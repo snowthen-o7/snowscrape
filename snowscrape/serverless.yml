@@ -1,0 +1,39 @@
+# "org" ensures this Service is used with the correct Serverless Framework Access Key.
+org: snowscrape
+# "app" enables Serverless Framework Dashboard features and sharing them with other Services.
+app: snowscrape-backend
+# "service" is the name of this project. This will also be added to your AWS resource names.
+service: snowscrape
+
+provider:
+  name: aws
+  runtime: python3.12
+  region: us-east-2
+  environment:
+    S3_BUCKET: snowscrape-results
+    DYNAMODB_TABLE: SnowScrapeJobs
+
+functions:
+  processJob:
+    handler: handler.lambda_handler
+    events:
+      - http:
+          path: jobs
+          method: post
+      - http:
+          path: jobs/{job_id}
+          method: get
+
+resources:
+  Resources:
+    JobsDynamoDbTable:
+      Type: "AWS::DynamoDB::Table"
+      Properties:
+        TableName: WebScrapingJobs
+        AttributeDefinitions:
+          - AttributeName: job_id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: job_id
+            KeyType: HASH
+        BillingMode: PAY_PER_REQUEST
