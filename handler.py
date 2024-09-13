@@ -2,6 +2,25 @@ from job_manager import create_job, delete_job, get_all_jobs, get_job, get_job_c
 from crawl_manager import get_crawl
 from utils import validate_job_data
 
+# Create a new job
+def create_job(event, context):
+	job_data = event['body']
+	validate_job_data(job_data)  # Ensure the job request is valid
+	job_id = create_job(job_data)
+	return {
+		"statusCode": 201,
+		"body": f"Job {job_id} created successfully"
+	}
+
+# Delete a job and cancel all associated crawls
+def delete_job(event, context):
+	job_id = event['pathParameters']['job_id']
+	delete_job(job_id)
+	return {
+		"statusCode": 200,
+		"body": f"Job {job_id} deleted successfully"
+	}
+
 # Get the status of all jobs
 def get_all_job_statuses(event, context):
 	jobs = get_all_jobs()
@@ -25,25 +44,6 @@ def get_crawl(event, context):
 			"statusCode": 404,
 			"body": "Crawl not found"
 		}
-
-# Create a new job
-def create_job(event, context):
-	job_data = event['body']
-	validate_job_data(job_data)  # Ensure the job request is valid
-	job_id = create_job(job_data)
-	return {
-		"statusCode": 201,
-		"body": f"Job {job_id} created successfully"
-	}
-
-# Delete a job and cancel all associated crawls
-def delete_job(event, context):
-	job_id = event['pathParameters']['job_id']
-	delete_job(job_id)
-	return {
-		"statusCode": 200,
-		"body": f"Job {job_id} deleted successfully"
-	}
 
 # Get all crawls for a job
 def get_job_crawls(event, context):

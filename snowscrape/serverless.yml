@@ -15,22 +15,6 @@ provider:
     S3_BUCKET: ${self:custom.s3Bucket}
 
 functions:
-  getAllJobStatuses:
-    name: snowscrape-get-all-job-statuses
-    handler: handler.get_all_job_statuses
-    events:
-      - http:
-          path: jobs/status
-          method: get
-
-  getCrawlDetails:
-    name: snowscrape-get-crawl-details
-    handler: handler.get_crawl
-    events:
-      - http:
-          path: jobs/{job_id}/crawls/{crawl_id}
-          method: get
-
   createJob:
     name: snowscrape-create-job
     handler: handler.create_job
@@ -46,6 +30,22 @@ functions:
       - http:
           path: jobs/{job_id}
           method: delete
+
+  getAllJobStatuses:
+    name: snowscrape-get-all-job-statuses
+    handler: handler.get_all_job_statuses
+    events:
+      - http:
+          path: jobs/status
+          method: get
+
+  getCrawlDetails:
+    name: snowscrape-get-crawl-details
+    handler: handler.get_crawl
+    events:
+      - http:
+          path: jobs/{job_id}/crawls/{crawl_id}
+          method: get
 
   getJobCrawlStatus:
     name: snowscrape-get-job-crawls
@@ -88,12 +88,12 @@ functions:
           method: patch
 
   updateJob:
-  name: snowscrape-update-job
-  handler: handler.update_job
-  events:
-    - http:
-        path: jobs/{job_id}
-        method: put
+    name: snowscrape-update-job
+    handler: handler.update_job
+    events:
+      - http:
+          path: jobs/{job_id}
+          method: put
 
 resources:
   Resources:
