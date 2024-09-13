@@ -10,30 +10,118 @@ provider:
   runtime: python3.12
   region: us-east-2
   environment:
-    S3_BUCKET: snowscrape-results
-    DYNAMODB_TABLE: SnowScrapeJobs
+    DYNAMODB_TABLE: ${self:custom.dynamoDbTable}
+    REGION: ${self:provider.region}
+    S3_BUCKET: ${self:custom.s3Bucket}
 
 functions:
-  processJob:
-    handler: handler.lambda_handler
+  getAllJobStatuses:
+    name: snowscrape-get-all-job-statuses
+    handler: handler.get_all_job_statuses
+    events:
+      - http:
+          path: jobs/status
+          method: get
+
+  getCrawlDetails:
+    name: snowscrape-get-crawl-details
+    handler: handler.get_crawl
+    events:
+      - http:
+          path: jobs/{job_id}/crawls/{crawl_id}
+          method: get
+
+  createJob:
+    name: snowscrape-create-job
+    handler: handler.create_job
     events:
       - http:
           path: jobs
           method: post
+
+  deleteJob:
+    name: snowscrape-delete-job
+    handler: handler.delete_job
+    events:
+      - http:
+          path: jobs/{job_id}
+          method: delete
+
+  getJobCrawlStatus:
+    name: snowscrape-get-job-crawls
+    handler: handler.get_job_crawls
+    events:
+      - http:
+          path: jobs/{job_id}/crawls
+          method: get
+
+  getJobDetails:
+    name: snowscrape-get-job-details
+    handler: handler.get_job_details
+    events:
       - http:
           path: jobs/{job_id}
           method: get
+
+  pauseJob:
+    name: snowscrape-pause-job
+    handler: handler.pause_job
+    events:
+      - http:
+          path: jobs/{job_id}/pause
+          method: patch
+
+  refreshJob:
+    name: snowscrape-refresh-job
+    handler: handler.refresh_job
+    events:
+      - http:
+          path: jobs/{job_id}/refresh
+          method: post
+
+  resumeJob:
+    name: snowscrape-resume-job
+    handler: handler.resume_job
+    events:
+      - http:
+          path: jobs/{job_id}/resume
+          method: patch
+
+  updateJob:
+  name: snowscrape-update-job
+  handler: handler.update_job
+  events:
+    - http:
+        path: jobs/{job_id}
+        method: put
 
 resources:
   Resources:
     JobsDynamoDbTable:
       Type: "AWS::DynamoDB::Table"
       Properties:
-        TableName: WebScrapingJobs
+        TableName: ${self:custom.dynamoDbTable}
         AttributeDefinitions:
-          - AttributeName: job_id
+          - AttributeName: job_id  # Define the primary key attribute
+            AttributeType: S       # S stands for String type
+          - AttributeName: status  # (Optional) GSI to query jobs by status
             AttributeType: S
         KeySchema:
           - AttributeName: job_id
-            KeyType: HASH
+            KeyType: HASH          # The primary key (hash key)
+        GlobalSecondaryIndexes:    # (Optional) GSI to query by status
+          - IndexName: StatusIndex
+            KeySchema:
+              - AttributeName: status
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
         BillingMode: PAY_PER_REQUEST
+    SnowscrapeResultsBucket:
+      Type: "AWS::S3::Bucket"
+      Properties:
+        BucketName: ${self:custom.s3Bucket}
+
+custom:
+  dynamoDbTable: SnowscrapeJobs
+  s3Bucket: snowscrape-results
