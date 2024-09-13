@@ -37,8 +37,8 @@ def validate_job_data(data):
 	if 'name' not in data or not isinstance(data['name'], str):
 		raise ValueError("Job must have a valid 'name' (string).")
 
-	if 'rate_limit' not in data or not isinstance(data['rate_limit'], int):
-		raise ValueError("Job must have a 'rate_limit' (integer).")
+	if 'rate_limit' not in data or not isinstance(data['rate_limit'], int) or not (1 <= data['rate_limit'] <= 8):
+		raise ValueError("Job must have a 'rate_limit' (integer between 1 and 8).")
 
 	if 'source' not in data or not isinstance(data['source'], str):
 		raise ValueError("Job must have a valid 'source' (string).")
@@ -49,10 +49,29 @@ def validate_job_data(data):
 		required_file_mapping_keys = ['delimiter', 'enclosure', 'escape', 'url_column']
 		for key in required_file_mapping_keys:
 			if key not in data['file_mapping']:
-					raise ValueError(f"'file_mapping' must contain '{key}'.")
+				raise ValueError(f"'file_mapping' must contain '{key}'.")
 
-	if 'scheduling' in data and not isinstance(data['scheduling'], str):
-		raise ValueError("'scheduling' must be a string representing cron syntax.")
+		if data['file_mapping']['delimiter'] not in [',', ';', '|']:
+			raise ValueError("Invalid 'delimiter'. Must be one of ',', ';', '|'.")
+		if data['file_mapping']['enclosure'] not in ['"', "'"]:
+			raise ValueError("Invalid 'enclosure'. Must be either '\"' or '\".")
+		if data['file_mapping']['escape'] not in ['\\', '/']:
+			raise ValueError("Invalid 'escape'. Must be '\\' or '/'.")
+
+	if 'scheduling' in data:
+		if 'hours' not in data['scheduling'] or not isinstance(data['scheduling']['hours'], list):
+			raise ValueError("'scheduling' must include 'hours' as a list.")
+		for hour in data['scheduling']['hours']:
+			if not isinstance(hour, int) or not (0 <= hour <= 23):
+				if hour != 'Every Hour':
+					raise ValueError("'hours' must be integers between 0 and 23, or 'Every Hour'.")
+
+		if 'days' not in data['scheduling'] or not isinstance(data['scheduling']['days'], list):
+			raise ValueError("'scheduling' must include 'days' as a list.")
+		valid_days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Every Day']
+		for day in data['scheduling']['days']:
+			if day not in valid_days:
+				raise ValueError(f"'days' must be one of {', '.join(valid_days)}.")
 
 	if 'queries' not in data or not isinstance(data['queries'], list):
 		raise ValueError("Job must have a 'queries' (array).")
@@ -64,8 +83,74 @@ def validate_job_data(data):
 				raise ValueError("Each query must have a valid 'type' (xpath, regex, or jsonpath).")
 			if 'query' not in query or not isinstance(query['query'], str):
 				raise ValueError("Each query must have a valid 'query' (string).")
-			if 'join' in query and not isinstance(query['join'], str):
+			if 'join' in query and query['join'] and not isinstance(query['join'], str):
 				raise ValueError("If 'join' is provided in a query, it must be a string.")
+
+def convert_cron_to_scheduling(cron_expression):
+	"""
+	Converts a cron expression to scheduling data.
+	"""
+	parts = cron_expression.split()
+	if len(parts) != 5:
+		raise ValueError("Invalid cron expression")
+
+	# Parse the hour part
+	hours = parts[1]
+	if hours == '*':
+		hours = ['Every Hour']
+	else:
+		hours = [int(h) for h in hours.split(',')]
+
+	# Parse the day part
+	days = parts[4]
+	if days == '*':
+		days = ['Every Day']
+	else:
+		valid_days_map = {
+			'0': 'Sunday',
+			'1': 'Monday',
+			'2': 'Tuesday',
+			'3': 'Wednesday',
+			'4': 'Thursday',
+			'5': 'Friday',
+			'6': 'Saturday',
+		}
+		days = [valid_days_map[day] for day in days.split(',') if day in valid_days_map]
+
+	return {
+		'days': days,
+		'hours': hours
+	}
+
+def convert_scheduling_to_cron(scheduling):
+	"""
+	Converts the scheduling data to a cron expression.
+	"""
+	days = scheduling.get('days', [])
+	hours = scheduling.get('hours', [])
+
+	# Handle "Every Day" and "Every Hour"
+	day_part = '*'
+	if 'Every Day' not in days:
+		valid_days_map = {
+			'Sunday': '0',
+			'Monday': '1',
+			'Tuesday': '2',
+			'Wednesday': '3',
+			'Thursday': '4',
+			'Friday': '5',
+			'Saturday': '6',
+		}
+		day_part = ','.join(valid_days_map[day] for day in days if day in valid_days_map)
+
+	hour_part = '*'
+	if 'Every Hour' not in hours:
+		hour_part = ','.join(str(hour) for hour in hours if isinstance(hour, int))
+
+	# Cron format: minute (0), hour, day of the month (*), month (*), day of the week
+	cron_expression = f"0 {hour_part} * * {day_part}"
+
+	return cron_expression
 
 def parse_links_from_file(file_mapping, file_url):
 	response = requests.get(file_url)
