@@ -124,6 +124,11 @@ resources:
       Properties:
         BucketName: ${self:custom.s3Bucket}
 
+plugins:
+  - serverless-python-requirements
+
 custom:
+  pythonRequirements:
+    dockerizePip: true  # Ensures proper packaging of dependencies in a Docker container
   dynamoDbTable: SnowscrapeJobs
   s3Bucket: snowscrape-results

@@ -75,16 +75,16 @@ def get_job(job_id):
 		return None
 
 # Retrieve all crawls for a specific job
-def get_job_crawls(site_id):
+def get_job_crawls(job_id):
 	try:
 		response = table.query(
-			IndexName='site_id-index',  # Assuming there's a GSI on site_id
-			KeyConditionExpression='site_id = :sid',
-			ExpressionAttributeValues={':sid': site_id}
+			IndexName='job_id-index',  # Assuming there's a GSI on job_id
+			KeyConditionExpression='job_id = :jid',
+			ExpressionAttributeValues={':jid': job_id}
 		)
 		return response.get('Items', [])
 	except ClientError as e:
-		print(f"Error retrieving crawls for site {site_id}: {e.response['Error']['Message']}")
+		print(f"Error retrieving crawls for job {job_id}: {e.response['Error']['Message']}")
 		return []
 
 # Pause a job (update status to "paused")

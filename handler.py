@@ -47,8 +47,8 @@ def get_crawl(event, context):
 
 # Get all crawls for a job
 def get_job_crawls(event, context):
-	site_id = event['pathParameters']['site_id']
-	crawls = get_job_crawls(site_id)
+	job_id = event['pathParameters']['job_id']
+	crawls = get_job_crawls(job_id)
 	return {
 		"statusCode": 200,
 		"body": crawls
