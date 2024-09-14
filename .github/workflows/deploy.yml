@@ -13,9 +13,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
-      - name: List Files for Debugging  # Add this step to list all files and directories
-        run: ls -R  # Recursively list all directories and files
-
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
@@ -35,5 +32,4 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           SERVERLESS_ACCESS_KEY: ${{ secrets.SERVERLESS_ACCESS_KEY }}
         run: |
-          cd snowscrape
           serverless deploy
