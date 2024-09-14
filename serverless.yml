@@ -31,6 +31,7 @@ functions:
       - http:
           path: jobs/{job_id}
           method: delete
+          cors: true
 
   getAllJobStatuses:
     name: snowscrape-get-all-job-statuses
@@ -48,6 +49,7 @@ functions:
       - http:
           path: jobs/{job_id}/crawls/{crawl_id}
           method: get
+          cors: true
 
   getJobCrawlStatus:
     name: snowscrape-get-job-crawls
@@ -56,6 +58,7 @@ functions:
       - http:
           path: jobs/{job_id}/crawls
           method: get
+          cors: true
 
   getJobDetails:
     name: snowscrape-get-job-details
@@ -64,6 +67,7 @@ functions:
       - http:
           path: jobs/{job_id}
           method: get
+          cors: true
 
   pauseJob:
     name: snowscrape-pause-job
@@ -72,6 +76,7 @@ functions:
       - http:
           path: jobs/{job_id}/pause
           method: patch
+          cors: true
 
   refreshJob:
     name: snowscrape-refresh-job
@@ -80,6 +85,7 @@ functions:
       - http:
           path: jobs/{job_id}/refresh
           method: post
+          cors: true
 
   resumeJob:
     name: snowscrape-resume-job
@@ -88,6 +94,7 @@ functions:
       - http:
           path: jobs/{job_id}/resume
           method: patch
+          cors: true
 
   updateJob:
     name: snowscrape-update-job
@@ -96,6 +103,7 @@ functions:
       - http:
           path: jobs/{job_id}
           method: put
+          cors: true
 
 resources:
   Resources:
