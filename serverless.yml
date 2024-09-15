@@ -13,6 +13,22 @@ provider:
     DYNAMODB_TABLE: ${self:custom.dynamoDbTable}
     REGION: ${self:provider.region}
     S3_BUCKET: ${self:custom.s3Bucket}
+  iamRoleStatements:
+    - Effect: "Allow"
+      Action:
+        - "dynamodb:Scan"  # Allows scanning the DynamoDB table
+        - "dynamodb:Query"
+        - "dynamodb:UpdateItem"
+        - "dynamodb:PutItem"
+        - "dynamodb:GetItem"
+      Resource:
+        - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.dynamoDbTable}"
+     
+    - Effect: "Allow"
+      Action:
+        - "s3:*"
+      Resource:
+        - "arn:aws:s3:::${self:custom.s3Bucket}/*"
 
 functions:
   createJob:
