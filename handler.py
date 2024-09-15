@@ -30,6 +30,8 @@ def get_all_job_statuses(event, context):
 		"statusCode": 200,
 		"body": json.dumps(jobs),  # Ensure body is a JSON string
 		"headers": {
+			'Access-Control-Allow-Credentials': True,
+    	'Access-Control-Allow-Origin': '*',
 			"Content-Type": "application/json"
 		}
 	}
