@@ -1,3 +1,5 @@
+import json
+
 from job_manager import create_job, delete_job, get_all_jobs, get_job, get_job_crawls, pause_job, refresh_job, resume_job, update_job
 from crawl_manager import get_crawl
 from utils import validate_job_data
@@ -26,7 +28,10 @@ def get_all_job_statuses(event, context):
 	jobs = get_all_jobs()
 	return {
 		"statusCode": 200,
-		"body": jobs
+		"body": json.dumps(jobs),  # Ensure body is a JSON string
+		"headers": {
+			"Content-Type": "application/json"
+		}
 	}
 
 # Get specific crawl details
