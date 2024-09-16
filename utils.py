@@ -1,4 +1,5 @@
 import csv
+import pandas as pd
 import requests
 
 def parse_file(file_content, delimiter=',', enclosure='"', escape='\\', url_column=0):
@@ -153,14 +154,29 @@ def convert_scheduling_to_cron(scheduling):
 	return cron_expression
 
 def parse_links_from_file(file_mapping, file_url):
-	response = requests.get(file_url)
-	response.raise_for_status()
+	try:
+		# Step 1: Try using pandas to autodetect CSV structure and extract links
+		response = requests.get(file_url)
+		response.raise_for_status()
+		
+		# Read the file content into pandas
+		file_content = response.text
+		df = pd.read_csv(pd.compat.StringIO(file_content))  # Using StringIO to treat file content as a file-like object
+		
+		# If pandas successfully reads it, we can assume it autodetected the delimiter and structure
+		print("Pandas auto-detection successful.")
+		return df.iloc[:, file_mapping['url_column']].dropna().tolist()  # Extract the URLs from the specified column
 
-	links = []
-	reader = csv.reader(response.text.splitlines(), delimiter=file_mapping['delimiter'], quotechar=file_mapping['enclosure'], escapechar=file_mapping['escape'])
-
-	for row in reader:
-		if len(row) > file_mapping['url_column']:
-			links.append(row[file_mapping['url_column']].strip())
-
-	return links
+	except Exception as e:
+		# Step 2: If pandas fails, fallback to csv with manual file_mapping settings
+		print(f"Pandas failed to parse file. Falling back to manual parsing. Error: {e}")
+		
+		# Manual parsing using csv.reader
+		reader = csv.reader(response.text.splitlines(), delimiter=file_mapping['delimiter'], quotechar=file_mapping['enclosure'], escapechar=file_mapping['escape'])
+		
+		links = []
+		for row in reader:
+			if len(row) > file_mapping['url_column']:
+				links.append(row[file_mapping['url_column']].strip())
+						
+		return links
