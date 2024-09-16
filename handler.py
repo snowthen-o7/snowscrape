@@ -11,7 +11,12 @@ def create_job(event, context):
 	job_id = create_job(job_data)
 	return {
 		"statusCode": 201,
-		"body": f"Job {job_id} created successfully"
+		"body": f"Job {job_id} created successfully",
+		"headers": {
+				'Access-Control-Allow-Credentials': True,
+				'Access-Control-Allow-Origin': '*',
+				"Content-Type": "application/json"
+			}
 	}
 
 # Delete a job and cancel all associated crawls
@@ -20,7 +25,12 @@ def delete_job(event, context):
 	delete_job(job_id)
 	return {
 		"statusCode": 200,
-		"body": f"Job {job_id} deleted successfully"
+		"body": f"Job {job_id} deleted successfully",
+		"headers": {
+				'Access-Control-Allow-Credentials': True,
+				'Access-Control-Allow-Origin': '*',
+				"Content-Type": "application/json"
+			}
 	}
 
 # Get the status of all jobs
@@ -44,12 +54,22 @@ def get_crawl(event, context):
 	if crawl:
 		return {
 			"statusCode": 200,
-			"body": crawl
+			"body": json.dumps(crawl),
+			"headers": {
+					'Access-Control-Allow-Credentials': True,
+					'Access-Control-Allow-Origin': '*',
+					"Content-Type": "application/json"
+				}
 		}
 	else:
 		return {
 			"statusCode": 404,
-			"body": "Crawl not found"
+			"body": "Crawl not found",
+			"headers": {
+					'Access-Control-Allow-Credentials': True,
+					'Access-Control-Allow-Origin': '*',
+					"Content-Type": "application/json"
+				}
 		}
 
 # Get all crawls for a job
@@ -58,7 +78,12 @@ def get_job_crawls(event, context):
 	crawls = get_job_crawls(job_id)
 	return {
 		"statusCode": 200,
-		"body": crawls
+		"body": json.dumps(crawls),
+			"headers": {
+					'Access-Control-Allow-Credentials': True,
+					'Access-Control-Allow-Origin': '*',
+					"Content-Type": "application/json"
+				}
 	}
 
 # Get job details
@@ -68,12 +93,22 @@ def get_job_details(event, context):
 	if job:
 		return {
 			"statusCode": 200,
-			"body": job
+			"body": json.dumps(job),
+			"headers": {
+					'Access-Control-Allow-Credentials': True,
+					'Access-Control-Allow-Origin': '*',
+					"Content-Type": "application/json"
+				}
 		}
 	else:
 		return {
 			"statusCode": 404,
-			"body": "Job not found"
+			"body": "Job not found",
+			"headers": {
+					'Access-Control-Allow-Credentials': True,
+					'Access-Control-Allow-Origin': '*',
+					"Content-Type": "application/json"
+				}
 		}
 
 # Pause a job
@@ -82,7 +117,12 @@ def pause_job(event, context):
 	pause_job(job_id)
 	return {
 		"statusCode": 200,
-		"body": f"Job {job_id} paused successfully"
+		"body": f"Job {job_id} paused successfully",
+		"headers": {
+				'Access-Control-Allow-Credentials': True,
+				'Access-Control-Allow-Origin': '*',
+				"Content-Type": "application/json"
+			}
 	}
 
 # Refresh a job (manual re-crawl)
@@ -91,7 +131,12 @@ def refresh_job(event, context):
 	refresh_job(job_id)
 	return {
 		"statusCode": 200,
-		"body": f"Job {job_id} refreshed successfully"
+		"body": f"Job {job_id} refreshed successfully",
+		"headers": {
+				'Access-Control-Allow-Credentials': True,
+				'Access-Control-Allow-Origin': '*',
+				"Content-Type": "application/json"
+			}
 	}
 
 # Resume a job
@@ -100,7 +145,12 @@ def resume_job(event, context):
 	resume_job(job_id)
 	return {
 		"statusCode": 200,
-		"body": f"Job {job_id} resumed successfully"
+		"body": f"Job {job_id} resumed successfully",
+		"headers": {
+				'Access-Control-Allow-Credentials': True,
+				'Access-Control-Allow-Origin': '*',
+				"Content-Type": "application/json"
+			}
 	}
  
 # Update a job
@@ -111,5 +161,10 @@ def update_job(event, context):
 	update_job(job_id, job_data)
 	return {
 		"statusCode": 200,
-		"body": f"Job {job_id} updated successfully"
+		"body": f"Job {job_id} updated successfully",
+		"headers": {
+				'Access-Control-Allow-Credentials': True,
+				'Access-Control-Allow-Origin': '*',
+				"Content-Type": "application/json"
+			}
 	}
