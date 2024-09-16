@@ -2,13 +2,13 @@
 
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
-import { UrlModal } from "@/components/UrlModal";
+import { UrlModal } from "@/lib/components/UrlModal";
 
-export default function SitePage() {
+export default function JobPage() {
 	const [modalOpen, setModalOpen] = useState(false);
 
 	const params = useParams(); // Retrieve dynamic route parameters
-	const siteId = params.siteId; // This accesses the [siteId] from the route
+	const jobId = params.jobId; // This accesses the [jobId] from the route
 
 	const urls = [
 		{ id: 1, url: 'https://example.com/page1' },
@@ -17,7 +17,7 @@ export default function SitePage() {
 
 	return (
 		<div className="p-8 text-white">
-			<h1 className="text-3xl mb-6">Site {siteId}</h1>
+			<h1 className="text-3xl mb-6">Job {jobId}</h1>
 			<div className="grid grid-cols-1 gap-4">
 				{urls.map(url => (
 					<button
