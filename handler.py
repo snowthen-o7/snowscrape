@@ -6,6 +6,7 @@ from utils import validate_job_data
 
 # Create a new job
 def create_job(event, context):
+	print(event)
 	job_data = event['body']
 	validate_job_data(job_data)  # Ensure the job request is valid
 	job_id = create_job(job_data)
@@ -21,6 +22,7 @@ def create_job(event, context):
 
 # Delete a job and cancel all associated crawls
 def delete_job(event, context):
+	print(event)
 	job_id = event['pathParameters']['job_id']
 	delete_job(job_id)
 	return {
@@ -48,6 +50,7 @@ def get_all_job_statuses(event, context):
 
 # Get specific crawl details
 def get_crawl(event, context):
+	print(event)
 	job_id = event['pathParameters']['job_id']
 	crawl_id = event['pathParameters']['crawl_id']
 	crawl = get_crawl(job_id, crawl_id)
@@ -74,6 +77,7 @@ def get_crawl(event, context):
 
 # Get all crawls for a job
 def get_job_crawls(event, context):
+	print(event)
 	job_id = event['pathParameters']['job_id']
 	crawls = get_job_crawls(job_id)
 	return {
@@ -88,6 +92,7 @@ def get_job_crawls(event, context):
 
 # Get job details
 def get_job_details(event, context):
+	print(event)
 	job_id = event['pathParameters']['job_id']
 	job = get_job(job_id)
 	if job:
@@ -113,6 +118,7 @@ def get_job_details(event, context):
 
 # Pause a job
 def pause_job(event, context):
+	print(event)
 	job_id = event['pathParameters']['job_id']
 	pause_job(job_id)
 	return {
@@ -127,6 +133,7 @@ def pause_job(event, context):
 
 # Refresh a job (manual re-crawl)
 def refresh_job(event, context):
+	print(event)
 	job_id = event['pathParameters']['job_id']
 	refresh_job(job_id)
 	return {
@@ -141,6 +148,7 @@ def refresh_job(event, context):
 
 # Resume a job
 def resume_job(event, context):
+	print(event)
 	job_id = event['pathParameters']['job_id']
 	resume_job(job_id)
 	return {
@@ -155,6 +163,7 @@ def resume_job(event, context):
  
 # Update a job
 def update_job(event, context):
+	print(event)
 	job_id = event['pathParameters']['job_id']
 	job_data = event['body']
 	validate_job_data(job_data)
