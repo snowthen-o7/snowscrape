@@ -10,10 +10,6 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
 
-    strategy:
-      matrix:
-        stage: [dev, prod]  # Define the two stages
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
