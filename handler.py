@@ -5,7 +5,7 @@ from crawl_manager import get_crawl
 from utils import validate_job_data
 
 # Create a new job
-def create_job(event, context):
+def create_job_handler(event, context):
 	print(event)
 	job_data = event['body']
 	validate_job_data(json.loads(job_data))  # Ensure the job request is valid
@@ -21,7 +21,7 @@ def create_job(event, context):
 	}
 
 # Delete a job and cancel all associated crawls
-def delete_job(event, context):
+def delete_job_handler(event, context):
 	print(event)
 	job_id = event['pathParameters']['job_id']
 	delete_job(job_id)
@@ -36,7 +36,7 @@ def delete_job(event, context):
 	}
 
 # Get the status of all jobs
-def get_all_job_statuses(event, context):
+def get_all_job_statuses_handler(event, context):
 	jobs = get_all_jobs()
 	return {
 		"statusCode": 200,
@@ -49,7 +49,7 @@ def get_all_job_statuses(event, context):
 	}
 
 # Get specific crawl details
-def get_crawl(event, context):
+def get_crawl_handler(event, context):
 	print(event)
 	job_id = event['pathParameters']['job_id']
 	crawl_id = event['pathParameters']['crawl_id']
@@ -76,7 +76,7 @@ def get_crawl(event, context):
 		}
 
 # Get all crawls for a job
-def get_job_crawls(event, context):
+def get_job_crawls_handler(event, context):
 	print(event)
 	job_id = event['pathParameters']['job_id']
 	crawls = get_job_crawls(job_id)
@@ -91,7 +91,7 @@ def get_job_crawls(event, context):
 	}
 
 # Get job details
-def get_job_details(event, context):
+def get_job_details_handler(event, context):
 	print(event)
 	job_id = event['pathParameters']['job_id']
 	job = get_job(job_id)
@@ -117,7 +117,7 @@ def get_job_details(event, context):
 		}
 
 # Pause a job
-def pause_job(event, context):
+def pause_job_handler(event, context):
 	print(event)
 	job_id = event['pathParameters']['job_id']
 	pause_job(job_id)
@@ -132,7 +132,7 @@ def pause_job(event, context):
 	}
 
 # Refresh a job (manual re-crawl)
-def refresh_job(event, context):
+def refresh_job_handler(event, context):
 	print(event)
 	job_id = event['pathParameters']['job_id']
 	refresh_job(job_id)
@@ -147,7 +147,7 @@ def refresh_job(event, context):
 	}
 
 # Resume a job
-def resume_job(event, context):
+def resume_job_handler(event, context):
 	print(event)
 	job_id = event['pathParameters']['job_id']
 	resume_job(job_id)
@@ -162,7 +162,7 @@ def resume_job(event, context):
 	}
  
 # Update a job
-def update_job(event, context):
+def update_job_handler(event, context):
 	print(event)
 	job_id = event['pathParameters']['job_id']
 	job_data = event['body']

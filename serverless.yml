@@ -33,7 +33,7 @@ provider:
 functions:
   createJob:
     name: snowscrape-create-job
-    handler: handler.create_job
+    handler: handler.create_job_handler
     events:
       - http:
           path: jobs
@@ -42,7 +42,7 @@ functions:
 
   deleteJob:
     name: snowscrape-delete-job
-    handler: handler.delete_job
+    handler: handler.delete_job_handler
     events:
       - http:
           path: jobs/{job_id}
@@ -51,7 +51,7 @@ functions:
 
   getAllJobStatuses:
     name: snowscrape-get-all-job-statuses
-    handler: handler.get_all_job_statuses
+    handler: handler.get_all_job_statuses_handler
     events:
       - http:
           path: jobs/status
@@ -60,7 +60,7 @@ functions:
 
   getCrawlDetails:
     name: snowscrape-get-crawl-details
-    handler: handler.get_crawl
+    handler: handler.get_crawl_handler
     events:
       - http:
           path: jobs/{job_id}/crawls/{crawl_id}
@@ -69,7 +69,7 @@ functions:
 
   getJobCrawlStatus:
     name: snowscrape-get-job-crawls
-    handler: handler.get_job_crawls
+    handler: handler.get_job_crawls_handler
     events:
       - http:
           path: jobs/{job_id}/crawls
@@ -78,7 +78,7 @@ functions:
 
   getJobDetails:
     name: snowscrape-get-job-details
-    handler: handler.get_job_details
+    handler: handler.get_job_details_handler
     events:
       - http:
           path: jobs/{job_id}
@@ -87,7 +87,7 @@ functions:
 
   pauseJob:
     name: snowscrape-pause-job
-    handler: handler.pause_job
+    handler: handler.pause_job_handler
     events:
       - http:
           path: jobs/{job_id}/pause
@@ -96,7 +96,7 @@ functions:
 
   refreshJob:
     name: snowscrape-refresh-job
-    handler: handler.refresh_job
+    handler: handler.refresh_job_handler
     events:
       - http:
           path: jobs/{job_id}/refresh
@@ -105,7 +105,7 @@ functions:
 
   resumeJob:
     name: snowscrape-resume-job
-    handler: handler.resume_job
+    handler: handler.resume_job_handler
     events:
       - http:
           path: jobs/{job_id}/resume
@@ -114,7 +114,7 @@ functions:
 
   updateJob:
     name: snowscrape-update-job
-    handler: handler.update_job
+    handler: handler.update_job_handler
     events:
       - http:
           path: jobs/{job_id}
