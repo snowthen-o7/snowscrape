@@ -45,7 +45,7 @@ def save_to_s3(bucket_name, key, data):
 def validate_clerk_token(token):
 	try:
 		# Validate the token using the Clerk public key from environment
-		decoded_token = jwt.decode(token, os.getenv('CLERK_PUBLIC_KEY'), algorithms=["RS256"], audience="YOUR_CLERK_FRONTEND_API")
+		decoded_token = jwt.decode(token, os.getenv('CLERK_JWT_SECRET_KEY'), algorithms=["RS256"])
 		return decoded_token  # Return the decoded token if valid
 	except jwt.ExpiredSignatureError:
 		raise Exception("Token expired.")

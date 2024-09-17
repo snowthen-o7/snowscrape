@@ -11,7 +11,8 @@ provider:
   region: us-east-2
   stage: ${opt:stage, 'dev'} # Default to 'dev' if no stage is specified
   environment:
-    CLERK_PUBLIC_KEY: ${self:custom.clerkPublicKey.${self:provider.stage}}  # Conditional key based on the stage
+    CLERK_JWT_PUBLIC_KEY: ${self:custom.clerkJwtPublicKey.${self:provider.stage}}  # Conditional key based on the stage
+    CLERK_JWT_SECRET_KEY: ${self:custom.clerkJwtSecretKey.${self:provider.stage}}  # Conditional key based on the stage
     DYNAMODB_TABLE: ${self:custom.dynamoDbTable}
     REGION: ${self:provider.region}
     S3_BUCKET: ${self:custom.s3Bucket}
@@ -158,7 +159,7 @@ custom:
     dockerizePip: true  # Ensures proper packaging of dependencies in a Docker container
   dynamoDbTable: SnowscrapeJobs
   s3Bucket: snowscrape-results
-  clerkPublicKey:
+  clerkJwtPublicKey:
     dev: |
       -----BEGIN PUBLIC KEY-----
       MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAoZVvkucSn5kVAbJNzz0O
@@ -170,3 +171,7 @@ custom:
       xQIDAQAB
       -----END PUBLIC KEY-----
     prod: "your-clerk-public-key-for-prod"
+  clerkJwtSecretKey:
+    dev: |
+      sk_test_xFXzGKYU7lhtFBel98iewFsgkNwwyCgWAARdRaU5dA
+    prod: "your-clerk-secret-key-for-prod"
