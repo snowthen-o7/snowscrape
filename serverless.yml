@@ -9,8 +9,9 @@ provider:
   name: aws
   runtime: python3.12
   region: us-east-2
+  stage: ${opt:stage, 'dev'} # Default to 'dev' if no stage is specified
   environment:
-    CLERK_PUBLIC_KEY: ${self:custom.clerkPublicKey}
+    CLERK_PUBLIC_KEY: ${self:custom.clerkPublicKey.${self:provider.stage}}  # Conditional key based on the stage
     DYNAMODB_TABLE: ${self:custom.dynamoDbTable}
     REGION: ${self:provider.region}
     S3_BUCKET: ${self:custom.s3Bucket}
