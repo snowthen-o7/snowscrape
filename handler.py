@@ -2,13 +2,37 @@ import json
 
 from job_manager import create_job, delete_job, get_all_jobs, get_job, get_job_crawls, pause_job, refresh_job, resume_job, update_job
 from crawl_manager import get_crawl
-from utils import validate_job_data
+from utils import extract_token_from_event, validate_clerk_token, validate_job_data
 
 # Create a new job
 def create_job_handler(event, context):
 	print(event)
-	job_data = event['body']
-	validate_job_data(json.loads(job_data))  # Ensure the job request is valid
+	token = extract_token_from_event(event)
+	if not token:
+		return {
+			"statusCode": 401,
+			"body": json.dumps({"message": "Unauthorized - No token provided"}),
+			"headers": {
+				'Access-Control-Allow-Origin': '*',
+				"Content-Type": "application/json"
+			}
+		}
+
+	try:
+		user_data = validate_clerk_token(token)
+	except Exception as e:
+		return {
+			"statusCode": 401,
+			"body": json.dumps({"message": str(e)}),
+			"headers": {
+				'Access-Control-Allow-Origin': '*',
+				"Content-Type": "application/json"
+			}
+		}
+
+	job_data = json.loads(event['body'])
+	validate_job_data(job_data)  # Ensure the job request is valid
+	job_data["user_id"] = user_data["sub"]
 	job_id = create_job(job_data)
 	return {
 		"statusCode": 201,
@@ -165,8 +189,8 @@ def resume_job_handler(event, context):
 def update_job_handler(event, context):
 	print(event)
 	job_id = event['pathParameters']['job_id']
-	job_data = event['body']
-	validate_job_data(json.loads(job_data))
+	job_data = json.loads(event['body'])
+	validate_job_data(job_data)
 	update_job(job_id, job_data)
 	return {
 		"statusCode": 200,
