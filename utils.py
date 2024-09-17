@@ -186,9 +186,17 @@ def parse_links_from_file(file_mapping, file_url):
 		file_content = response.text
 		df = pd.read_csv(StringIO(file_content))  # Using StringIO to treat file content as a file-like object
 		
-		# If pandas successfully reads it, we can assume it autodetected the delimiter and structure
+		# If 'url_column' is a string, use it as a column name. If it's an integer, use it as an index.
+		if isinstance(file_mapping['url_column'], str):
+			url_column = file_mapping['url_column']
+		else:
+			url_column = df.columns[file_mapping['url_column']]
+		
+		# Extract the URLs from the specified column
+		urls = df[url_column].dropna().tolist()
+  
 		print("Pandas auto-detection successful.")
-		return df.iloc[:, file_mapping['url_column']].dropna().tolist()  # Extract the URLs from the specified column
+		return urls
 
 	except Exception as e:
 		# Step 2: If pandas fails, fallback to csv with manual file_mapping settings
