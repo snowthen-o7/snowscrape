@@ -3,6 +3,7 @@ import jwt
 import os
 import pandas as pd
 import requests
+from io import StringIO
 
 def cron_to_seconds(cron_expression):
 	"""Converts a cron expression to the equivalent interval in seconds."""
@@ -183,7 +184,7 @@ def parse_links_from_file(file_mapping, file_url):
 		
 		# Read the file content into pandas
 		file_content = response.text
-		df = pd.read_csv(pd.compat.StringIO(file_content))  # Using StringIO to treat file content as a file-like object
+		df = pd.read_csv(StringIO(file_content))  # Using StringIO to treat file content as a file-like object
 		
 		# If pandas successfully reads it, we can assume it autodetected the delimiter and structure
 		print("Pandas auto-detection successful.")
