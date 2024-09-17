@@ -8,7 +8,7 @@ from utils import validate_job_data
 def create_job(event, context):
 	print(event)
 	job_data = event['body']
-	validate_job_data(job_data)  # Ensure the job request is valid
+	validate_job_data(json.loads(job_data))  # Ensure the job request is valid
 	job_id = create_job(job_data)
 	return {
 		"statusCode": 201,
@@ -166,7 +166,7 @@ def update_job(event, context):
 	print(event)
 	job_id = event['pathParameters']['job_id']
 	job_data = event['body']
-	validate_job_data(job_data)
+	validate_job_data(json.loads(job_data))
 	update_job(job_id, job_data)
 	return {
 		"statusCode": 200,
