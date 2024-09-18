@@ -184,7 +184,7 @@ def parse_links_from_file(file_mapping, file_url):
 		
 		# Read the file content into pandas
 		file_content = response.text
-		df = pd.read_csv(StringIO(file_content))  # Using StringIO to treat file content as a file-like object
+		df = pd.read_csv(StringIO(file_content), error_bad_lines=False) # Using StringIO to treat file content as a file-like object
 		
 		# If 'url_column' is a string, use it as a column name. If it's an integer, use it as an index.
 		if isinstance(file_mapping['url_column'], str):
@@ -202,7 +202,8 @@ def parse_links_from_file(file_mapping, file_url):
 	except Exception as e:
 		# Step 2: If pandas fails, fallback to csv with manual file_mapping settings
 		print(f"Pandas failed to parse file. Falling back to manual parsing. Error: {e}")
-		
+		print(file_mapping)
+
 		# Manual parsing using csv.reader
 		delimiter = file_mapping.get('delimiter', ',')
 		quotechar = file_mapping.get('enclosure', None) or None
@@ -212,7 +213,14 @@ def parse_links_from_file(file_mapping, file_url):
 		
 		links = []
 		for row in reader:
-			if len(row) > file_mapping['url_column']:
-				links.append(row[file_mapping['url_column']].strip())
+			# If url_column is a string (header name), get its index
+			if isinstance(file_mapping['url_column'], str):
+				if row and file_mapping['url_column'] in row:
+					url_column_index = row.index(file_mapping['url_column'])
+			else:
+				url_column_index = file_mapping['url_column']
+
+			if len(row) > url_column_index:  # Ensure row has enough columns
+				links.append(row[url_column_index].strip())
 						
 		return links
