@@ -36,7 +36,7 @@ def create_job_handler(event, context):
 	job_id = create_job(job_data)
 	return {
 		"statusCode": 201,
-		"body": f"Job {job_id} created successfully",
+		"body": f"Job '{job_id}' created successfully",
 		"headers": {
 				'Access-Control-Allow-Credentials': True,
 				'Access-Control-Allow-Origin': '*',

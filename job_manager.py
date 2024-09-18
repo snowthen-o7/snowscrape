@@ -14,6 +14,7 @@ def create_job(job_data):
 
 		# Parse the list of URLs from the external source
 		links = parse_links_from_file(job_data['file_mapping'], job_data['source'])  # Assuming 'source' is the URL to the list
+		print(f"Parsed links: {links}")
 
 		# Add the parsed links to the job data
 		job_data['links'] = links
@@ -26,6 +27,7 @@ def create_job(job_data):
 
 		# Ensure all necessary fields are present in job_data and add defaults if needed
 		job_item = {
+			'user_id': job_data['user_id'],
 			'job_id': job_data['job_id'],
 			'name': job_data['name'],
 			'rate_limit': job_data['rate_limit'],
@@ -37,6 +39,7 @@ def create_job(job_data):
 			'status': job_data.get('status', 'pending')  # Default job status
 		}
 
+		print(f"Creating job: {job_item}")
 		# Insert job data into DynamoDB
 		table.put_item(Item=job_item)
 		return job_data['job_id']
@@ -60,6 +63,7 @@ def delete_job(job_id):
 def get_all_jobs():
 	try:
 		response = table.scan()
+		print(f"Retrieved jobs response: {response}")
 		return response.get('Items', [])
 	except ClientError as e:
 		print(f"Error retrieving jobs: {e.response['Error']['Message']}")
