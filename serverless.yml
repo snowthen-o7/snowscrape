@@ -19,11 +19,12 @@ provider:
   iamRoleStatements:
     - Effect: "Allow"
       Action:
-        - "dynamodb:Scan"  # Allows scanning the DynamoDB table
-        - "dynamodb:Query"
-        - "dynamodb:UpdateItem"
-        - "dynamodb:PutItem"
+        - "dynamodb:DeleteItem"
         - "dynamodb:GetItem"
+        - "dynamodb:PutItem"
+        - "dynamodb:Query"
+        - "dynamodb:Scan"
+        - "dynamodb:UpdateItem"
       Resource:
         - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.dynamoDbTable}"
      
