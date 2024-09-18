@@ -11,7 +11,8 @@ def cron_to_seconds(cron_expression):
 	pass
 
 def extract_token_from_event(event):
-	authorization_header = event["headers"].get("Authorization", "")
+	headers = event.get("headers", {})
+	authorization_header = headers.get("Authorization", "")
 	if authorization_header.startswith("Bearer "):
 		return authorization_header[len("Bearer "):]
 	return None
@@ -154,7 +155,6 @@ def convert_scheduling_to_cron(scheduling):
 	hours = scheduling.get('hours', [])
 
 	# Handle "Every Day" and "Every Hour"
-	day_part = '*'
 	if 'Every Day' not in days:
 		valid_days_map = {
 			'Sunday': '0',
@@ -165,11 +165,10 @@ def convert_scheduling_to_cron(scheduling):
 			'Friday': '5',
 			'Saturday': '6',
 		}
-		day_part = ','.join(valid_days_map[day] for day in days if day in valid_days_map)
+		day_part = '*' if not days or 'Every Day' in days else ','.join(valid_days_map[day] for day in days)
 
-	hour_part = '*'
 	if 'Every Hour' not in hours:
-		hour_part = ','.join(str(hour) for hour in hours if isinstance(hour, int))
+		hour_part = '*' if not hours or 'Every Hour' in hours else ','.join(str(hour) for hour in hours)
 
 	# Cron format: minute (0), hour, day of the month (*), month (*), day of the week
 	cron_expression = f"0 {hour_part} * * {day_part}"
@@ -184,7 +183,7 @@ def parse_links_from_file(file_mapping, file_url):
 		
 		# Read the file content into pandas
 		file_content = response.text
-		df = pd.read_csv(StringIO(file_content), error_bad_lines=False) # Using StringIO to treat file content as a file-like object
+		df = pd.read_csv(StringIO(file_content), on_bad_lines="skip") # Using StringIO to treat file content as a file-like object
 		
 		# If 'url_column' is a string, use it as a column name. If it's an integer, use it as an index.
 		if isinstance(file_mapping['url_column'], str):
@@ -212,15 +211,20 @@ def parse_links_from_file(file_mapping, file_url):
 		reader = csv.reader(response.text.splitlines(), delimiter=delimiter, quotechar=quotechar, escapechar=escapechar)
 		
 		links = []
-		for row in reader:
-			# If url_column is a string (header name), get its index
-			if isinstance(file_mapping['url_column'], str):
-				if row and file_mapping['url_column'] in row:
-					url_column_index = row.index(file_mapping['url_column'])
-			else:
-				url_column_index = file_mapping['url_column']
+		url_column_index = None  # Initialize the url_column_index variable
 
-			if len(row) > url_column_index:  # Ensure row has enough columns
+		for row_num, row in enumerate(reader):
+			# Handle the first row (header) if url_column is a string (header name)
+			if row_num == 0 and isinstance(file_mapping['url_column'], str):
+				if file_mapping['url_column'] in row:
+					url_column_index = row.index(file_mapping['url_column'])  # Find the index of the header
+				else:
+					raise Exception(f"Column '{file_mapping['url_column']}' not found in header")
+			elif isinstance(file_mapping['url_column'], int):
+				url_column_index = file_mapping['url_column']  # Use the integer as the column index
+
+			# Ensure url_column_index is set and the row has enough columns
+			if url_column_index is not None and len(row) > url_column_index:
 				links.append(row[url_column_index].strip())
 						
 		return links
