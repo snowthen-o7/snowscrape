@@ -196,6 +196,7 @@ def parse_links_from_file(file_mapping, file_url):
 		urls = df[url_column].dropna().tolist()
   
 		print("Pandas auto-detection successful.")
+		print(urls)
 		return urls
 
 	except Exception as e:
@@ -203,7 +204,11 @@ def parse_links_from_file(file_mapping, file_url):
 		print(f"Pandas failed to parse file. Falling back to manual parsing. Error: {e}")
 		
 		# Manual parsing using csv.reader
-		reader = csv.reader(response.text.splitlines(), delimiter=file_mapping['delimiter'], quotechar=file_mapping['enclosure'], escapechar=file_mapping['escape'])
+		delimiter = file_mapping.get('delimiter', ',')
+		quotechar = file_mapping.get('enclosure', None) or None
+		escapechar = file_mapping.get('escape', None) or None
+		
+		reader = csv.reader(response.text.splitlines(), delimiter=delimiter, quotechar=quotechar, escapechar=escapechar)
 		
 		links = []
 		for row in reader:
