@@ -62,6 +62,7 @@ def delete_job_handler(event, context):
 # Get the status of all jobs
 def get_all_job_statuses_handler(event, context):
 	jobs = get_all_jobs()
+	print(jobs)
 	return {
 		"statusCode": 200,
 		"body": json.dumps(jobs),  # Ensure body is a JSON string
