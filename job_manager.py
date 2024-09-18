@@ -1,7 +1,7 @@
 import boto3
 import os
 from botocore.exceptions import ClientError
-from utils import parse_links_from_file, validate_job_data
+from utils import decimal_to_float, parse_links_from_file, validate_job_data
 
 dynamodb = boto3.resource('dynamodb', region_name=os.environ.get('REGION', 'us-east-2'))
 table = dynamodb.Table(os.environ['DYNAMODB_TABLE'])
@@ -64,7 +64,9 @@ def get_all_jobs():
 	try:
 		response = table.scan()
 		print(f"Retrieved jobs response: {response}")
-		return response.get('Items', [])
+		jobs = response.get('Items', [])
+		jobs_cleaned = decimal_to_float(jobs)  # Convert Decimals
+		return jobs_cleaned
 	except ClientError as e:
 		print(f"Error retrieving jobs: {e.response['Error']['Message']}")
 		return []

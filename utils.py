@@ -3,12 +3,23 @@ import jwt
 import os
 import pandas as pd
 import requests
+from decimal import Decimal
 from io import StringIO
 
 def cron_to_seconds(cron_expression):
 	"""Converts a cron expression to the equivalent interval in seconds."""
 	# Implement logic to convert cron to seconds
 	pass
+
+def decimal_to_float(obj):
+	if isinstance(obj, list):
+		return [decimal_to_float(i) for i in obj]
+	elif isinstance(obj, dict):
+		return {k: decimal_to_float(v) for k, v in obj.items()}
+	elif isinstance(obj, Decimal):
+		return float(obj)  # Convert Decimal to float
+	else:
+		return obj
 
 def extract_token_from_event(event):
 	headers = event.get("headers", {})
