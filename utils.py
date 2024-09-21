@@ -29,13 +29,33 @@ def detect_csv_settings(file_content):
 	
 	# Detect delimiter and quoting
 	sample = file_content[:1024]  # Use the first 1024 bytes for sampling
-	print(sample)
-	dialect = sniffer.sniff(sample)
-	print(dialect)
-	
+	print(f"Sample content for sniffing:\n{sample}\n")
+
+	try:
+		dialect = sniffer.sniff(sample)
+		# Log detailed information about the dialect detected
+		print(f"Detected CSV dialect:\n"
+			f"Delimiter: {dialect.delimiter}\n"
+			f"Quote character: {repr(dialect.quotechar)}\n"
+			f"Escape character: {repr(dialect.escapechar)}\n"
+			f"Doublequote: {dialect.doublequote}\n"
+			f"Skip initial space: {dialect.skipinitialspace}\n"
+			f"Line terminator: {repr(dialect.lineterminator)}\n"
+			f"Quoting: {dialect.quoting}\n")
+	except csv.Error as e:
+		print(f"Error detecting CSV dialect: {e}")
+		return {
+			'delimiter': ',',
+			'enclosure': '"',
+			'escape': '',
+			'headers': []
+		}
+
 	# Read the file into a list of rows
 	reader = csv.reader(StringIO(file_content), dialect)
 	headers = next(reader, None)  # Assume the first row is the header
+
+	print(f"Detected headers: {headers}\n")
 	
 	return {
 		'delimiter': dialect.delimiter,
