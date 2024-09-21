@@ -29,7 +29,9 @@ def detect_csv_settings(file_content):
 	
 	# Detect delimiter and quoting
 	sample = file_content[:1024]  # Use the first 1024 bytes for sampling
+	print(sample)
 	dialect = sniffer.sniff(sample)
+	print(dialect)
 	
 	# Read the file into a list of rows
 	reader = csv.reader(StringIO(file_content), dialect)
