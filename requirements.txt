@@ -1,3 +1,4 @@
+bcrypt==4.2.0
 boto3==1.35.0
 botocore==1.35.0
 certifi==2024.7.4
@@ -10,9 +11,11 @@ jsonpath-ng==1.6.1
 lxml==5.3.0
 numpy==2.1.1
 pandas==2.2.2
+paramiko==3.5.0
 ply==3.11
 pycparser==2.22
 PyJWT==2.9.0
+PyNaCl==1.5.0
 python-dateutil==2.9.0.post0
 pytz==2024.2
 requests==2.32.3

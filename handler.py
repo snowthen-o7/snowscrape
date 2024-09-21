@@ -1,5 +1,7 @@
 import json
+import paramiko
 
+from urllib.parse import urlparse
 from job_manager import create_job, delete_job, get_all_jobs, get_job, get_job_crawls, pause_job, refresh_job, resume_job, update_job
 from crawl_manager import get_crawl
 from utils import extract_token_from_event, validate_clerk_token, validate_job_data
@@ -202,3 +204,70 @@ def update_job_handler(event, context):
 				"Content-Type": "application/json"
 			}
 	}
+
+def validate_sftp_url_handler(event, context):
+	# Extract URL from the request body
+	body = json.loads(event.get('body', '{}'))
+	sftp_url = body.get('sftp_url')
+
+	if not sftp_url:
+		return {
+			'statusCode': 400,
+			'body': json.dumps({'error': 'Missing SFTP URL'}),
+			"headers": {
+				'Access-Control-Allow-Credentials': True,
+				'Access-Control-Allow-Origin': '*',
+				"Content-Type": "application/json"
+			}
+		}
+
+	# Parse the SFTP URL
+	parsed_url = urlparse(sftp_url)
+
+	if parsed_url.scheme != 'sftp':
+		return {
+			'statusCode': 400,
+			'body': json.dumps({'error': 'Invalid URL scheme'}),
+			"headers": {
+				'Access-Control-Allow-Credentials': True,
+				'Access-Control-Allow-Origin': '*',
+				"Content-Type": "application/json"
+			}
+		}
+  
+  # Extract username and password from the URL
+	username = parsed_url.username
+	password = parsed_url.password
+
+	# Attempt to connect to the SFTP server
+	try:
+		transport = paramiko.Transport((parsed_url.hostname, parsed_url.port or 22))
+		transport.connect(username=username, password=password)
+		sftp = paramiko.SFTPClient.from_transport(transport)
+
+		# Check if the directory or file exists
+		sftp.stat(parsed_url.path)
+
+		sftp.close()
+		transport.close()
+
+		return {
+			'statusCode': 200,
+			'body': json.dumps({'message': 'SFTP URL validated successfully'}),
+			"headers": {
+				'Access-Control-Allow-Credentials': True,
+				'Access-Control-Allow-Origin': '*',
+				"Content-Type": "application/json"
+			}
+		}
+
+	except Exception as e:
+		return {
+			'statusCode': 400,
+			'body': json.dumps({'error': str(e)}),
+			"headers": {
+				'Access-Control-Allow-Credentials': True,
+				'Access-Control-Allow-Origin': '*',
+				"Content-Type": "application/json"
+			}
+		}

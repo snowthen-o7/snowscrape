@@ -125,6 +125,14 @@ functions:
           method: put
           cors: true
 
+  validateSftpUrl:
+    handler: handler.validate_sftp_url_handler
+    events:
+      - http:
+          path: validate-sftp-url
+          method: post
+          cors: true
+
 resources:
   Resources:
     JobsDynamoDbTable:
