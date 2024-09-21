@@ -21,6 +21,27 @@ def decimal_to_float(obj):
 	else:
 		return obj
 
+def detect_csv_settings(file_content):
+	"""
+	Detects the CSV settings such as delimiter, enclosure, escape characters, and headers from a file.
+	"""
+	sniffer = csv.Sniffer()
+	
+	# Detect delimiter and quoting
+	sample = file_content[:1024]  # Use the first 1024 bytes for sampling
+	dialect = sniffer.sniff(sample)
+	
+	# Read the file into a list of rows
+	reader = csv.reader(StringIO(file_content), dialect)
+	headers = next(reader, None)  # Assume the first row is the header
+	
+	return {
+		'delimiter': dialect.delimiter,
+		'enclosure': dialect.quotechar if dialect.quotechar else '',
+		'escape': dialect.escapechar if dialect.escapechar else '',
+		'headers': headers
+	}
+
 def extract_token_from_event(event):
 	headers = event.get("headers", {})
 	authorization_header = headers.get("Authorization", "")

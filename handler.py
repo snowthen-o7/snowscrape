@@ -239,21 +239,42 @@ def validate_sftp_url_handler(event, context):
 	username = parsed_url.username
 	password = parsed_url.password
 
+	if not username or not password:
+		return {
+			'statusCode': 400,
+			'body': json.dumps({'error': 'Missing username or password in the URL'}),
+			"headers": {
+				'Access-Control-Allow-Credentials': True,
+				'Access-Control-Allow-Origin': '*',
+				"Content-Type": "application/json"
+			}
+		}
+
 	# Attempt to connect to the SFTP server
 	try:
 		transport = paramiko.Transport((parsed_url.hostname, parsed_url.port or 22))
 		transport.connect(username=username, password=password)
 		sftp = paramiko.SFTPClient.from_transport(transport)
 
-		# Check if the directory or file exists
-		sftp.stat(parsed_url.path)
+		# Retrieve the file content
+		with sftp.file(parsed_url.path, 'r') as file:
+			file_content = file.read().decode()  # Decode file content to string
 
 		sftp.close()
 		transport.close()
+  
+		# Detect CSV settings from the file content
+		csv_settings = detect_csv_settings(file_content)
 
 		return {
 			'statusCode': 200,
-			'body': json.dumps({'message': 'SFTP URL validated successfully'}),
+			'body': json.dumps({
+					'message': 'SFTP URL validated successfully',
+					'delimiter': csv_settings['delimiter'],
+					'enclosure': csv_settings['enclosure'],
+					'escape': csv_settings['escape'],
+					'headers': csv_settings['headers']
+			}),
 			"headers": {
 				'Access-Control-Allow-Credentials': True,
 				'Access-Control-Allow-Origin': '*',
