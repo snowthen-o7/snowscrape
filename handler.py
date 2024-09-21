@@ -4,7 +4,7 @@ import paramiko
 from urllib.parse import urlparse
 from job_manager import create_job, delete_job, get_all_jobs, get_job, get_job_crawls, pause_job, refresh_job, resume_job, update_job
 from crawl_manager import get_crawl
-from utils import extract_token_from_event, validate_clerk_token, validate_job_data
+from utils import detect_csv_settings, extract_token_from_event, validate_clerk_token, validate_job_data
 
 # Create a new job
 def create_job_handler(event, context):
