@@ -32,7 +32,7 @@ def detect_csv_settings(file_content):
 	print(f"Sample content for sniffing:\n{sample}\n")
 
 	try:
-		dialect = sniffer.sniff(sample)
+		dialect = sniffer.sniff(sample, delimiters=[',', ';', '\t', '|'])
 		# Log detailed information about the dialect detected
 		print(f"Detected CSV dialect:\n"
 			f"Delimiter: {dialect.delimiter}\n"
