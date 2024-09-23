@@ -2,9 +2,11 @@ import csv
 import jwt
 import os
 import pandas as pd
+import paramiko
 import requests
 from decimal import Decimal
-from io import StringIO
+from io import BytesIO, StringIO
+from urllib.parse import urlparse
 
 def cron_to_seconds(cron_expression):
 	"""Converts a cron expression to the equivalent interval in seconds."""
@@ -225,15 +227,47 @@ def convert_scheduling_to_cron(scheduling):
 
 	return cron_expression
 
-def parse_links_from_file(file_mapping, file_url):
-	try:
-		# Step 1: Try using pandas to autodetect CSV structure and extract links
+def fetch_file_content(file_url):
+	"""
+	Fetches file content from HTTP/HTTPS or SFTP URLs.
+	Returns file content as string.
+	"""
+	parsed_url = urlparse(file_url)
+
+	if parsed_url.scheme in ['http', 'https']:
+		# Fetch file from HTTP/HTTPS
 		response = requests.get(file_url)
 		response.raise_for_status()
-		
-		# Read the file content into pandas
-		file_content = response.text
-		df = pd.read_csv(StringIO(file_content), on_bad_lines="skip") # Using StringIO to treat file content as a file-like object
+		return response.text
+
+	elif parsed_url.scheme == 'sftp':
+		# Fetch file from SFTP
+		if not parsed_url.username or not parsed_url.password:
+				raise Exception("SFTP URL must contain a username and password")
+
+		transport = paramiko.Transport((parsed_url.hostname, parsed_url.port or 22))
+		transport.connect(username=parsed_url.username, password=parsed_url.password)
+		sftp = paramiko.SFTPClient.from_transport(transport)
+
+		try:
+			with sftp.file(parsed_url.path, 'r') as remote_file:
+				file_content = remote_file.read().decode('utf-8')  # Read and decode bytes to string
+		finally:
+			sftp.close()
+			transport.close()
+
+		return file_content
+
+	else:
+		raise Exception("Unsupported URL scheme. Only HTTP, HTTPS, and SFTP are supported.")
+
+def parse_links_from_file(file_mapping, file_url):
+	try:
+		# Fetch file content from the given URL (HTTP/HTTPS or SFTP)
+		file_content = fetch_file_content(file_url)
+
+		# Step 1: Try using pandas to autodetect CSV structure and extract links
+		df = pd.read_csv(StringIO(file_content), on_bad_lines="skip")  # Using StringIO to treat file content as a file-like object
 		
 		# If 'url_column' is a string, use it as a column name. If it's an integer, use it as an index.
 		if isinstance(file_mapping['url_column'], str):
@@ -258,7 +292,7 @@ def parse_links_from_file(file_mapping, file_url):
 		quotechar = file_mapping.get('enclosure', None) or None
 		escapechar = file_mapping.get('escape', None) or None
 		
-		reader = csv.reader(response.text.splitlines(), delimiter=delimiter, quotechar=quotechar, escapechar=escapechar)
+		reader = csv.reader(file_content.splitlines(), delimiter=delimiter, quotechar=quotechar, escapechar=escapechar)
 		
 		links = []
 		url_column_index = None  # Initialize the url_column_index variable
