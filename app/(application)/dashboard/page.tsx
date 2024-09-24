@@ -156,7 +156,7 @@ export default function Dashboard() {
 			)}
 
 			{/* Unified Job Modal for both creating new jobs and updating existing ones */}
-			{jobModalOpen.isOpen && (
+			{jobModalOpen.isOpen && session && (
 				<JobModal
 					closeModal={() => setJobModalOpen({ isOpen: false, jobDetails: null })}
 					jobDetails={jobModalOpen.jobDetails} // Pass job details if editing, or null if creating a new job

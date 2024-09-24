@@ -37,15 +37,15 @@ export interface JobDetailsModalProps {
 }
 
 export interface Query {
+  join: boolean;
   name: string;
-  type: 'xpath' | 'regex' | 'jsonpath';
   query: string;
-  join?: boolean;
+  type: 'xpath' | 'regex' | 'jsonpath';
 }
 
 export interface Scheduling {
   days: string[];
-  hours: string[];
+  hours: number[];
 }
 
 export interface JobCardProps {

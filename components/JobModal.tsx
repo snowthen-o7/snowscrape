@@ -10,20 +10,24 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch"
 
 import { X, Loader2, Plus, Trash2 } from 'lucide-react'
-import { SessionResource, UserResource } from '@clerk/types';
+import { SessionResource } from '@clerk/types';
 import { FormData, FileMapping, Job, Query, Scheduling } from '@/lib/types';
 import { validateQueries, validateHTTP, validateSFTP } from '@/lib/utils';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
-export function JobModal({ closeModal, jobDetails, session }: { closeModal: () => void, jobDetails?: Job, session: SessionResource, user: UserResource }) {
+export function JobModal({ closeModal, jobDetails, session }: {
+  closeModal: () => void,
+  jobDetails?: Job | null,
+  session: SessionResource | null,
+ }) {
   const [formData, setFormData] = useState<FormData>({
     name: '',
     rate_limit: 1,
     source: '',
-    file_mapping: { delimiter: ',', enclosure: '', escape: '', url_column: '' },
-    scheduling: { days: [], hours: [] }, // Array for selected days and hours
-    queries: [{ name: '', type: 'xpath', query: '', join: false }]
+    file_mapping: { delimiter: ',', enclosure: '', escape: '', url_column: '' } as FileMapping,
+    scheduling: { days: [], hours: [] } as Scheduling, // Array for selected days and hours
+    queries: [{ name: '', type: 'xpath', query: '', join: false }] as Query[] // Explicitly type the queries as an array of Query
   });
 
   const [sourceError, setSourceError] = useState<string | null>(null);
@@ -121,21 +125,24 @@ export function JobModal({ closeModal, jobDetails, session }: { closeModal: () =
     });
   };
 
-  const handleQueryChange = (index: number, field: keyof Query, value: string) => {
-    const updatedQueries = [...formData.queries];
+  const handleQueryChange = (index: number, field: keyof Query, value: string | boolean) => {
+    const updatedQueries = [...formData.queries]; // Copy the existing queries
   
-    if (field === 'type') {
-      // Ensure that the value is one of the allowed types
+    // Cast 'value' based on the 'field' being updated
+    if (field === 'name' || field === 'query') {
+      updatedQueries[index][field] = value as string; // Cast 'value' to string
+    } else if (field === 'join') {
+      updatedQueries[index][field] = value as boolean; // Cast 'value' to boolean
+    } else if (field === 'type') {
+      // Ensure that the value for 'type' is one of the allowed types
       if (value === 'xpath' || value === 'regex' || value === 'jsonpath') {
-        updatedQueries[index][field] = value;
+        updatedQueries[index][field] = value; // 'value' already has the correct type
       } else {
         console.error("Invalid type value");
-        return; // Invalid type, so don't proceed
+        return; // Stop if the type value is invalid
       }
-    } else {
-      updatedQueries[index][field] = value;
     }
-
+  
     setFormData({ ...formData, queries: updatedQueries });
   };
 
@@ -174,7 +181,10 @@ export function JobModal({ closeModal, jobDetails, session }: { closeModal: () =
     }
 
     try {
-      const token = await session.getToken(); // Get the session token
+      const token = session?.getToken(); // Use optional chaining to ensure session is not null
+      if (!token) {
+        throw new Error("Session is null or token is unavailable");
+      }
       const url = jobDetails ? `${process.env.NEXT_PUBLIC_API_BASE_URL}/jobs/${jobDetails.job_id}` : `${process.env.NEXT_PUBLIC_API_BASE_URL}/jobs`;
       const method = jobDetails ? "PUT" : "POST";
 
@@ -205,19 +215,25 @@ export function JobModal({ closeModal, jobDetails, session }: { closeModal: () =
   
       // Handle "Every Day" and disable other days
       if (field === 'days') {
-        if (value.includes('Every Day')) {
+        // Type assertion to treat `value` as a string array for days
+        const daysValue = value as string[];
+
+        if (daysValue.includes('Every Day')) {
           updatedScheduling.days = ['Every Day']; // Only "Every Day" should be selected
         } else {
-          updatedScheduling.days = value.filter((day) => day !== 'Every Day'); // Remove "Every Day" if others are selected
+          updatedScheduling.days = daysValue.filter((day) => day !== 'Every Day'); // Remove "Every Day" if others are selected, Ensure only strings are passed here
         }
       }
   
       // Handle "24" (Every Hour) and disable other hours
       if (field === 'hours') {
-        if (value.includes(24)) {
+        // Type assertion to treat `value` as a number array for hours
+        const hoursValue = value as number[];
+
+        if (hoursValue.includes(24)) {
           updatedScheduling.hours = [24]; // Only "24" (Every Hour) should be selected
         } else {
-          updatedScheduling.hours = value.filter((hour) => hour !== 24); // Remove "24" if others are selected
+          updatedScheduling.hours = hoursValue.filter((hour) => hour !== 24); // Remove "24" if others are selected
         }
       }
   
@@ -407,7 +423,7 @@ export function JobModal({ closeModal, jobDetails, session }: { closeModal: () =
                     </div>
                     <div>
                       <Label htmlFor={`queryType-${index}`}>Type</Label>
-                      <Select id={`queryType-${index}`} value={query.type} onValueChange={value => handleQueryChange(index, 'type', value)}>
+                      <Select value={query.type} onValueChange={value => handleQueryChange(index, 'type', value)}>
                         <SelectTrigger>
                           <SelectValue placeholder="Select type" />
                         </SelectTrigger>
