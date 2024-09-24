@@ -16,7 +16,7 @@ import { validateQueries, validateHTTP, validateSFTP } from '@/lib/utils';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
-export function JobModal({ closeModal, jobDetails, session, user }: { closeModal: () => void, jobDetails?: Job, session: SessionResource, user: UserResource }) {
+export function JobModal({ closeModal, jobDetails, session }: { closeModal: () => void, jobDetails?: Job, session: SessionResource, user: UserResource }) {
   const [formData, setFormData] = useState<FormData>({
     name: '',
     rate_limit: 1,
@@ -31,6 +31,12 @@ export function JobModal({ closeModal, jobDetails, session, user }: { closeModal
   const [sourceLoading, setSourceLoading] = useState<boolean>(false);
   const [headers, setHeaders] = useState<string[]>([]); // Track headers from the source file
   const maxQueries = 10;
+
+  // Helper function to set error and show toast
+  const setErrorAndToast = (setError: React.Dispatch<React.SetStateAction<string | null>>, errorMessage: string) => {
+    setError(errorMessage);
+    toast.error(errorMessage, { position: 'top-right' });
+  };
 
   useEffect(() => {
     console.log("JobDetails", jobDetails);

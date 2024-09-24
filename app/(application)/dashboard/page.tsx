@@ -7,7 +7,7 @@ import { JobCard } from "@/components/JobCard";
 import { Job } from "@/lib/types";
 
 export default function Dashboard() {
-	const { user, isLoaded: isUserLoaded } = useUser();
+	const { isLoaded: isUserLoaded } = useUser();
 	const { session, isLoaded: isSessionLoaded } = useSession();
 	const [jobs, setJobs] = useState<Job[]>([]);
 	const [loading, setLoading] = useState(true);
@@ -161,7 +161,6 @@ export default function Dashboard() {
 					closeModal={() => setJobModalOpen({ isOpen: false, jobDetails: null })}
 					jobDetails={jobModalOpen.jobDetails} // Pass job details if editing, or null if creating a new job
 					session={session}
-					user={user}
 				/>
 			)}
 		</div>
