@@ -338,12 +338,12 @@ export function JobModal({ closeModal, jobDetails, session }: {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="default">Default (Auto-detect)</SelectItem>  {/* Add default option */}
-                    {headers.length > 0 ?? (
+                    {headers.length > 0 && (
                       headers.map((header, index) => (
                         <SelectItem key={index} value={header}>{header}</SelectItem>
                       ))
                     )}
-                  </SelectContent>
+                </SelectContent>
                 </Select>
               </div>
             </div>
