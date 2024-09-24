@@ -3,6 +3,7 @@ import jwt
 import os
 import pandas as pd
 import paramiko
+import re
 import requests
 from decimal import Decimal
 from io import BytesIO, StringIO
@@ -65,6 +66,16 @@ def detect_csv_settings(file_content):
 		'escape': dialect.escapechar if dialect.escapechar else '',
 		'headers': headers
 	}
+
+def detect_url_column(headers):
+	# Define a regex to match common column names for URLs (like "link" or "url")
+	url_column_regex = re.compile(r'(link|url)', re.IGNORECASE)
+	
+	# Iterate over the headers and return the first match
+	for index, header in enumerate(headers):
+		if url_column_regex.search(header):
+			return index  # Return the index of the matching column
+	return None  # Return None if no match is found
 
 def extract_token_from_event(event):
 	headers = event.get("headers", {})
@@ -160,8 +171,6 @@ def validate_job_data(data):
 				raise ValueError("Each query must have a valid 'type' (xpath, regex, or jsonpath).")
 			if 'query' not in query or not isinstance(query['query'], str):
 				raise ValueError("Each query must have a valid 'query' (string).")
-			if 'join' in query and query['join'] and not isinstance(query['join'], str):
-				raise ValueError("If 'join' is provided in a query, it must be a string.")
 
 def convert_cron_to_scheduling(cron_expression):
 	"""
@@ -269,11 +278,15 @@ def parse_links_from_file(file_mapping, file_url):
 		# Step 1: Try using pandas to autodetect CSV structure and extract links
 		df = pd.read_csv(StringIO(file_content), on_bad_lines="skip")  # Using StringIO to treat file content as a file-like object
 		
-		# If 'url_column' is a string, use it as a column name. If it's an integer, use it as an index.
-		if isinstance(file_mapping['url_column'], str):
-			url_column = file_mapping['url_column']
+		# Handle the "default" option for URL column
+		if file_mapping['url_column'] == 'default':
+			url_column_index = detect_url_column(df.columns)  # Use the regex to detect a matching column
+			if url_column_index is None:
+				raise ValueError("No suitable URL column found matching 'link' or 'url'.")
+			url_column = df.columns[url_column_index]  # Use the detected column
 		else:
-			url_column = df.columns[file_mapping['url_column']]
+			# If 'url_column' is a string, use it as a column name. If it's an integer, use it as an index.
+			url_column = file_mapping['url_column'] if isinstance(file_mapping['url_column'], str) else df.columns[file_mapping['url_column']]
 		
 		# Extract the URLs from the specified column
 		urls = df[url_column].dropna().tolist()
