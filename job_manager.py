@@ -38,7 +38,8 @@ def create_job(job_data):
 
 		print(f"Creating job: {job_item}")
 		# Insert job data into DynamoDB
-		table.put_item(Item=job_item)
+		response = table.put_item(Item=job_item)
+		print(f"DynamoDB put_item response: {response}")
 		return job_data['job_id']
 	except ValueError as e:
 		print(f"Job validation failed: {str(e)}")
