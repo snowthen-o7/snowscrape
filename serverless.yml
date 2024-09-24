@@ -185,6 +185,8 @@ resources:
             AttributeType: S       # String
           - AttributeName: url  # Sort Key
             AttributeType: S       # String
+          - AttributeName: status  # Attribute for the GSI
+            AttributeType: S       # String
         KeySchema:
           - AttributeName: job_id  # Partition Key for URLs by job
             KeyType: HASH
