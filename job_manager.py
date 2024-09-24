@@ -73,7 +73,9 @@ def get_job(job_id):
 	try:
 		response = table.get_item(Key={'job_id': job_id})
 		print(f"Retrieved job response: {response}")
-		return response.get('Item')
+		response_cleaned = decimal_to_float(response)
+		print(f"Cleaned job response: {response_cleaned}")
+		return response_cleaned.get('Item')
 	except ClientError as e:
 		print(f"Error retrieving job {job_id}: {e.response['Error']['Message']}")
 		return None
