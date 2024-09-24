@@ -18,8 +18,7 @@ provider:
     REGION: ${self:provider.region}
     S3_BUCKET: ${self:custom.s3Bucket}
     SQS_JOB_QUEUE: ${self:custom.sqsJobQueue}
-    SQS_JOB_QUEUE_URL:
-      Ref: ${self:custom.sqsJobQueue}
+    SQS_JOB_QUEUE_URL: ${self:custom.sqsJobQueueUrl}
   iamRoleStatements:
     - Effect: "Allow"
       Action:
@@ -222,6 +221,7 @@ custom:
   dynamoDbUrlsTable: SnowscrapeUrls
   s3Bucket: snowscrape-results
   sqsJobQueue: SnowscrapeJobQueue
+  sqsJobQueueUrl: https://sqs.us-east-2.amazonaws.com/390844772519/SnowscrapeJobQueue
   clerkJwtPublicKey:
     dev: |
       -----BEGIN PUBLIC KEY-----
