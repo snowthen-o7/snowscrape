@@ -9,9 +9,6 @@ table = dynamodb.Table(os.environ['DYNAMODB_TABLE'])
 # Create a new job in DynamoDB
 def create_job(job_data):
 	try:
-		# Validate the job data before creating
-		validate_job_data(job_data)
-
 		# Parse the list of URLs from the external source
 		links = parse_links_from_file(job_data['file_mapping'], job_data['source'])  # Assuming 'source' is the URL to the list
 		print(f"Parsed links: {links}")

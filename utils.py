@@ -141,10 +141,10 @@ def validate_job_data(data):
 
 		if data['file_mapping']['delimiter'] not in [',', ';', '|', '\t']:
 			raise ValueError("Invalid 'delimiter'. Must be one of ',', ';', '|', or '\t'.")
-		if data['file_mapping']['enclosure'] not in ['"', "'", ""]:
-			raise ValueError("Invalid 'enclosure'. Must be either '\"', '\'', or ''.")
-		if data['file_mapping']['escape'] not in ['\\', '/', '"', "'", ""]:
-			raise ValueError("Invalid 'escape'. Must be '\\', '/', '\"', '\'', or ''.")
+		if data['file_mapping']['enclosure'] not in ['"', "'", "none"]:
+			raise ValueError("Invalid 'enclosure'. Must be either '\"', '\'', or 'none'.")
+		if data['file_mapping']['escape'] not in ['\\', '/', '"', "'", "none"]:
+			raise ValueError("Invalid 'escape'. Must be '\\', '/', '\"', '\'', or 'none'.")
 
 	if 'scheduling' in data:
 		if 'hours' not in data['scheduling'] or not isinstance(data['scheduling']['hours'], list):
@@ -302,8 +302,8 @@ def parse_links_from_file(file_mapping, file_url):
 
 		# Manual parsing using csv.reader
 		delimiter = file_mapping.get('delimiter', ',')
-		quotechar = file_mapping.get('enclosure', None) or None
-		escapechar = file_mapping.get('escape', None) or None
+		quotechar = None if file_mapping.get('enclosure') == 'none' else file_mapping.get('enclosure', None)
+		escapechar = None if file_mapping.get('escape') == 'none' else file_mapping.get('escape', None)
 		
 		reader = csv.reader(file_content.splitlines(), delimiter=delimiter, quotechar=quotechar, escapechar=escapechar)
 		
