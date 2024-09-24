@@ -18,8 +18,8 @@ provider:
     REGION: ${self:provider.region}
     S3_BUCKET: ${self:custom.s3Bucket}
     SQS_JOB_QUEUE: ${self:custom.sqsJobQueue}
-    # SQS_JOB_QUEUE_URL:
-    #   Ref: ${self:custom.sqsJobQueue}
+    SQS_JOB_QUEUE_URL:
+      Ref: ${self:custom.sqsJobQueue}
   iamRoleStatements:
     - Effect: "Allow"
       Action:
