@@ -2,7 +2,7 @@
 
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
-import { UrlModal } from "@/lib/components/UrlModal";
+import { UrlModal } from "@/components/UrlModal";
 
 export default function JobPage() {
 	const [modalOpen, setModalOpen] = useState(false);

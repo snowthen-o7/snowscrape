@@ -1,5 +1,11 @@
+import { ClassValue, clsx } from "clsx";
 import Papa from 'papaparse';
+import { twMerge } from "tailwind-merge";
 import { Query } from '@/lib/types';
+
+export const cn = (...inputs: ClassValue[]) => {
+  return twMerge(clsx(inputs));
+}
 
 /**
  * Detects CSV settings using PapaParse and extracts headers
@@ -100,3 +106,59 @@ export const validateQueries = async (queries: Query[]): Promise<(string | null)
   return errors;
 };
 
+export const validateHTTP = async (sourceUrl: string): Promise<{ delimiter: string; enclosure: string; escape: string; headers: string[] }> => {
+  try {
+    const response = await fetch(sourceUrl);
+    if (!response.ok) {
+      throw new Error('Invalid URL or cannot reach the source.');
+    }
+
+    const fileText = await response.text();
+    const detected = detectCSVSettings(fileText); // Detect CSV settings and headers
+    return {
+      delimiter: detected.delimiter || ',',
+      enclosure: detected.enclosure || '',
+      escape: detected.escape || '',
+      headers: detected.headers || [],
+    };
+  } catch (error) {
+    throw new Error(`HTTP validation error: ${(error as Error).message}`);
+  }
+};
+
+/**
+ * Validates an SFTP URL by making a POST request to the serverless API.
+ * @param sftpUrl - The SFTP URL string
+ * @returns A promise that resolves if valid, rejects if invalid
+ */
+export const validateSFTP = async (sftpUrl: string): Promise<{ delimiter: string; enclosure: string; escape: string; headers: string[] }> => {
+  try {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/validate-sftp-url`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ sftp_url: sftpUrl }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to validate SFTP URL');
+    }
+
+    const result = await response.json();
+    if (result.message !== 'SFTP URL validated successfully') {
+      throw new Error('Failed to validate SFTP URL');
+    }
+
+    // Return the file mapping data from the response
+    return {
+      delimiter: result.delimiter,
+      enclosure: result.enclosure,
+      escape: result.escape,
+      headers: result.headers,
+    };
+  } catch (error) {
+    throw new Error((error as Error).message);
+  }
+};

@@ -17,22 +17,30 @@ export interface FormData {
 }
 
 export interface Job {
-  id: string;
-  name: string;
-  status: string;
   crawl_count: number;
+  created_at: string;
+  file_mapping: FileMapping;
+  job_id: string;
+  name: string;
+  queries: Query[];
+  rate_limit: number;
+  scheduling: Scheduling;
+  source: string;
+  status: string;
+  user_id: string;
 }
 
 export interface JobDetailsModalProps {
-  jobId: string; // Assuming `jobId` is a string, change if necessary
   closeModal: () => void;
+  jobId: string; // Assuming `jobId` is a string
+  token: string; // Assuming `token` is a string
 }
 
 export interface Query {
   name: string;
   type: 'xpath' | 'regex' | 'jsonpath';
   query: string;
-  join?: string;
+  join?: boolean;
 }
 
 export interface Scheduling {
