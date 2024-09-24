@@ -1,3 +1,4 @@
+import boto3
 import csv
 import jwt
 import os
@@ -6,8 +7,72 @@ import paramiko
 import re
 import requests
 from decimal import Decimal
-from io import BytesIO, StringIO
+from io import StringIO
 from urllib.parse import urlparse
+
+def convert_cron_to_scheduling(cron_expression):
+	"""
+	Converts a cron expression to scheduling data.
+	"""
+	parts = cron_expression.split()
+	if len(parts) != 5:
+		raise ValueError("Invalid cron expression")
+
+	# Parse the hour part
+	hours = parts[1]
+	if hours == '*':
+		hours = ['Every Hour']
+	else:
+		hours = [int(h) for h in hours.split(',')]
+
+	# Parse the day part
+	days = parts[4]
+	if days == '*':
+		days = ['Every Day']
+	else:
+		valid_days_map = {
+			'0': 'Sunday',
+			'1': 'Monday',
+			'2': 'Tuesday',
+			'3': 'Wednesday',
+			'4': 'Thursday',
+			'5': 'Friday',
+			'6': 'Saturday',
+		}
+		days = [valid_days_map[day] for day in days.split(',') if day in valid_days_map]
+
+	return {
+		'days': days,
+		'hours': hours
+	}
+
+def convert_scheduling_to_cron(scheduling):
+	"""
+	Converts the scheduling data to a cron expression.
+	"""
+	days = scheduling.get('days', [])
+	hours = scheduling.get('hours', [])
+
+	# Handle "Every Day" and "Every Hour"
+	if 'Every Day' not in days:
+		valid_days_map = {
+			'Sunday': '0',
+			'Monday': '1',
+			'Tuesday': '2',
+			'Wednesday': '3',
+			'Thursday': '4',
+			'Friday': '5',
+			'Saturday': '6',
+		}
+		day_part = '*' if not days or 'Every Day' in days else ','.join(valid_days_map[day] for day in days)
+
+	if 'Every Hour' not in hours:
+		hour_part = '*' if not hours or 'Every Hour' in hours else ','.join(str(hour) for hour in hours)
+
+	# Cron format: minute (0), hour, day of the month (*), month (*), day of the week
+	cron_expression = f"0 {hour_part} * * {day_part}"
+
+	return cron_expression
 
 def cron_to_seconds(cron_expression):
 	"""Converts a cron expression to the equivalent interval in seconds."""
@@ -105,11 +170,56 @@ def parse_file(file_content, delimiter=',', enclosure='"', escape='\\', url_colu
 			urls.append(row[url_column].strip())
 	return urls
 
-def save_to_s3(bucket_name, key, data):
-	"""Saves data to an S3 bucket."""
-	import boto3
-	s3 = boto3.client('s3')
-	s3.put_object(Bucket=bucket_name, Key=key, Body=data)
+def retrieve_links_from_s3(s3_key):
+	"""
+	Retrieve the list of links from S3 using the provided key.
+	"""
+	try:
+		s3 = boto3.client('s3')
+		response = s3.get_object(Bucket=os.environ['S3_BUCKET'], Key=s3_key)
+		print(f"Retrieved links from S3: {s3_key} ({response})")
+		links_content = response['Body'].read().decode('utf-8')
+		links = links_content.splitlines()  # Convert the file content back to a list of links
+		print(f"Links: {links}")
+		return links
+	except Exception as e:
+		print(f"Error retrieving links from S3: {e}")
+		return []
+
+def save_links_to_s3(links, job_id):
+	"""
+	Save the list of links to an S3 bucket and return the S3 key (path).
+	"""
+	try:
+		s3 = boto3.client('s3')
+		# Convert the list of links to a string format (CSV or plain text)
+		links_content = "\n".join(links)
+		
+		# Define the S3 key (file path) based on the job_id
+		s3_key = f"jobs/{job_id}/links.txt"
+		
+		# Save the links to the S3 bucket
+		s3.put_object(Bucket=os.environ['S3_BUCKET'], Key=s3_key, Body=links_content)
+		
+		print(f"Links successfully saved to S3: {s3_key}")
+		return s3_key  # Return the S3 key (file path) for referencing in DynamoDB
+	except Exception as e:
+		print(f"Error saving links to S3: {e}")
+		return None
+
+def send_job_to_queue(job_id, job_data):
+	sqs = boto3.client('sqs', region_name=os.environ.get('REGION', 'us-east-2'))
+	response = sqs.send_message(
+		QueueUrl=os.getenv('SQS_JOB_QUEUE_URL'),
+		MessageBody=str(job_data),  # You can serialize the job data as JSON
+		MessageAttributes={
+			'JobId': {
+				'StringValue': job_id,
+				'DataType': 'String'
+			}
+		}
+	)
+	return response
 
 def validate_clerk_token(token):
 	try:
@@ -170,70 +280,6 @@ def validate_job_data(data):
 				raise ValueError("Each query must have a valid 'type' (xpath, regex, or jsonpath).")
 			if 'query' not in query or not isinstance(query['query'], str):
 				raise ValueError("Each query must have a valid 'query' (string).")
-
-def convert_cron_to_scheduling(cron_expression):
-	"""
-	Converts a cron expression to scheduling data.
-	"""
-	parts = cron_expression.split()
-	if len(parts) != 5:
-		raise ValueError("Invalid cron expression")
-
-	# Parse the hour part
-	hours = parts[1]
-	if hours == '*':
-		hours = ['Every Hour']
-	else:
-		hours = [int(h) for h in hours.split(',')]
-
-	# Parse the day part
-	days = parts[4]
-	if days == '*':
-		days = ['Every Day']
-	else:
-		valid_days_map = {
-			'0': 'Sunday',
-			'1': 'Monday',
-			'2': 'Tuesday',
-			'3': 'Wednesday',
-			'4': 'Thursday',
-			'5': 'Friday',
-			'6': 'Saturday',
-		}
-		days = [valid_days_map[day] for day in days.split(',') if day in valid_days_map]
-
-	return {
-		'days': days,
-		'hours': hours
-	}
-
-def convert_scheduling_to_cron(scheduling):
-	"""
-	Converts the scheduling data to a cron expression.
-	"""
-	days = scheduling.get('days', [])
-	hours = scheduling.get('hours', [])
-
-	# Handle "Every Day" and "Every Hour"
-	if 'Every Day' not in days:
-		valid_days_map = {
-			'Sunday': '0',
-			'Monday': '1',
-			'Tuesday': '2',
-			'Wednesday': '3',
-			'Thursday': '4',
-			'Friday': '5',
-			'Saturday': '6',
-		}
-		day_part = '*' if not days or 'Every Day' in days else ','.join(valid_days_map[day] for day in days)
-
-	if 'Every Hour' not in hours:
-		hour_part = '*' if not hours or 'Every Hour' in hours else ','.join(str(hour) for hour in hours)
-
-	# Cron format: minute (0), hour, day of the month (*), month (*), day of the week
-	cron_expression = f"0 {hour_part} * * {day_part}"
-
-	return cron_expression
 
 def fetch_file_content(file_url):
 	"""

@@ -1,9 +1,12 @@
+import boto3
 import json
+import os
 import paramiko
 
-from urllib.parse import urlparse
-from job_manager import create_job, delete_job, get_all_jobs, get_job, get_job_crawls, pause_job, refresh_job, resume_job, update_job
 from crawl_manager import get_crawl
+from datetime import datetime
+from job_manager import create_job, delete_job, get_all_jobs, get_job, get_job_crawls, pause_job, process_job, refresh_job, resume_job, update_job
+from urllib.parse import urlparse
 from utils import detect_csv_settings, extract_token_from_event, validate_clerk_token, validate_job_data
 
 # Create a new job
@@ -151,6 +154,49 @@ def pause_job_handler(event, context):
 	return {
 		"statusCode": 200,
 		"body": f"Job {job_id} paused successfully",
+		"headers": {
+				'Access-Control-Allow-Credentials': True,
+				'Access-Control-Allow-Origin': '*',
+				"Content-Type": "application/json"
+			}
+	}
+
+# Process a job (Triggered by SQS)
+def process_job_handler(event, context):
+	# Process each message from SQS
+	for record in event['Records']:
+		job_data = json.loads(record['body'])
+		job_id = job_data.get('job_id')
+
+		print(f"Processing job {job_id}")
+
+		# Perform job processing, e.g., scraping
+		result = process_job(job_data)
+
+		# Store the result in S3
+		s3 = boto3.client('s3')
+		s3.put_object(
+			Bucket='your-results-bucket',
+			Key=f'jobs/{job_id}/result.json',
+			Body=json.dumps(result)
+		)
+
+		# Update DynamoDB with job status
+		dynamodb = boto3.resource('dynamodb', region_name=os.environ.get('REGION', 'us-east-2'))
+		job_table = dynamodb.Table(os.environ['DYNAMODB_JOBS_TABLE'])
+		job_table.update_item(
+			Key={'job_id': job_id},
+			UpdateExpression="SET #status = :status, #last_updated = :last_updated",
+			ExpressionAttributeNames={'#status': 'status', '#last_updated': 'last_updated'},
+			ExpressionAttributeValues={
+				':status': 'finished',
+				':last_updated': datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+			}
+		)
+
+	return {
+		'statusCode': 200,
+		'body': 'Job processed successfully',
 		"headers": {
 				'Access-Control-Allow-Credentials': True,
 				'Access-Control-Allow-Origin': '*',

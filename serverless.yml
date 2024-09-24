@@ -13,26 +13,31 @@ provider:
   environment:
     CLERK_JWT_PUBLIC_KEY: ${self:custom.clerkJwtPublicKey.${self:provider.stage}}  # Conditional key based on the stage
     CLERK_JWT_SECRET_KEY: ${self:custom.clerkJwtSecretKey.${self:provider.stage}}  # Conditional key based on the stage
-    DYNAMODB_TABLE: ${self:custom.dynamoDbTable}
+    DYNAMODB_JOBS_TABLE: ${self:custom.dynamoDbJobsTable}
+    DYNAMODB_URLS_TABLE: ${self:custom.dynamoDbUrlsTable}
     REGION: ${self:provider.region}
     S3_BUCKET: ${self:custom.s3Bucket}
+    SQS_JOB_QUEUE: ${self:custom.sqsJobQueue}
+    SQS_JOB_QUEUE_URL:
+      Ref: ${self:custom.sqsJobQueue}
   iamRoleStatements:
     - Effect: "Allow"
       Action:
-        - "dynamodb:DeleteItem"
-        - "dynamodb:GetItem"
-        - "dynamodb:PutItem"
-        - "dynamodb:Query"
-        - "dynamodb:Scan"
-        - "dynamodb:UpdateItem"
+        - "dynamodb:*"
       Resource:
-        - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.dynamoDbTable}"
+        - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.dynamoDbJobsTable}"
      
     - Effect: "Allow"
       Action:
         - "s3:*"
       Resource:
         - "arn:aws:s3:::${self:custom.s3Bucket}/*"
+
+    - Effect: "Allow"
+      Action:
+        - "sqs:*"
+      Resource:
+        - "arn:aws:sqs:${self:provider.region}:*:queue/${self:custom.sqsJobQueue}"
 
 functions:
   createJob:
@@ -43,6 +48,21 @@ functions:
           path: jobs
           method: post
           cors: true
+
+  # Job processing function (Triggered by SQS)
+  processJob:
+    name: snowscrape-process-job
+    handler: handler.process_job_handler
+    events:
+      - sqs:
+          arn:
+            Fn::GetAtt:
+              - JobQueue
+              - Arn
+          batchSize: 5  # Controls how many messages are processed at once
+    environment:
+      DYNAMODB_JOBS_TABLE: ${self:custom.dynamoDbJobsTable}
+      S3_BUCKET: ${self:custom.s3Bucket}
 
   deleteJob:
     name: snowscrape-delete-job
@@ -138,7 +158,7 @@ resources:
     JobsDynamoDbTable:
       Type: "AWS::DynamoDB::Table"
       Properties:
-        TableName: ${self:custom.dynamoDbTable}
+        TableName: ${self:custom.dynamoDbJobsTable}
         AttributeDefinitions:
           - AttributeName: job_id  # Define the primary key attribute
             AttributeType: S       # S stands for String type
@@ -155,6 +175,36 @@ resources:
             Projection:
               ProjectionType: ALL
         BillingMode: PAY_PER_REQUEST
+
+    UrlsDynamoDbTable:
+      Type: "AWS::DynamoDB::Table"
+      Properties:
+        TableName: ${self:custom.dynamoDbUrlsTable}  # A single table for all URLs across jobs
+        AttributeDefinitions:
+          - AttributeName: job_id  # Partition Key
+            AttributeType: S       # String
+          - AttributeName: url  # Sort Key
+            AttributeType: S       # String
+        KeySchema:
+          - AttributeName: job_id  # Partition Key for URLs by job
+            KeyType: HASH
+          - AttributeName: url  # Sort Key for URL under each job
+            KeyType: RANGE
+        BillingMode: PAY_PER_REQUEST
+        GlobalSecondaryIndexes:
+          - IndexName: StatusIndex  # Optional index to query URLs by status
+            KeySchema:
+              - AttributeName: status
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+
+    # SQS Queue for job processing
+    JobQueue:
+      Type: "AWS::SQS::Queue"
+      Properties:
+        QueueName: ${self:custom.sqsJobQueue}
+
     SnowscrapeResultsBucket:
       Type: "AWS::S3::Bucket"
       Properties:
@@ -166,8 +216,10 @@ plugins:
 custom:
   pythonRequirements:
     dockerizePip: true  # Ensures proper packaging of dependencies in a Docker container
-  dynamoDbTable: SnowscrapeJobs
+  dynamoDbJobsTable: SnowscrapeJobs
+  dynamoDbUrlsTable: SnowscrapeUrls
   s3Bucket: snowscrape-results
+  sqsJobQueue: SnowscrapeJobQueue
   clerkJwtPublicKey:
     dev: |
       -----BEGIN PUBLIC KEY-----
