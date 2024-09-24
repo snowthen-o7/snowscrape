@@ -62,6 +62,7 @@ def get_all_jobs():
 		response = table.scan()
 		print(f"Retrieved jobs response: {response}")
 		jobs = response.get('Items', [])
+		print(f"Jobs: {jobs}")
 		jobs_cleaned = decimal_to_float(jobs)  # Convert Decimals
 		return jobs_cleaned
 	except ClientError as e:

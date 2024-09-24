@@ -150,9 +150,8 @@ def validate_job_data(data):
 		if 'hours' not in data['scheduling'] or not isinstance(data['scheduling']['hours'], list):
 			raise ValueError("'scheduling' must include 'hours' as a list.")
 		for hour in data['scheduling']['hours']:
-			if not isinstance(hour, int) or not (0 <= hour <= 23):
-				if hour != 'Every Hour':
-					raise ValueError("'hours' must be integers between 0 and 23, or 'Every Hour'.")
+			if not isinstance(hour, int) or not (0 <= hour <= 24):
+				raise ValueError("'hours' must be integers between 0 and 23, or 'Every Hour'.")
 
 		if 'days' not in data['scheduling'] or not isinstance(data['scheduling']['days'], list):
 			raise ValueError("'scheduling' must include 'days' as a list.")
