@@ -41,7 +41,7 @@ def create_job_handler(event, context):
 	job_id = create_job(job_data)
 	return {
 		"statusCode": 201,
-		"body": f"Job '{job_id}' created successfully",
+		"body": json.dumps({"message": "Job created successfully", "job_id": job_id}),
 		"headers": {
 				'Access-Control-Allow-Credentials': True,
 				'Access-Control-Allow-Origin': '*',
@@ -56,7 +56,7 @@ def delete_job_handler(event, context):
 	delete_job(job_id)
 	return {
 		"statusCode": 200,
-		"body": f"Job {job_id} deleted successfully",
+		"body": json.dumps({"message": "Job deleted successfully", "job_id": job_id}),
 		"headers": {
 				'Access-Control-Allow-Credentials': True,
 				'Access-Control-Allow-Origin': '*',
@@ -97,7 +97,7 @@ def get_crawl_handler(event, context):
 	else:
 		return {
 			"statusCode": 404,
-			"body": "Crawl not found",
+			"body": json.dumps({"message": "Crawl not found"}),
 			"headers": {
 					'Access-Control-Allow-Credentials': True,
 					'Access-Control-Allow-Origin': '*',
@@ -138,7 +138,7 @@ def get_job_details_handler(event, context):
 	else:
 		return {
 			"statusCode": 404,
-			"body": "Job not found",
+			"body": json.dumps({"message": "Job not found"}),
 			"headers": {
 					'Access-Control-Allow-Credentials': True,
 					'Access-Control-Allow-Origin': '*',
@@ -153,7 +153,7 @@ def pause_job_handler(event, context):
 	pause_job(job_id)
 	return {
 		"statusCode": 200,
-		"body": f"Job {job_id} paused successfully",
+		"body": json.dumps({"message": "Job paused successfully", "job_id": job_id}),
 		"headers": {
 				'Access-Control-Allow-Credentials': True,
 				'Access-Control-Allow-Origin': '*',
@@ -176,7 +176,7 @@ def process_job_handler(event, context):
 		# Store the result in S3
 		s3 = boto3.client('s3')
 		s3.put_object(
-			Bucket='your-results-bucket',
+			Bucket=os.environ['S3_BUCKET'],
 			Key=f'jobs/{job_id}/result.json',
 			Body=json.dumps(result)
 		)
@@ -196,7 +196,7 @@ def process_job_handler(event, context):
 
 	return {
 		'statusCode': 200,
-		'body': 'Job processed successfully',
+		'body': json.dumps({"message": "Job processed successfully"}),
 		"headers": {
 				'Access-Control-Allow-Credentials': True,
 				'Access-Control-Allow-Origin': '*',
@@ -211,7 +211,7 @@ def refresh_job_handler(event, context):
 	refresh_job(job_id)
 	return {
 		"statusCode": 200,
-		"body": f"Job {job_id} refreshed successfully",
+		"body": json.dumps({"message": "Job refreshed successfully", "job_id": job_id}),
 		"headers": {
 				'Access-Control-Allow-Credentials': True,
 				'Access-Control-Allow-Origin': '*',
@@ -226,7 +226,7 @@ def resume_job_handler(event, context):
 	resume_job(job_id)
 	return {
 		"statusCode": 200,
-		"body": f"Job {job_id} resumed successfully",
+		"body": json.dumps({"message": "Job resumed successfully", "job_id": job_id}),
 		"headers": {
 				'Access-Control-Allow-Credentials': True,
 				'Access-Control-Allow-Origin': '*',
@@ -243,7 +243,7 @@ def update_job_handler(event, context):
 	update_job(job_id, job_data)
 	return {
 		"statusCode": 200,
-		"body": f"Job {job_id} updated successfully",
+		"body": json.dumps({"message": "Job updated successfully", "job_id": job_id}),
 		"headers": {
 				'Access-Control-Allow-Credentials': True,
 				'Access-Control-Allow-Origin': '*',
