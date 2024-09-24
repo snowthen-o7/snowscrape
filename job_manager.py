@@ -72,6 +72,7 @@ def get_all_jobs():
 def get_job(job_id):
 	try:
 		response = table.get_item(Key={'job_id': job_id})
+		print(f"Retrieved job response: {response}")
 		return response.get('Item')
 	except ClientError as e:
 		print(f"Error retrieving job {job_id}: {e.response['Error']['Message']}")
