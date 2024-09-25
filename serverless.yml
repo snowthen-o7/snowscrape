@@ -136,8 +136,8 @@ functions:
     handler: handler.schedule_jobs_handler
     events:
       - schedule:
-          name: "RunJobsEveryHour" # You can use rate expressions or cron jobs
-          rate: rate(1 hour) # Runs every hour
+          name: "RunJobsEveryFiveMinutes" # You can use rate expressions or cron jobs
+          rate: rate(5 minutes) # Runs every 5 minutes
 
   updateJob:
     name: snowscrape-update-job
