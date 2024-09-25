@@ -1,4 +1,5 @@
 import boto3
+import json
 import os
 import requests
 
@@ -35,6 +36,7 @@ def create_job(job_data):
 			'created_at': job_data.get('created_at', datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')),
 			'file_mapping': job_data['file_mapping'],
 			'job_id': job_data['job_id'],
+			'last_run': None,
 			'link_count': len(links),
 			'links_s3_key': s3_key,  # Store the S3 key instead of the links
 			'name': job_data['name'],
@@ -170,6 +172,17 @@ def process_job(job_data: Dict[str, Any]) -> Dict[str, Any]:
 				'message': str(e)
 			}
 
+	# After processing all URLs, update the job's last_run timestamp
+	job_table.update_item(
+		Key={'job_id': job_data['job_id']},
+		UpdateExpression="SET #last_run = :last_run, #status = :status",
+		ExpressionAttributeNames={'#last_run': 'last_run', '#status': 'status'},
+		ExpressionAttributeValues={
+			':last_run': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+			':status': 'finished'  # Assuming the status should be updated to 'finished'
+		}
+	)
+
 	return results
 
 # Refresh a job (re-crawl all URLs)
@@ -180,8 +193,10 @@ def refresh_job(job_id):
 	"""
 	# Example logic to update job status and re-run the crawl
 	response = job_table.get_item(Key={'job_id': job_id})
+
 	if 'Item' in response:
 		job_data = response['Item']
+
 		# Re-parse the list of URLs from the external source
 		new_links = parse_links_from_file(job_data['file_mapping'], job_data['source'])
   
@@ -194,12 +209,50 @@ def refresh_job(job_id):
 		job_data['links'] = new_links
 		job_table.put_item(Item=job_data)
 
-		# Initiate crawling for the new list of links
-		crawl_links(new_links, job_data['queries'])
+		# Update the job status to 'queued'
+		job_table.update_item(
+			Key={'job_id': job_id},
+			UpdateExpression="SET #status = :status, #last_updated = :last_updated",
+			ExpressionAttributeNames={
+				'#status': 'status',
+				'#last_updated': 'last_updated'
+			},
+			ExpressionAttributeValues={
+				':status': 'queued',
+				':last_updated': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+			}
+		)
 
-		return f"Job {job_id} refreshed and crawled successfully."
+		# Send URLs to the SQS queue for processing
+		sqs = boto3.client('sqs')
+		queue_url = os.environ['SQS_JOB_QUEUE_URL']
+
+		for url in new_links:
+			url_data = {
+				'job_id': job_id,
+				'url': url,
+				'queries': job_data['queries'],
+			}
+			print(f"Sending URL {url} to SQS for job {job_id}")
+			sqs.send_message(
+				QueueUrl=queue_url,
+				MessageBody=json.dumps(url_data)
+			)
+
+		# Update the last_run timestamp
+		job_table.update_item(
+			Key={'job_id': job_id},
+			UpdateExpression="SET #last_run = :last_run",
+			ExpressionAttributeNames={'#last_run': 'last_run'},
+			ExpressionAttributeValues={
+				':last_run': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+			}
+		)
+
+		return f"Job {job_id} refreshed and URLs sent to SQS successfully."
+
 	else:
-		return f"Job {job_id} not found."
+			return f"Job {job_id} not found."
 
 # Resume a job (update status to "active")
 def resume_job(job_id):

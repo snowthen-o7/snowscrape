@@ -261,7 +261,11 @@ def schedule_jobs_handler(event, context):
 		job_days = scheduling.get('days', [])  # E.g., ['Monday', 'Wednesday']
 		job_hours = scheduling.get('hours', [])  # E.g., [12, 14] for 12 PM and 2 PM or 24 for "Every Hour"
 		job_minutes = scheduling.get('minutes', [])  # E.g., [0, 15, 30, 45] for multiples of 5
-  
+
+		# Check if the job has a last_run timestamp
+		last_run_str = job.get('last_run')
+		last_run = datetime.strptime(last_run_str, '%Y-%m-%dT%H:%M:%SZ') if last_run_str else None
+
 		# If 'Every Day' is in the job_days, it means the job should run every day
 		should_run_today = 'Every Day' in job_days or current_day in job_days
 		
@@ -273,9 +277,19 @@ def schedule_jobs_handler(event, context):
 		
 		# Check if the job should run based on its scheduling
 		if should_run_today and should_run_this_hour and should_run_this_minute:
-			print(f"Scheduling job {job['job_id']} for processing.")
-		
+			# If last_run exists, check if the current time is after the next scheduled run
+			if last_run:
+				# Calculate the next run time
+				next_run_time = last_run + timedelta(
+					hours=1 if should_run_this_hour else 0,
+					minutes=5 if should_run_this_minute else 0
+				)
+				if current_time < next_run_time:
+					print(f"Job {job['job_id']} was already run recently, skipping.")
+					continue
+
 			# Send the job to the SQS queue for processing
+			print(f"Scheduling job {job['job_id']} for processing.")
 			sqs.send_message(
 				QueueUrl=os.environ['SQS_JOB_QUEUE_URL'],
 				MessageBody=json.dumps(job)
@@ -284,10 +298,15 @@ def schedule_jobs_handler(event, context):
 			# Update the job status to queued
 			job_table.update_item(
 				Key={'job_id': job['job_id']},
-				UpdateExpression="SET #status = :queued, #last_updated = :last_updated",
-				ExpressionAttributeNames={'#status': 'status', '#last_updated': 'last_updated'},
+				UpdateExpression="SET #status = :queued, #last_run = :last_run, #last_updated = :last_updated",
+				ExpressionAttributeNames={
+					'#status': 'status',
+					'#last_run': 'last_run',
+					'#last_updated': 'last_updated'
+				},
 				ExpressionAttributeValues={
 					':queued': 'queued',
+					':last_run': current_time.strftime('%Y-%m-%dT%H:%M:%SZ'),
 					':last_updated': current_time.strftime('%Y-%m-%dT%H:%M:%SZ')
 				}
 			)
