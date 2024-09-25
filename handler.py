@@ -7,7 +7,7 @@ from crawl_manager import get_crawl
 from datetime import datetime, timezone
 from job_manager import create_job, delete_job, get_all_jobs, get_job, get_job_crawls, pause_job, process_job, refresh_job, resume_job, update_job
 from urllib.parse import urlparse
-from utils import detect_csv_settings, extract_token_from_event, validate_clerk_token, validate_job_data
+from utils import decimal_to_float, detect_csv_settings, extract_token_from_event, validate_clerk_token, validate_job_data
 
 dynamodb = boto3.resource('dynamodb', region_name=os.environ.get('REGION', 'us-east-2'))
 job_table = dynamodb.Table(os.environ['DYNAMODB_JOBS_TABLE'])
@@ -254,7 +254,8 @@ def schedule_jobs_handler(event, context):
 		ExpressionAttributeValues={":ready": "ready"}
 	).get('Items', [])
 	
-	for job in jobs:
+	jobs_cleaned = decimal_to_float(jobs)
+	for job in jobs_cleaned:
 		scheduling = job.get('scheduling', {})
 		job_days = scheduling.get('days', [])  # E.g., ['Monday', 'Wednesday']
 		job_hours = scheduling.get('hours', [])  # E.g., [12, 14] for 12 PM and 2 PM or 24 for "Every Hour"
