@@ -243,11 +243,11 @@ def schedule_jobs_handler(event, context):
 	"""
 	# Get current time to check jobs that need to be run
 	current_time = datetime.now(timezone.utc)
-	print(f"Current time: {current_time}")
+	current_day = current_time.strftime('%A')  # E.g., 'Monday', 'Tuesday'
+	current_hour = current_time.hour  # E.g., 14 for 2 PM
+	print(f"Current time: {current_time}, Day: {current_day}, Hour: {current_hour}")
 	
-	# Scan for jobs ready to run (based on some scheduling criteria)
-	# Example: Check job's next run time is before or at the current time
-	# You'll need to adjust this query based on how you're storing schedule data
+	# Scan for jobs that are ready to run and have scheduling criteria
 	jobs = job_table.scan(
 		FilterExpression="attribute_exists(scheduling) AND #status = :ready",
 		ExpressionAttributeNames={"#status": "status"},
@@ -255,24 +255,38 @@ def schedule_jobs_handler(event, context):
 	).get('Items', [])
 	
 	for job in jobs:
-		print(f"Scheduling job {job['job_id']} for processing.")
+		scheduling = job.get('scheduling', {})
+		job_days = scheduling.get('days', [])  # E.g., ['Monday', 'Wednesday']
+		job_hours = scheduling.get('hours', [])  # E.g., [12, 14] for 12 PM and 2 PM or 24 for "Every Hour"
+  
+		# If 'Every Day' is in the job_days, it means the job should run every day
+		should_run_today = 'Every Day' in job_days or current_day in job_days
 		
-		# Send the job to the SQS queue for processing
-		sqs.send_message(
-			QueueUrl=os.environ['SQS_JOB_QUEUE_URL'],
-			MessageBody=json.dumps(job)
-		)
+		# If '24' is in the job_hours, it means the job should run every hour
+		should_run_this_hour = 24 in job_hours or current_hour in job_hours
+		
+		# Check if the job should run based on its scheduling
+		if should_run_today and should_run_this_hour:
+			print(f"Scheduling job {job['job_id']} for processing.")
+		
+			# Send the job to the SQS queue for processing
+			sqs.send_message(
+				QueueUrl=os.environ['SQS_JOB_QUEUE_URL'],
+				MessageBody=json.dumps(job)
+			)
 
-		# Update the job status to queued
-		job_table.update_item(
-			Key={'job_id': job['job_id']},
-			UpdateExpression="SET #status = :queued, #last_updated = :last_updated",
-			ExpressionAttributeNames={'#status': 'status', '#last_updated': 'last_updated'},
-			ExpressionAttributeValues={
-				':queued': 'queued',
-				':last_updated': current_time.strftime('%Y-%m-%dT%H:%M:%SZ')
-			}
-		)
+			# Update the job status to queued
+			job_table.update_item(
+				Key={'job_id': job['job_id']},
+				UpdateExpression="SET #status = :queued, #last_updated = :last_updated",
+				ExpressionAttributeNames={'#status': 'status', '#last_updated': 'last_updated'},
+				ExpressionAttributeValues={
+					':queued': 'queued',
+					':last_updated': current_time.strftime('%Y-%m-%dT%H:%M:%SZ')
+				}
+			)
+		else:
+			print(f"Job {job['job_id']} is not scheduled to run at this time.")
 
 # Update a job
 def update_job_handler(event, context):
