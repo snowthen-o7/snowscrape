@@ -36,7 +36,7 @@ provider:
       Action:
         - "sqs:*"
       Resource:
-        - "arn:aws:sqs:${self:provider.region}:*:queue/${self:custom.sqsJobQueue}"
+        - "arn:aws:sqs:${self:provider.region}:*:${self:custom.sqsJobQueue}"
 
 functions:
   createJob:
