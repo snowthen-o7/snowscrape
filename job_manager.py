@@ -129,7 +129,7 @@ def pause_job(job_id):
 		print(f"Error pausing job: {e.response['Error']['Message']}")
 		return None
 
-def perform_job(job_data: Dict[str, Any]) -> Dict[str, Any]:
+def process_job(job_data: Dict[str, Any]) -> Dict[str, Any]:
 	"""
 	Perform the job by scraping and processing URLs based on the job's queries.
 	
