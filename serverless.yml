@@ -48,21 +48,6 @@ functions:
           method: post
           cors: true
 
-  # Job processing function (Triggered by SQS)
-  processJob:
-    name: snowscrape-process-job
-    handler: handler.process_job_handler
-    events:
-      - sqs:
-          arn:
-            Fn::GetAtt:
-              - JobQueue
-              - Arn
-          batchSize: 5  # Controls how many messages are processed at once
-    environment:
-      DYNAMODB_JOBS_TABLE: ${self:custom.dynamoDbJobsTable}
-      S3_BUCKET: ${self:custom.s3Bucket}
-
   deleteJob:
     name: snowscrape-delete-job
     handler: handler.delete_job_handler
@@ -117,6 +102,18 @@ functions:
           method: patch
           cors: true
 
+  # Job processing function (Triggered by SQS)
+  processJob:
+    name: snowscrape-process-job
+    handler: handler.process_job_handler
+    events:
+      - sqs:
+          arn:
+            Fn::GetAtt:
+              - JobQueue
+              - Arn
+          batchSize: 5  # Controls how many messages are processed at once
+
   refreshJob:
     name: snowscrape-refresh-job
     handler: handler.refresh_job_handler
@@ -134,6 +131,13 @@ functions:
           path: jobs/{job_id}/resume
           method: patch
           cors: true
+
+  scheduleJobs:
+    handler: handler.schedule_jobs_handler
+    events:
+      - schedule:
+          name: "RunJobsEveryHour" # You can use rate expressions or cron jobs
+          rate: rate(1 hour) # Runs every hour
 
   updateJob:
     name: snowscrape-update-job

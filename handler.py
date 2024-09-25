@@ -4,10 +4,15 @@ import os
 import paramiko
 
 from crawl_manager import get_crawl
-from datetime import datetime
+from datetime import datetime, timezone
 from job_manager import create_job, delete_job, get_all_jobs, get_job, get_job_crawls, pause_job, process_job, refresh_job, resume_job, update_job
 from urllib.parse import urlparse
 from utils import detect_csv_settings, extract_token_from_event, validate_clerk_token, validate_job_data
+
+dynamodb = boto3.resource('dynamodb', region_name=os.environ.get('REGION', 'us-east-2'))
+job_table = dynamodb.Table(os.environ['DYNAMODB_JOBS_TABLE'])
+s3 = boto3.client('s3')
+sqs = boto3.client('sqs')
 
 # Create a new job
 def create_job_handler(event, context):
@@ -174,7 +179,6 @@ def process_job_handler(event, context):
 		result = process_job(job_data)
 
 		# Store the result in S3
-		s3 = boto3.client('s3')
 		s3.put_object(
 			Bucket=os.environ['S3_BUCKET'],
 			Key=f'jobs/{job_id}/result.json',
@@ -182,15 +186,13 @@ def process_job_handler(event, context):
 		)
 
 		# Update DynamoDB with job status
-		dynamodb = boto3.resource('dynamodb', region_name=os.environ.get('REGION', 'us-east-2'))
-		job_table = dynamodb.Table(os.environ['DYNAMODB_JOBS_TABLE'])
 		job_table.update_item(
 			Key={'job_id': job_id},
 			UpdateExpression="SET #status = :status, #last_updated = :last_updated",
 			ExpressionAttributeNames={'#status': 'status', '#last_updated': 'last_updated'},
 			ExpressionAttributeValues={
 				':status': 'finished',
-				':last_updated': datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+				':last_updated': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 			}
 		)
 
@@ -233,7 +235,45 @@ def resume_job_handler(event, context):
 				"Content-Type": "application/json"
 			}
 	}
- 
+
+def schedule_jobs_handler(event, context):
+	"""
+	This function runs on a schedule (e.g., every hour) and finds jobs that need to be run,
+	sending them to SQS for processing.
+	"""
+	# Get current time to check jobs that need to be run
+	current_time = datetime.now(timezone.utc)
+	print(f"Current time: {current_time}")
+	
+	# Scan for jobs ready to run (based on some scheduling criteria)
+	# Example: Check job's next run time is before or at the current time
+	# You'll need to adjust this query based on how you're storing schedule data
+	jobs = job_table.scan(
+		FilterExpression="attribute_exists(scheduling) AND #status = :ready",
+		ExpressionAttributeNames={"#status": "status"},
+		ExpressionAttributeValues={":ready": "ready"}
+	).get('Items', [])
+	
+	for job in jobs:
+		print(f"Scheduling job {job['job_id']} for processing.")
+		
+		# Send the job to the SQS queue for processing
+		sqs.send_message(
+			QueueUrl=os.environ['SQS_JOB_QUEUE_URL'],
+			MessageBody=json.dumps(job)
+		)
+
+		# Update the job status to queued
+		job_table.update_item(
+			Key={'job_id': job['job_id']},
+			UpdateExpression="SET #status = :queued, #last_updated = :last_updated",
+			ExpressionAttributeNames={'#status': 'status', '#last_updated': 'last_updated'},
+			ExpressionAttributeValues={
+				':queued': 'queued',
+				':last_updated': current_time.strftime('%Y-%m-%dT%H:%M:%SZ')
+			}
+		)
+
 # Update a job
 def update_job_handler(event, context):
 	print(event)

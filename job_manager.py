@@ -4,7 +4,7 @@ import requests
 
 from botocore.exceptions import ClientError
 from crawl_manager import process_queries
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict
 from utils import decimal_to_float, parse_links_from_file, save_links_to_s3, validate_job_data
 
@@ -32,16 +32,17 @@ def create_job(job_data):
 
 		# Ensure all necessary fields are present in job_data and add defaults if needed
 		job_item = {
-			'created_at': job_data.get('created_at', datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')),
+			'created_at': job_data.get('created_at', datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')),
 			'file_mapping': job_data['file_mapping'],
 			'job_id': job_data['job_id'],
+			'link_count': len(links),
 			'links_s3_key': s3_key,  # Store the S3 key instead of the links
 			'name': job_data['name'],
 			'queries': job_data['queries'],
 			'rate_limit': job_data['rate_limit'],
 			'scheduling': job_data.get('scheduling', None),
 			'source': job_data['source'],
-			'status': job_data.get('status', 'pending'),  # Default job status
+			'status': job_data.get('status', 'ready'),  # Default job status
 			'user_id': job_data['user_id'],
 		}
 
@@ -56,7 +57,7 @@ def create_job(job_data):
 				'job_id': job_data['job_id'],
 				'url': url,
 				'state': 'ready',
-				'last_updated': datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+				'last_updated': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 			}
 			url_table.put_item(Item=url_item)
   
