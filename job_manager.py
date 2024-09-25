@@ -19,16 +19,16 @@ def create_job(job_data):
 		links = parse_links_from_file(job_data['file_mapping'], job_data['source'])  # Assuming 'source' is the URL to the list
 		print(f"Parsed links: {links}")
 
-		# Save the links to S3 and get the S3 key (file path)
-		s3_key = save_links_to_s3(links, job_data['job_id'])
-		if not s3_key:
-			raise Exception("Failed to save links to S3")
-
 		# Assign a job_id if it doesn't exist
 		job_id = job_data.get('job_id')
 		if not job_id:
 			import uuid
 			job_data['job_id'] = str(uuid.uuid4())
+
+		# Save the links to S3 and get the S3 key (file path)
+		s3_key = save_links_to_s3(links, job_data['job_id'])
+		if not s3_key:
+			raise Exception("Failed to save links to S3")
 
 		# Ensure all necessary fields are present in job_data and add defaults if needed
 		job_item = {
