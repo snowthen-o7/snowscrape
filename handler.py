@@ -245,7 +245,8 @@ def schedule_jobs_handler(event, context):
 	current_time = datetime.now(timezone.utc)
 	current_day = current_time.strftime('%A')  # E.g., 'Monday', 'Tuesday'
 	current_hour = current_time.hour  # E.g., 14 for 2 PM
-	print(f"Current time: {current_time}, Day: {current_day}, Hour: {current_hour}")
+	current_minute = current_time.minute  # E.g., 45 for 45 minutes past the hour
+	print(f"Current time: {current_time}, Day: {current_day}, Hour: {current_hour}, Minute: {current_minute}")
 	
 	# Scan for jobs that are ready to run and have scheduling criteria
 	jobs = job_table.scan(
@@ -259,15 +260,19 @@ def schedule_jobs_handler(event, context):
 		scheduling = job.get('scheduling', {})
 		job_days = scheduling.get('days', [])  # E.g., ['Monday', 'Wednesday']
 		job_hours = scheduling.get('hours', [])  # E.g., [12, 14] for 12 PM and 2 PM or 24 for "Every Hour"
+		job_minutes = scheduling.get('minutes', [])  # E.g., [0, 15, 30, 45] for multiples of 5
   
 		# If 'Every Day' is in the job_days, it means the job should run every day
 		should_run_today = 'Every Day' in job_days or current_day in job_days
 		
 		# If '24' is in the job_hours, it means the job should run every hour
 		should_run_this_hour = 24 in job_hours or current_hour in job_hours
+  
+		# Determine if the job should run this minute (based on multiples of 5)
+		should_run_this_minute = 60 in job_minutes or current_minute in job_minutes
 		
 		# Check if the job should run based on its scheduling
-		if should_run_today and should_run_this_hour:
+		if should_run_today and should_run_this_hour and should_run_this_minute:
 			print(f"Scheduling job {job['job_id']} for processing.")
 		
 			# Send the job to the SQS queue for processing
