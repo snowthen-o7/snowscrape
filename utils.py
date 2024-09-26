@@ -124,7 +124,7 @@ def delete_job_links(job_id):
 # Helper function to delete the S3 result file for the job
 def delete_s3_result_file(job_id):
 	try:
-		s3.delete_object(Bucket=s3_bucket, Key=f'jobs/{job_id}/result.json')
+		s3.delete_object(Bucket=os.environ['S3_BUCKET'], Key=f'jobs/{job_id}/result.json')
 		print(f"Deleted result file for job {job_id} from S3.")
 	
 	except ClientError as e:
@@ -189,6 +189,19 @@ def extract_token_from_event(event):
 	if authorization_header.startswith("Bearer "):
 		return authorization_header[len("Bearer "):]
 	return None
+
+def fetch_urls_for_job(job_id: str) -> list:
+	"""
+	Query DynamoDB to fetch all URLs associated with the given job_id.
+	"""
+	try:
+		response = url_table.query(
+			KeyConditionExpression=boto3.dynamodb.conditions.Key('job_id').eq(job_id)
+		)
+		return response.get('Items', [])
+	except ClientError as e:
+		print(f"Error fetching URLs for job {job_id}: {e.response['Error']['Message']}")
+		return []
 
 def load_from_s3(bucket_name, key):
 	"""Loads data from an S3 bucket."""
@@ -411,3 +424,23 @@ def parse_links_from_file(file_mapping, file_url):
 				links.append(row[url_column_index].strip())
 						
 		return links
+
+def update_url_status(job_id: str, url: str, status: str) -> None:
+	"""
+	Update the status of a URL in the url_table.
+	
+	Args:
+	- job_id (str): The ID of the job the URL is associated with.
+	- url (str): The URL being updated.
+	- status (str): The new status for the URL.
+	"""
+	try:
+		url_table.update_item(
+			Key={'job_id': job_id, 'url': url},
+			UpdateExpression="SET #status = :status",
+			ExpressionAttributeNames={'#status': 'status'},
+			ExpressionAttributeValues={':status': status}
+		)
+		print(f"Updated URL {url} status to {status}.")
+	except ClientError as e:
+		print(f"Error updating status for URL {url}: {e.response['Error']['Message']}")

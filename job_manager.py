@@ -7,7 +7,7 @@ from botocore.exceptions import ClientError
 from crawl_manager import process_queries
 from datetime import datetime, timezone
 from typing import Any, Dict
-from utils import decimal_to_float, delete_job_links, delete_s3_result_file, parse_links_from_file, save_links_to_s3, validate_job_data
+from utils import decimal_to_float, delete_job_links, delete_s3_result_file, fetch_urls_for_job, parse_links_from_file, save_links_to_s3, update_url_status, validate_job_data
 
 dynamodb = boto3.resource('dynamodb', region_name=os.environ.get('REGION', 'us-east-2'))
 job_table = dynamodb.Table(os.environ['DYNAMODB_JOBS_TABLE'])
@@ -152,20 +152,28 @@ def process_job(job_data: Dict[str, Any]) -> Dict[str, Any]:
 	- dict: A dictionary containing the results of the job, with scraped data for each URL.
 	"""
 	results = {}
-	urls = job_data.get('links', [])  # The list of URLs to scrape
+	job_id = job_data['job_id']
 	queries = job_data.get('queries', [])  # The list of queries to apply to each URL
 	
-	if not urls:
-		raise ValueError("No URLs provided for the job.")
+	# Step 1: Fetch URLs from the url_table associated with the job
+	try:
+		urls = fetch_urls_for_job(job_id)
+		if not urls:
+			raise ValueError("No URLs found for the job.")
+	except ClientError as e:
+		print(f"Error fetching URLs for job {job_id}: {e.response['Error']['Message']}")
+		return {'status': 'error', 'message': f"Failed to fetch URLs for job {job_id}"}
 
-	for url in urls:
+	# Step 2: Process each URL
+	for url_item in urls:
+		url = url_item['url']
 		try:
 			print(f"Scraping URL: {url}")
 			response = requests.get(url)
 			response.raise_for_status()  # Check for HTTP errors
 			page_content = response.content
 
-			# Depending on the query type (XPath, Regex, etc.), apply the appropriate method
+			# Apply the queries (XPath, Regex, etc.) to the page content
 			url_results = process_queries(page_content, queries)
 			
 			# Store the results for this URL
@@ -174,16 +182,21 @@ def process_job(job_data: Dict[str, Any]) -> Dict[str, Any]:
 				'data': url_results
 			}
 		
+			# Update the URL's status in DynamoDB to 'finished'
+			update_url_status(job_id, url, 'finished')
+		
 		except requests.RequestException as e:
 			print(f"Error fetching {url}: {str(e)}")
 			results[url] = {
 				'status': 'error',
 				'message': str(e)
 			}
+			# Update the URL's status in DynamoDB to 'error'
+			update_url_status(job_id, url, 'error')
 
-	# After processing all URLs, update the job's last_run timestamp
+	# Step 3: After processing all URLs, update the job's last_run timestamp
 	job_table.update_item(
-		Key={'job_id': job_data['job_id']},
+		Key={'job_id': job_id},
 		UpdateExpression="SET #last_run = :last_run, #status = :status",
 		ExpressionAttributeNames={'#last_run': 'last_run', '#status': 'status'},
 		ExpressionAttributeValues={
