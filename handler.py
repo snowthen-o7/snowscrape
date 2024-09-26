@@ -168,6 +168,7 @@ def pause_job_handler(event, context):
 
 # Process a job (Triggered by SQS)
 def process_job_handler(event, context):
+	print(event)
 	# Process each message from SQS
 	for record in event['Records']:
 		job_data = json.loads(record['body'])

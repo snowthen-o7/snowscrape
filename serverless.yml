@@ -25,6 +25,12 @@ provider:
         - "dynamodb:*"
       Resource:
         - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.dynamoDbJobsTable}"
+
+    - Effect: "Allow"
+      Action:
+        - "dynamodb:*"
+      Resource:
+        - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.dynamoDbUrlsTable}"
      
     - Effect: "Allow"
       Action:
