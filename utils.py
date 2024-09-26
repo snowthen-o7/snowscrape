@@ -198,6 +198,7 @@ def fetch_urls_for_job(job_id: str) -> list:
 		response = url_table.query(
 			KeyConditionExpression=boto3.dynamodb.conditions.Key('job_id').eq(job_id)
 		)
+		print(f"Fetched URLs for job {job_id}: {response}")
 		return response.get('Items', [])
 	except ClientError as e:
 		print(f"Error fetching URLs for job {job_id}: {e.response['Error']['Message']}")
@@ -239,27 +240,6 @@ def retrieve_links_from_s3(s3_key):
 	except Exception as e:
 		print(f"Error retrieving links from S3: {e}")
 		return []
-
-def save_links_to_s3(links, job_id):
-	"""
-	Save the list of links to an S3 bucket and return the S3 key (path).
-	"""
-	try:
-		s3 = boto3.client('s3')
-		# Convert the list of links to a string format (CSV or plain text)
-		links_content = "\n".join(links)
-		
-		# Define the S3 key (file path) based on the job_id
-		s3_key = f"jobs/{job_id}/links.txt"
-		
-		# Save the links to the S3 bucket
-		s3.put_object(Bucket=os.environ['S3_BUCKET'], Key=s3_key, Body=links_content)
-		
-		print(f"Links successfully saved to S3: {s3_key}")
-		return s3_key  # Return the S3 key (file path) for referencing in DynamoDB
-	except Exception as e:
-		print(f"Error saving links to S3: {e}")
-		return None
 
 def send_job_to_queue(job_id, job_data):
 	sqs = boto3.client('sqs', region_name=os.environ.get('REGION', 'us-east-2'))

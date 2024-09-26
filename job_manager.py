@@ -7,7 +7,7 @@ from botocore.exceptions import ClientError
 from crawl_manager import process_queries
 from datetime import datetime, timezone
 from typing import Any, Dict
-from utils import decimal_to_float, delete_job_links, delete_s3_result_file, fetch_urls_for_job, parse_links_from_file, save_links_to_s3, update_url_status, validate_job_data
+from utils import decimal_to_float, delete_job_links, fetch_urls_for_job, parse_links_from_file, update_url_status, validate_job_data
 
 dynamodb = boto3.resource('dynamodb', region_name=os.environ.get('REGION', 'us-east-2'))
 job_table = dynamodb.Table(os.environ['DYNAMODB_JOBS_TABLE'])
@@ -26,11 +26,6 @@ def create_job(job_data):
 			import uuid
 			job_data['job_id'] = str(uuid.uuid4())
 
-		# Save the links to S3 and get the S3 key (file path)
-		s3_key = save_links_to_s3(links, job_data['job_id'])
-		if not s3_key:
-			raise Exception("Failed to save links to S3")
-
 		# Ensure all necessary fields are present in job_data and add defaults if needed
 		job_item = {
 			'created_at': job_data.get('created_at', datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')),
@@ -38,7 +33,6 @@ def create_job(job_data):
 			'job_id': job_data['job_id'],
 			'last_run': None,
 			'link_count': len(links),
-			'links_s3_key': s3_key,  # Store the S3 key instead of the links
 			'name': job_data['name'],
 			'queries': job_data['queries'],
 			'rate_limit': job_data['rate_limit'],
@@ -79,11 +73,8 @@ def delete_job(job_id):
 		
 		# 2. Delete the job from the job_table
 		job_table.delete_item(Key={'job_id': job_id})
-
-		# 3. Delete the results file from S3
-		delete_s3_result_file(job_id)
 		
-		return f"Job {job_id}, related links, and result file deleted successfully."
+		return f"Job {job_id} and related links deleted successfully."
 	
 	except ClientError as e:
 		print(f"Error deleting job: {e.response['Error']['Message']}")
@@ -201,7 +192,7 @@ def process_job(job_data: Dict[str, Any]) -> Dict[str, Any]:
 		ExpressionAttributeNames={'#last_run': 'last_run', '#status': 'status'},
 		ExpressionAttributeValues={
 			':last_run': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
-			':status': 'finished'  # Assuming the status should be updated to 'finished'
+			':status': 'finished'  # Set job status to 'finished' if all URLs are processed
 		}
 	)
 
