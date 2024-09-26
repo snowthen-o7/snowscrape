@@ -13,6 +13,7 @@ from io import StringIO
 from urllib.parse import urlparse
 
 dynamodb = boto3.resource('dynamodb', region_name=os.environ.get('REGION', 'us-east-2'))
+s3 = boto3.client('s3')
 job_table = dynamodb.Table(os.environ['DYNAMODB_JOBS_TABLE'])
 url_table = dynamodb.Table(os.environ['DYNAMODB_URLS_TABLE'])
 
@@ -119,6 +120,15 @@ def delete_job_links(job_id):
 	
 	except ClientError as e:
 		print(f"Error deleting URLs for job {job_id}: {e.response['Error']['Message']}")
+
+# Helper function to delete the S3 result file for the job
+def delete_s3_result_file(job_id):
+	try:
+		s3.delete_object(Bucket=s3_bucket, Key=f'jobs/{job_id}/result.json')
+		print(f"Deleted result file for job {job_id} from S3.")
+	
+	except ClientError as e:
+		print(f"Error deleting result file from S3 for job {job_id}: {e.response['Error']['Message']}")
 
 def detect_csv_settings(file_content):
 	"""

@@ -7,7 +7,7 @@ from botocore.exceptions import ClientError
 from crawl_manager import process_queries
 from datetime import datetime, timezone
 from typing import Any, Dict
-from utils import decimal_to_float, delete_job_links, parse_links_from_file, save_links_to_s3, validate_job_data
+from utils import decimal_to_float, delete_job_links, delete_s3_result_file, parse_links_from_file, save_links_to_s3, validate_job_data
 
 dynamodb = boto3.resource('dynamodb', region_name=os.environ.get('REGION', 'us-east-2'))
 job_table = dynamodb.Table(os.environ['DYNAMODB_JOBS_TABLE'])
@@ -79,8 +79,11 @@ def delete_job(job_id):
 		
 		# 2. Delete the job from the job_table
 		job_table.delete_item(Key={'job_id': job_id})
+
+		# 3. Delete the results file from S3
+		delete_s3_result_file(job_id)
 		
-		return f"Job {job_id} and its related links deleted successfully."
+		return f"Job {job_id}, related links, and result file deleted successfully."
 	
 	except ClientError as e:
 		print(f"Error deleting job: {e.response['Error']['Message']}")
