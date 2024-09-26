@@ -6,9 +6,15 @@ import pandas as pd
 import paramiko
 import re
 import requests
+
+from botocore.exceptions import ClientError
 from decimal import Decimal
 from io import StringIO
 from urllib.parse import urlparse
+
+dynamodb = boto3.resource('dynamodb', region_name=os.environ.get('REGION', 'us-east-2'))
+job_table = dynamodb.Table(os.environ['DYNAMODB_JOBS_TABLE'])
+url_table = dynamodb.Table(os.environ['DYNAMODB_URLS_TABLE'])
 
 def convert_cron_to_scheduling(cron_expression):
 	"""
@@ -88,6 +94,31 @@ def decimal_to_float(obj):
 		return float(obj)  # Convert Decimal to float
 	else:
 		return obj
+
+# Helper function to delete all URLs associated with the job
+def delete_job_links(job_id):
+	try:
+		# Query the url_table to get all links for the given job_id
+		response = url_table.query(
+			KeyConditionExpression=boto3.dynamodb.conditions.Key('job_id').eq(job_id)
+		)
+		
+		# Get the list of URLs associated with the job
+		urls = response.get('Items', [])
+		
+		# Batch delete each URL associated with the job
+		with url_table.batch_writer() as batch:
+			for url_item in urls:
+				batch.delete_item(
+					Key={
+						'job_id': job_id,
+						'url': url_item['url']
+					}
+				)
+		print(f"Deleted {len(urls)} URLs for job {job_id}.")
+	
+	except ClientError as e:
+		print(f"Error deleting URLs for job {job_id}: {e.response['Error']['Message']}")
 
 def detect_csv_settings(file_content):
 	"""
