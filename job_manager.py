@@ -156,12 +156,23 @@ def process_job(job_data: Dict[str, Any]) -> Dict[str, Any]:
 		print(f"Error fetching URLs for job {job_id}: {e.response['Error']['Message']}")
 		return {'status': 'error', 'message': f"Failed to fetch URLs for job {job_id}"}
 
-	# Step 2: Process each URL
+	# Step 2: Set headers and process each URL
+	headers = {
+		'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3',
+		'Accept-Language': 'en-US,en;q=0.9',
+		'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+		'Connection': 'keep-alive',
+		'Referer': 'https://www.google.com/',
+		'Upgrade-Insecure-Requests': '1',
+	}
+
 	for url_item in urls:
 		url = url_item['url']
 		try:
 			print(f"Scraping URL: {url}")
-			response = requests.get(url)
+			
+			# Add headers to the request to avoid being blocked
+			response = requests.get(url, headers=headers)
 			response.raise_for_status()  # Check for HTTP errors
 			page_content = response.content
 
