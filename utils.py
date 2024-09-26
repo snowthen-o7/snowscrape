@@ -1,5 +1,6 @@
 import boto3
 import csv
+import json
 import jwt
 import os
 import pandas as pd
@@ -240,6 +241,24 @@ def retrieve_links_from_s3(s3_key):
 	except Exception as e:
 		print(f"Error retrieving links from S3: {e}")
 		return []
+
+def save_results_to_s3(results, job_id):
+	"""
+	Save the final job results to S3 as a consolidated file.
+	"""
+	s3 = boto3.client('s3')
+	s3_key = f"jobs/{job_id}/results.json"
+	try:
+		s3.put_object(
+			Bucket=os.environ['S3_BUCKET'],
+			Key=s3_key,
+			Body=json.dumps(results)
+		)
+		print(f"Results successfully saved to S3: {s3_key}")
+		return s3_key
+	except Exception as e:
+		print(f"Error saving results to S3: {str(e)}")
+		return None
 
 def send_job_to_queue(job_id, job_data):
 	sqs = boto3.client('sqs', region_name=os.environ.get('REGION', 'us-east-2'))

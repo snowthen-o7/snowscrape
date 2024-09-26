@@ -53,6 +53,7 @@ functions:
           path: jobs
           method: post
           cors: true
+    maximumRetryAttempts: 0
 
   deleteJob:
     name: snowscrape-delete-job
@@ -62,6 +63,7 @@ functions:
           path: jobs/{job_id}
           method: delete
           cors: true
+    maximumRetryAttempts: 0
 
   getAllJobStatuses:
     name: snowscrape-get-all-job-statuses
@@ -71,6 +73,7 @@ functions:
           path: jobs/status
           method: get
           cors: true
+    maximumRetryAttempts: 0
 
   getCrawlDetails:
     name: snowscrape-get-crawl-details
@@ -80,6 +83,7 @@ functions:
           path: jobs/{job_id}/crawls/{crawl_id}
           method: get
           cors: true
+    maximumRetryAttempts: 0
 
   getJobCrawlStatus:
     name: snowscrape-get-job-crawls
@@ -89,6 +93,7 @@ functions:
           path: jobs/{job_id}/crawls
           method: get
           cors: true
+    maximumRetryAttempts: 0
 
   getJobDetails:
     name: snowscrape-get-job-details
@@ -98,6 +103,7 @@ functions:
           path: jobs/{job_id}
           method: get
           cors: true
+    maximumRetryAttempts: 0
 
   pauseJob:
     name: snowscrape-pause-job
@@ -107,6 +113,7 @@ functions:
           path: jobs/{job_id}/pause
           method: patch
           cors: true
+    maximumRetryAttempts: 0
 
   # Job processing function (Triggered by SQS)
   processJob:
@@ -119,6 +126,7 @@ functions:
               - JobQueue
               - Arn
           batchSize: 5  # Controls how many messages are processed at once
+          maximumRetryAttempts: 0  # Disable retries
 
   refreshJob:
     name: snowscrape-refresh-job
@@ -128,6 +136,7 @@ functions:
           path: jobs/{job_id}/refresh
           method: post
           cors: true
+    maximumRetryAttempts: 0
 
   resumeJob:
     name: snowscrape-resume-job
@@ -137,6 +146,7 @@ functions:
           path: jobs/{job_id}/resume
           method: patch
           cors: true
+    maximumRetryAttempts: 0
 
   scheduleJobs:
     handler: handler.schedule_jobs_handler
@@ -144,6 +154,7 @@ functions:
       - schedule:
           name: "RunJobsEveryFiveMinutes" # You can use rate expressions or cron jobs
           rate: rate(5 minutes) # Runs every 5 minutes
+    maximumRetryAttempts: 0
 
   updateJob:
     name: snowscrape-update-job
@@ -153,6 +164,7 @@ functions:
           path: jobs/{job_id}
           method: put
           cors: true
+    maximumRetryAttempts: 0
 
   validateSftpUrl:
     handler: handler.validate_sftp_url_handler
@@ -161,6 +173,7 @@ functions:
           path: validate-sftp-url
           method: post
           cors: true
+    maximumRetryAttempts: 0
 
 resources:
   Resources:

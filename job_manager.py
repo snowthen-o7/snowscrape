@@ -7,7 +7,7 @@ from botocore.exceptions import ClientError
 from crawl_manager import process_queries
 from datetime import datetime, timezone
 from typing import Any, Dict
-from utils import decimal_to_float, delete_job_links, fetch_urls_for_job, parse_links_from_file, update_url_status, validate_job_data
+from utils import decimal_to_float, delete_job_links, fetch_urls_for_job, parse_links_from_file, save_results_to_s3, update_url_status, validate_job_data
 
 dynamodb = boto3.resource('dynamodb', region_name=os.environ.get('REGION', 'us-east-2'))
 job_table = dynamodb.Table(os.environ['DYNAMODB_JOBS_TABLE'])
@@ -36,6 +36,7 @@ def create_job(job_data):
 			'name': job_data['name'],
 			'queries': job_data['queries'],
 			'rate_limit': job_data['rate_limit'],
+			'results_s3_key': None,
 			'scheduling': job_data.get('scheduling', None),
 			'source': job_data['source'],
 			'status': job_data.get('status', 'ready'),  # Default job status
@@ -185,14 +186,22 @@ def process_job(job_data: Dict[str, Any]) -> Dict[str, Any]:
 			# Update the URL's status in DynamoDB to 'error'
 			update_url_status(job_id, url, 'error')
 
+	# After processing all URLs, save the consolidated results to S3
+	results_file_key = save_results_to_s3(results, job_data['job_id'])
+
 	# Step 3: After processing all URLs, update the job's last_run timestamp
 	job_table.update_item(
-		Key={'job_id': job_id},
-		UpdateExpression="SET #last_run = :last_run, #status = :status",
-		ExpressionAttributeNames={'#last_run': 'last_run', '#status': 'status'},
+		Key={'job_id': job_data['job_id']},
+		UpdateExpression="SET #last_run = :last_run, #status = :status, #results_s3_key = :results_s3_key",
+		ExpressionAttributeNames={
+			'#last_run': 'last_run',
+			'#status': 'status',
+			'#results_s3_key': 'results_s3_key'
+		},
 		ExpressionAttributeValues={
 			':last_run': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
-			':status': 'finished'  # Set job status to 'finished' if all URLs are processed
+			':status': 'finished',
+			':results_s3_key': results_file_key
 		}
 	)
 
