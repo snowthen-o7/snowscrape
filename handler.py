@@ -7,7 +7,7 @@ from crawl_manager import get_crawl
 from datetime import datetime, timedelta, timezone
 from job_manager import create_job, delete_job, get_all_jobs, get_job, get_job_crawls, pause_job, process_job, refresh_job, resume_job, update_job
 from urllib.parse import urlparse
-from utils import decimal_to_float, detect_csv_settings, extract_token_from_event, validate_clerk_token, validate_job_data
+from utils import decimal_to_float, detect_csv_settings, extract_token_from_event, parse_links_from_file, refresh_job_urls, validate_clerk_token, validate_job_data
 
 dynamodb = boto3.resource('dynamodb', region_name=os.environ.get('REGION', 'us-east-2'))
 job_table = dynamodb.Table(os.environ['DYNAMODB_JOBS_TABLE'])
@@ -267,7 +267,7 @@ def schedule_jobs_handler(event, context):
 
 		# Check if the job has a last_run timestamp
 		last_run_str = job.get('last_run')
-		last_run = datetime.strptime(last_run_str, '%Y-%m-%dT%H:%M:%SZ') if last_run_str else None
+		last_run = datetime.strptime(last_run_str, '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc) if last_run_str else None
 
 		# If 'Every Day' is in the job_days, it means the job should run every day
 		should_run_today = 'Every Day' in job_days or current_day in job_days
@@ -279,6 +279,7 @@ def schedule_jobs_handler(event, context):
 		should_run_this_minute = 60 in job_minutes or current_minute in job_minutes
 		
 		print(f"Job {job['job_id']} - Days: {job_days}, Hours: {job_hours}, Minutes: {job_minutes}, Last Run: {last_run}, Should Run Today: {should_run_today}, Should Run This Hour: {should_run_this_hour}, Should Run This Minute: {should_run_this_minute}")
+
 		# Check if the job should run based on its scheduling
 		if should_run_today and should_run_this_hour and should_run_this_minute:
 			# If last_run exists, check if the current time is after the next scheduled run
@@ -291,6 +292,18 @@ def schedule_jobs_handler(event, context):
 				if current_time < next_run_time:
 					print(f"Job {job['job_id']} was already run recently, skipping.")
 					continue
+
+			# Refresh the URLs by re-pulling from the source file
+			try:
+				links = parse_links_from_file(job['file_mapping'], job['source'])
+				print(f"Refreshed links for job {job['job_id']}: {links}")
+
+				# Update the URL table with the refreshed links
+				refresh_job_urls(job['job_id'], links)
+
+			except Exception as e:
+				print(f"Failed to refresh URLs for job {job['job_id']}: {e}")
+				continue
 
 			# Send the job to the SQS queue for processing
 			print(f"Scheduling job {job['job_id']} for processing.")

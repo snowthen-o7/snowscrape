@@ -10,7 +10,7 @@ import re
 import requests
 
 from botocore.exceptions import ClientError
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from io import StringIO
 from requests.sessions import Session
@@ -533,6 +533,35 @@ def parse_links_from_file(file_mapping, file_url):
 				links.append(row[url_column_index].strip())
 						
 		return links
+
+def refresh_job_urls(job_id, links):
+	"""
+	Refresh the URLs for a given job in the URL table.
+	If the job already has URLs, they will be replaced with the new links.
+	"""
+	try:
+		# First, delete existing URLs for the job
+		existing_urls = url_table.query(
+			KeyConditionExpression=Key('job_id').eq(job_id)
+		).get('Items', [])
+
+		with url_table.batch_writer() as batch:
+			for url_item in existing_urls:
+				batch.delete_item(Key={'job_id': job_id, 'url': url_item['url']})
+
+		# Now, insert the refreshed links into the URL table with state 'ready'
+		with url_table.batch_writer() as batch:
+			for url in links:
+				batch.put_item(Item={
+					'job_id': job_id,
+					'url': url,
+					'state': 'ready',
+					'last_updated': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+				})
+
+		print(f"Successfully refreshed URLs for job {job_id}")
+	except Exception as e:
+		print(f"Error refreshing URLs for job {job_id}: {e}")
 
 def update_job_status(job_id: str, status: str) -> None:
 	"""
