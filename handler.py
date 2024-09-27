@@ -284,11 +284,16 @@ def schedule_jobs_handler(event, context):
 		if should_run_today and should_run_this_hour and should_run_this_minute:
 			# If last_run exists, check if the current time is after the next scheduled run
 			if last_run:
-				# Calculate the next run time
-				next_run_time = last_run + timedelta(
-					hours=1 if should_run_this_hour else 0,
-					minutes=5 if should_run_this_minute else 0
-				)
+				# Calculate the next scheduled minute for the job
+				next_scheduled_minute = min([minute for minute in job_minutes if minute > last_run.minute], default=job_minutes[0])
+
+				# If the next minute has already passed for the current hour, move to the next hour
+				if next_scheduled_minute <= last_run.minute:
+					next_run_time = last_run.replace(hour=(last_run.hour + 1) % 24, minute=next_scheduled_minute, second=0, microsecond=0)
+				else:
+					next_run_time = last_run.replace(minute=next_scheduled_minute, second=0, microsecond=0)
+
+				# Compare current time to the next calculated run time
 				if current_time < next_run_time:
 					print(f"Job {job['job_id']} was already run recently, skipping.")
 					continue
