@@ -226,6 +226,7 @@ def fetch_url_with_session(url: str, session: Session, job_id: str) -> dict:
 	try:
 		print(f"Fetching URL: {url} for job: {job_id}")
 		response = session.get(url)
+		print(response)
 		response.raise_for_status()  # Raise an exception for HTTP errors
 		
 		# Return the content and status
