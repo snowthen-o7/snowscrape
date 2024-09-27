@@ -289,9 +289,9 @@ def schedule_jobs_handler(event, context):
 
 				# If the next minute has already passed for the current hour, move to the next hour
 				if next_scheduled_minute <= last_run.minute:
-					next_run_time = last_run.replace(hour=(last_run.hour + 1) % 24, minute=next_scheduled_minute, second=0, microsecond=0)
+					next_run_time = last_run.replace(hour=(last_run.hour + 1) % 24, minute=int(next_scheduled_minute), second=0, microsecond=0)
 				else:
-					next_run_time = last_run.replace(minute=next_scheduled_minute, second=0, microsecond=0)
+					next_run_time = last_run.replace(minute=int(next_scheduled_minute), second=0, microsecond=0)
 
 				# Compare current time to the next calculated run time
 				if current_time < next_run_time:
