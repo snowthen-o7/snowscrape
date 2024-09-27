@@ -550,12 +550,12 @@ def update_job_status(job_id: str, status: str) -> None:
 			Key={'job_id': job_id},
 			UpdateExpression="SET #status = :status, #last_updated = :last_updated",
 			ExpressionAttributeNames={
-					'#status': 'status',
-					'#last_updated': 'last_updated'
+				'#status': 'status',
+				'#last_updated': 'last_updated'
 			},
 			ExpressionAttributeValues={
-					':status': status,
-					':last_updated': datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+				':status': status,
+				':last_updated': datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
 			}
 		)
 		print(f"Job {job_id} status updated to {status}")

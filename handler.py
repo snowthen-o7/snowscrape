@@ -192,7 +192,7 @@ def process_job_handler(event, context):
 			UpdateExpression="SET #status = :status, #last_updated = :last_updated",
 			ExpressionAttributeNames={'#status': 'status', '#last_updated': 'last_updated'},
 			ExpressionAttributeValues={
-				':status': 'finished',
+				':status': 'ready',
 				':last_updated': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 			}
 		)
