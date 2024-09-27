@@ -5,18 +5,37 @@ import jwt
 import os
 import pandas as pd
 import paramiko
+import random
 import re
 import requests
 
 from botocore.exceptions import ClientError
+from datetime import datetime
 from decimal import Decimal
 from io import StringIO
+from requests.sessions import Session
+from typing import Dict, Any
 from urllib.parse import urlparse
 
 dynamodb = boto3.resource('dynamodb', region_name=os.environ.get('REGION', 'us-east-2'))
 s3 = boto3.client('s3')
 job_table = dynamodb.Table(os.environ['DYNAMODB_JOBS_TABLE'])
 url_table = dynamodb.Table(os.environ['DYNAMODB_URLS_TABLE'])
+
+# Define a list of common user agents and referrers
+REFERRERS = [
+	"https://www.google.com",
+	"https://www.bing.com",
+	"https://duckduckgo.com",
+	# Add more referrers if needed
+]
+
+USER_AGENTS = [
+	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.131 Safari/537.36",
+	"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.2 Safari/605.1.15",
+	"Mozilla/5.0 (Linux; Android 11; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.131 Mobile Safari/537.36",
+	# Add more user agents if needed
+]
 
 def convert_cron_to_scheduling(cron_expression):
 	"""
@@ -191,6 +210,31 @@ def extract_token_from_event(event):
 		return authorization_header[len("Bearer "):]
 	return None
 
+# Use this function for each URL request, and pass the session across requests within the job
+def fetch_url_with_session(url: str, session: Session, job_id: str) -> dict:
+	"""
+	Fetches the URL using the provided session, handling retries and exceptions.
+	
+	Args:
+	- url: The URL to scrape.
+	- session: The requests.Session object.
+	- job_id: The job ID for logging or tracking.
+
+	Returns:
+	- dict: Contains the status and response content or error message.
+	"""
+	try:
+		print(f"Fetching URL: {url} for job: {job_id}")
+		response = session.get(url)
+		response.raise_for_status()  # Raise an exception for HTTP errors
+		
+		# Return the content and status
+		return {"status": "success", "content": response.content}
+	
+	except requests.RequestException as e:
+		print(f"Error fetching {url} for job {job_id}: {str(e)}")
+		return {"status": "error", "message": str(e)}
+
 def fetch_urls_for_job(job_id: str) -> list:
 	"""
 	Query DynamoDB to fetch all URLs associated with the given job_id.
@@ -204,6 +248,49 @@ def fetch_urls_for_job(job_id: str) -> list:
 	except ClientError as e:
 		print(f"Error fetching URLs for job {job_id}: {e.response['Error']['Message']}")
 		return []
+
+# This utility function initializes a session, rotates user agents, referrers, and manages session cookies.
+def initialize_session(job_id: str, session_data: dict = None) -> Session:
+	"""
+	Initialize a session with random user agent, referrer, and optionally use previous session data.
+	
+	Args:
+	- job_id: The job ID associated with this session.
+	- session_data: Optional. Contains user agent, referrer, and cookies from previous requests.
+
+	Returns:
+	- A requests.Session object pre-configured with user agent, referrer, and cookies.
+	"""
+	session = Session()
+	
+	# Rotate or reuse user agent and referrer
+	if session_data:
+		user_agent = session_data.get("user_agent")
+		referrer = session_data.get("referrer")
+		cookies = session_data.get("cookies")
+		
+		# If there are previous cookies, reuse them
+		if cookies:
+			session.cookies.update(cookies)
+	else:
+		# Randomly select a new user agent and referrer
+		user_agent = random.choice(USER_AGENTS)
+		referrer = random.choice(REFERRERS)
+	
+	headers = {
+		"User-Agent": user_agent,
+		"Referer": referrer,
+	}
+	session.headers.update(headers)
+	
+	# Save session data for reuse in future calls within the same job
+	session_data = {
+		"user_agent": user_agent,
+		"referrer": referrer,
+		"cookies": session.cookies.get_dict()  # Store session cookies
+	}
+	
+	return session, session_data
 
 def load_from_s3(bucket_name, key):
 	"""Loads data from an S3 bucket."""
@@ -259,6 +346,29 @@ def save_results_to_s3(results, job_id):
 	except Exception as e:
 		print(f"Error saving results to S3: {str(e)}")
 		return None
+
+def save_session_data(job_id: str, session_data: Dict[str, Any]) -> None:
+	"""
+	Save the session data (e.g., cookies, user agent, referrer) for a job to DynamoDB.
+	
+	Args:
+	- job_id (str): The ID of the job whose session data is being saved.
+	- session_data (dict): A dictionary containing session data (cookies, user agents, etc.).
+	"""
+	try:
+		dynamodb = boto3.resource('dynamodb', region_name=os.environ.get('REGION', 'us-east-2'))
+		session_table = dynamodb.Table(os.environ['DYNAMODB_SESSION_TABLE'])
+
+		session_table.put_item(
+			Item={
+				'job_id': job_id,
+				'session_data': session_data,
+				'last_updated': datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+			}
+		)
+		print(f"Session data for job {job_id} saved successfully")
+	except Exception as e:
+		print(f"Error saving session data for job {job_id}: {str(e)}")
 
 def send_job_to_queue(job_id, job_data):
 	sqs = boto3.client('sqs', region_name=os.environ.get('REGION', 'us-east-2'))
@@ -423,6 +533,34 @@ def parse_links_from_file(file_mapping, file_url):
 				links.append(row[url_column_index].strip())
 						
 		return links
+
+def update_job_status(job_id: str, status: str) -> None:
+	"""
+	Update the status of a job in the DynamoDB job table.
+	
+	Args:
+	- job_id (str): The ID of the job to update.
+	- status (str): The new status of the job (e.g., 'in progress', 'finished', 'error').
+	"""
+	try:
+		dynamodb = boto3.resource('dynamodb', region_name=os.environ.get('REGION', 'us-east-2'))
+		job_table = dynamodb.Table(os.environ['DYNAMODB_JOBS_TABLE'])
+		
+		job_table.update_item(
+			Key={'job_id': job_id},
+			UpdateExpression="SET #status = :status, #last_updated = :last_updated",
+			ExpressionAttributeNames={
+					'#status': 'status',
+					'#last_updated': 'last_updated'
+			},
+			ExpressionAttributeValues={
+					':status': status,
+					':last_updated': datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+			}
+		)
+		print(f"Job {job_id} status updated to {status}")
+	except Exception as e:
+		print(f"Error updating job status for job {job_id}: {str(e)}")
 
 def update_url_status(job_id: str, url: str, status: str) -> None:
 	"""

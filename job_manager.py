@@ -7,7 +7,7 @@ from botocore.exceptions import ClientError
 from crawl_manager import process_queries
 from datetime import datetime, timezone
 from typing import Any, Dict
-from utils import decimal_to_float, delete_job_links, fetch_urls_for_job, parse_links_from_file, save_results_to_s3, update_url_status, validate_job_data
+from utils import decimal_to_float, delete_job_links, fetch_url_with_session, fetch_urls_for_job, initialize_session, parse_links_from_file, save_results_to_s3, update_url_status, validate_job_data
 
 dynamodb = boto3.resource('dynamodb', region_name=os.environ.get('REGION', 'us-east-2'))
 job_table = dynamodb.Table(os.environ['DYNAMODB_JOBS_TABLE'])
@@ -146,77 +146,83 @@ def process_job(job_data: Dict[str, Any]) -> Dict[str, Any]:
 	results = {}
 	job_id = job_data['job_id']
 	queries = job_data.get('queries', [])  # The list of queries to apply to each URL
-	
-	# Step 1: Fetch URLs from the url_table associated with the job
+
 	try:
+		# Fetch URLs from the url_table associated with the job
 		urls = fetch_urls_for_job(job_id)
 		if not urls:
 			raise ValueError("No URLs found for the job.")
 	except ClientError as e:
 		print(f"Error fetching URLs for job {job_id}: {e.response['Error']['Message']}")
 		return {'status': 'error', 'message': f"Failed to fetch URLs for job {job_id}"}
+	except Exception as e:
+		print(f"General error fetching URLs for job {job_id}: {str(e)}")
+		return {'status': 'error', 'message': f"General error: {str(e)}"}
 
-	# Step 2: Set headers and process each URL
-	headers = {
-		'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3',
-		'Accept-Language': 'en-US,en;q=0.9',
-		'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-		'Connection': 'keep-alive',
-		'Referer': 'https://www.google.com/',
-		'Upgrade-Insecure-Requests': '1',
-	}
+	# Initialize session with random user agent, referrer, and cookie handling
+	session, session_data = initialize_session(job_id)
 
-	for url_item in urls:
-		url = url_item['url']
-		try:
-			print(f"Scraping URL: {url}")
-			
-			# Add headers to the request to avoid being blocked
-			response = requests.get(url, headers=headers)
-			response.raise_for_status()  # Check for HTTP errors
-			page_content = response.content
+	try:
+		# Process each URL
+		for url_item in urls:
+			url = url_item['url']
+			response = fetch_url_with_session(url, session, job_id)
 
-			# Apply the queries (XPath, Regex, etc.) to the page content
-			url_results = process_queries(page_content, queries)
-			
-			# Store the results for this URL
-			results[url] = {
-				'status': 'success',
-				'data': url_results
+			if response['status'] == 'success':
+				# Process the page content
+				page_content = response['content']
+				url_results = process_queries(page_content, queries)
+
+				# Store the results for this URL
+				results[url] = {
+					'status': 'success',
+					'data': url_results
+				}
+				update_url_status(job_id, url, 'finished')
+
+			else:
+				# Handle failure
+				results[url] = response
+				update_url_status(job_id, url, 'error')
+
+	except Exception as e:
+		print(f"Error processing job {job_id}: {str(e)}")
+		# Optionally update job status as failed
+		update_job_status(job_id, 'error')
+		return {'status': 'error', 'message': f"Error processing job: {str(e)}"}
+
+	# Save session data for future reuse (this can be stored in DynamoDB or another persistent store)
+	save_session_data(job_id, session_data)
+
+	try:
+		# Save the consolidated results to S3 or DynamoDB
+		results_file_key = save_results_to_s3(results, job_id)
+	except Exception as e:
+		print(f"Error saving results for job {job_id} to S3: {str(e)}")
+		return {'status': 'error', 'message': f"Failed to save results: {str(e)}"}
+
+	# Update the job's last_run timestamp and status in the job table at the end of the process
+	try:
+		job_table.update_item(
+			Key={'job_id': job_id},
+			UpdateExpression="SET #last_run = :last_run, #status = :status, #results_s3_key = :results_s3_key",
+			ExpressionAttributeNames={
+				'#last_run': 'last_run',
+				'#status': 'status',
+				'#results_s3_key': 'results_s3_key'
+			},
+			ExpressionAttributeValues={
+				':last_run': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+				':status': 'finished',
+				':results_s3_key': results_file_key
 			}
-		
-			# Update the URL's status in DynamoDB to 'finished'
-			update_url_status(job_id, url, 'finished')
-		
-		except requests.RequestException as e:
-			print(f"Error fetching {url}: {str(e)}")
-			results[url] = {
-				'status': 'error',
-				'message': str(e)
-			}
-			# Update the URL's status in DynamoDB to 'error'
-			update_url_status(job_id, url, 'error')
-
-	# After processing all URLs, save the consolidated results to S3
-	results_file_key = save_results_to_s3(results, job_data['job_id'])
-
-	# Step 3: After processing all URLs, update the job's last_run timestamp
-	job_table.update_item(
-		Key={'job_id': job_data['job_id']},
-		UpdateExpression="SET #last_run = :last_run, #status = :status, #results_s3_key = :results_s3_key",
-		ExpressionAttributeNames={
-			'#last_run': 'last_run',
-			'#status': 'status',
-			'#results_s3_key': 'results_s3_key'
-		},
-		ExpressionAttributeValues={
-			':last_run': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
-			':status': 'finished',
-			':results_s3_key': results_file_key
-		}
-	)
+		)
+	except Exception as e:
+		print(f"Error updating job status for job {job_id}: {str(e)}")
+		return {'status': 'error', 'message': f"Failed to update job status: {str(e)}"}
 
 	return results
+
 
 # Refresh a job (re-crawl all URLs)
 def refresh_job(job_id):
