@@ -4,7 +4,7 @@ import os
 import paramiko
 
 from crawl_manager import get_crawl
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from job_manager import create_job, delete_job, get_all_jobs, get_job, get_job_crawls, pause_job, process_job, refresh_job, resume_job, update_job
 from urllib.parse import urlparse
 from utils import decimal_to_float, detect_csv_settings, extract_token_from_event, validate_clerk_token, validate_job_data
@@ -257,6 +257,8 @@ def schedule_jobs_handler(event, context):
 	).get('Items', [])
 	
 	jobs_cleaned = decimal_to_float(jobs)
+ 
+	print(f"Jobs to process: {jobs_cleaned}")
 	for job in jobs_cleaned:
 		scheduling = job.get('scheduling', {})
 		job_days = scheduling.get('days', [])  # E.g., ['Monday', 'Wednesday']
@@ -276,6 +278,7 @@ def schedule_jobs_handler(event, context):
 		# Determine if the job should run this minute (based on multiples of 5)
 		should_run_this_minute = 60 in job_minutes or current_minute in job_minutes
 		
+		print(f"Job {job['job_id']} - Days: {job_days}, Hours: {job_hours}, Minutes: {job_minutes}, Last Run: {last_run}, Should Run Today: {should_run_today}, Should Run This Hour: {should_run_this_hour}, Should Run This Minute: {should_run_this_minute}")
 		# Check if the job should run based on its scheduling
 		if should_run_today and should_run_this_hour and should_run_this_minute:
 			# If last_run exists, check if the current time is after the next scheduled run
