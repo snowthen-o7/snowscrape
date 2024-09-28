@@ -415,11 +415,11 @@ def validate_job_data(data):
 				raise ValueError(f"'file_mapping' must contain '{key}'.")
 
 		if data['file_mapping']['delimiter'] not in [',', ';', '|', '\t']:
-			raise ValueError("Invalid 'delimiter'. Must be one of ',', ';', '|', or '\t'.")
+			raise ValueError("Invalid 'delimiter'. Must be one of ',', ';', '|', or '\t'. Received: " + data['file_mapping']['delimiter'])
 		if data['file_mapping']['enclosure'] not in ['"', "'", "none"]:
-			raise ValueError("Invalid 'enclosure'. Must be either '\"', '\'', or 'none'.")
+			raise ValueError("Invalid 'enclosure'. Must be either '\"', '\'', or 'none'. Received: " + data['file_mapping']['enclosure'])
 		if data['file_mapping']['escape'] not in ['\\', '/', '"', "'", "none"]:
-			raise ValueError("Invalid 'escape'. Must be '\\', '/', '\"', '\'', or 'none'.")
+			raise ValueError("Invalid 'escape'. Must be '\\', '/', '\"', '\'', or 'none'. Received: " + data['file_mapping']['escape'])
 
 	if 'scheduling' in data:
 		if 'hours' not in data['scheduling'] or not isinstance(data['scheduling']['hours'], list):
