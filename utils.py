@@ -414,7 +414,7 @@ def validate_job_data(data):
 			if key not in data['file_mapping']:
 				raise ValueError(f"'file_mapping' must contain '{key}'.")
 
-		if data['file_mapping']['delimiter'] not in [',', ';', '|', '\t']:
+		if data['file_mapping']['delimiter'] not in [',', ';', '|', '\\t']:
 			raise ValueError("Invalid 'delimiter'. Must be one of ',', ';', '|', or '\t'. Received: " + data['file_mapping']['delimiter'])
 		if data['file_mapping']['enclosure'] not in ['"', "'", "none"]:
 			raise ValueError("Invalid 'enclosure'. Must be either '\"', '\'', or 'none'. Received: " + data['file_mapping']['enclosure'])
