@@ -9,6 +9,7 @@ import random
 import re
 import requests
 
+from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
 from datetime import datetime, timezone
 from decimal import Decimal
