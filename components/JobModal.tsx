@@ -9,12 +9,13 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 
-import { X, Loader2, Plus, Trash2 } from 'lucide-react'
+import { X, Loader2, Plus, Trash2, Save, FolderOpen } from 'lucide-react'
 import { SessionResource } from '@clerk/types';
-import { FormData, FileMapping, Job, Query, Scheduling } from '@/lib/types';
+import { FormData, FileMapping, Job, Query, Scheduling, Template } from '@/lib/types';
 import { validateQueries, validateHTTP, validateSFTP } from '@/lib/utils';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import { TemplateModal } from './TemplateModal';
 
 export function JobModal({ closeModal, jobDetails, session }: {
   closeModal: () => void,
@@ -26,7 +27,7 @@ export function JobModal({ closeModal, jobDetails, session }: {
     rate_limit: 1,
     source: '',
     file_mapping: { delimiter: ',', enclosure: '', escape: '', url_column: '' } as FileMapping,
-    scheduling: { days: [], hours: [] } as Scheduling, // Array for selected days and hours
+    scheduling: { days: [], hours: [], minutes: [] } as Scheduling, // Array for selected days and hours
     queries: [{ name: '', type: 'xpath', query: '', join: false }] as Query[] // Explicitly type the queries as an array of Query
   });
 
@@ -34,6 +35,8 @@ export function JobModal({ closeModal, jobDetails, session }: {
   const [queryErrors, setQueryErrors] = useState<(string | null)[]>([]); // Track errors for each query
   const [sourceLoading, setSourceLoading] = useState<boolean>(false);
   const [headers, setHeaders] = useState<string[]>([]); // Track headers from the source file
+  const [templateModalOpen, setTemplateModalOpen] = useState(false);
+  const [token, setToken] = useState<string | null>(null);
   const maxQueries = 10;
 
   // Helper function to set error and show toast
@@ -44,6 +47,15 @@ export function JobModal({ closeModal, jobDetails, session }: {
 
   useEffect(() => {
     console.log("JobDetails", jobDetails);
+    // Fetch token
+    const fetchToken = async () => {
+      if (session) {
+        const tkn = await session.getToken();
+        setToken(tkn);
+      }
+    };
+    fetchToken();
+
     // If jobDetails are passed in, populate formData with jobDetails values
     if (jobDetails) {
       setFormData({
@@ -63,7 +75,7 @@ export function JobModal({ closeModal, jobDetails, session }: {
         setHeaders([jobDetails.file_mapping.url_column]);
       }
     }
-  }, [jobDetails]);
+  }, [jobDetails, session]);
 
   // Handle validation when clicking away from the source input
   const validateSource = async () => {
@@ -180,8 +192,16 @@ export function JobModal({ closeModal, jobDetails, session }: {
       return; // Don't submit if there are errors
     }
 
+    // Sort the scheduling arrays before submitting the form
+    const sortedScheduling = {
+      ...formData.scheduling,
+      days: [...formData.scheduling.days].sort(),
+      hours: [...formData.scheduling.hours].sort((a, b) => a - b),  // Sort numerically
+      minutes: [...formData.scheduling.minutes].sort((a, b) => a - b),  // Sort numerically
+    };
+
     try {
-      const token = session?.getToken(); // Use optional chaining to ensure session is not null
+      const token = await session?.getToken(); // Use optional chaining to ensure session is not null
       if (!token) {
         throw new Error("Session is null or token is unavailable");
       }
@@ -194,7 +214,7 @@ export function JobModal({ closeModal, jobDetails, session }: {
           "Authorization": `Bearer ${token}`,
           ...(process.env.NEXT_PUBLIC_API_KEY && { "x-api-key": process.env.NEXT_PUBLIC_API_KEY }),
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({ ...formData, scheduling: sortedScheduling }),
       });
 
       if (!response.ok) {
@@ -236,14 +256,77 @@ export function JobModal({ closeModal, jobDetails, session }: {
           updatedScheduling.hours = hoursValue.filter((hour) => hour !== 24); // Remove "24" if others are selected
         }
       }
+
+      // Handle "minutes" (multiples of 5)
+      if (field === 'minutes') {
+        const minutesValue = value as number[];
+
+        // Simply update the selected minutes
+        updatedScheduling.minutes = minutesValue;
+      }
   
       return { ...prevState, scheduling: updatedScheduling };
     });
   };
 
+  // Save current configuration as template
+  const handleSaveAsTemplate = async () => {
+    const templateName = prompt("Enter a name for this template:");
+    if (!templateName) return;
+
+    const description = prompt("Enter a description (optional):");
+
+    try {
+      const token = await session?.getToken();
+      if (!token) {
+        throw new Error("Session is null or token is unavailable");
+      }
+
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/templates`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json",
+          ...(process.env.NEXT_PUBLIC_API_KEY && { "x-api-key": process.env.NEXT_PUBLIC_API_KEY }),
+        },
+        body: JSON.stringify({
+          name: templateName,
+          description: description || undefined,
+          config: {
+            file_mapping: formData.file_mapping,
+            queries: formData.queries,
+            scheduling: formData.scheduling,
+          }
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to save template");
+      }
+
+      toast.success("Template saved successfully!", { position: 'top-right' });
+    } catch (error) {
+      console.error("Error saving template", error);
+      toast.error("Failed to save template", { position: 'top-right' });
+    }
+  };
+
+  // Load configuration from template
+  const handleLoadTemplate = (template: Template) => {
+    setFormData({
+      ...formData,
+      file_mapping: template.config.file_mapping,
+      queries: template.config.queries,
+      scheduling: template.config.scheduling,
+    });
+    setTemplateModalOpen(false);
+    toast.success(`Loaded template: ${template.name}`, { position: 'top-right' });
+  };
+
   // Schedule options
   const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
   const hours = Array.from({ length: 24 }, (_, i) => i); // 0 - 23 hours
+  const minutes = Array.from({ length: 12 }, (_, i) => i * 5); // Multiples of 5 minutes
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
@@ -251,8 +334,23 @@ export function JobModal({ closeModal, jobDetails, session }: {
         <div className="p-6 space-y-6">
           <div className="flex justify-between items-center">
             <ToastContainer />
-            <h2 className="text-2xl font-bold">{jobDetails ? `Edit Job - ${jobDetails.name}` : "Submit a New Job"}</h2>
-            <Button variant="ghost" size="icon" onClick={closeModal}><X className="h-6 w-6" /></Button>
+            <div className="flex-1">
+              <h2 className="text-2xl font-bold">{jobDetails ? `Edit Job - ${jobDetails.name}` : "Submit a New Job"}</h2>
+            </div>
+            <div className="flex items-center gap-2">
+              {!jobDetails && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setTemplateModalOpen(true)}
+                  className="flex items-center gap-2"
+                >
+                  <FolderOpen className="h-4 w-4" />
+                  Load Template
+                </Button>
+              )}
+              <Button variant="ghost" size="icon" onClick={closeModal}><X className="h-6 w-6" /></Button>
+            </div>
           </div>
 
           {/* General Job Info */}
@@ -352,8 +450,10 @@ export function JobModal({ closeModal, jobDetails, session }: {
           {/* Scheduling */}
           <div className="space-y-4">
             <h3 className="text-xl font-semibold">Scheduling</h3>
-            <div className="space-y-2"></div>
-              <Label>Days of Week</Label>
+
+            {/* Days */}
+            <div className="space-y-2">
+              <Label>Days</Label>
               <div className="flex flex-wrap gap-2">
                 <div className="flex items-center space-x-2">
                   <Checkbox
@@ -381,6 +481,8 @@ export function JobModal({ closeModal, jobDetails, session }: {
                 ))}
               </div>
             </div>
+
+            {/* Hours */}
             <div className="space-y-2">
               <Label>Hours</Label>
               <div className="flex flex-wrap gap-2">
@@ -410,6 +512,27 @@ export function JobModal({ closeModal, jobDetails, session }: {
                 ))}
               </div>
             </div>
+
+            {/* Minutes */}
+            <div className="space-y-2">
+              <Label>Minutes</Label>
+              <div className="flex flex-wrap gap-2">
+                {minutes.map(minute => (
+                  <div key={minute} className="flex items-center space-x-2">
+                    <Checkbox
+                      id={`minute-${minute}`}
+                      checked={formData.scheduling.minutes.includes(minute)}
+                      onCheckedChange={(checked) => {
+                        const newMinutes = checked ? [...formData.scheduling.minutes, minute] : formData.scheduling.minutes.filter(m => m !== minute);
+                        handleSchedulingChange('minutes', newMinutes);
+                      }}
+                    />
+                    <Label htmlFor={`minute-${minute}`}>{`${minute.toString().padStart(2, '0')}m`}</Label>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
 
           {/* Queries */}
             <div className="space-y-4">
@@ -467,12 +590,36 @@ export function JobModal({ closeModal, jobDetails, session }: {
             </div>
 
             {/* Form Actions */}
-            <div className="flex justify-end space-x-4">
-              <Button onClick={closeModal} variant="outline">Cancel</Button>
-              <Button onClick={handleSubmit}>Submit</Button>
+            <div className="flex justify-between items-center">
+              <div>
+                {!jobDetails && (
+                  <Button
+                    onClick={handleSaveAsTemplate}
+                    variant="outline"
+                    className="flex items-center gap-2"
+                  >
+                    <Save className="h-4 w-4" />
+                    Save as Template
+                  </Button>
+                )}
+              </div>
+              <div className="flex space-x-4">
+                <Button onClick={closeModal} variant="outline">Cancel</Button>
+                <Button onClick={handleSubmit}>Submit</Button>
+              </div>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Template Modal */}
+      {templateModalOpen && (
+        <TemplateModal
+          closeModal={() => setTemplateModalOpen(false)}
+          onSelectTemplate={handleLoadTemplate}
+          token={token}
+        />
+      )}
+    </>
   );
 }

@@ -1,7 +1,28 @@
 import { ClassValue, clsx } from "clsx";
 import Papa from 'papaparse';
 import { twMerge } from "tailwind-merge";
-import { Query } from '@/lib/types';
+import { Query, Scheduling } from '@/lib/types';
+
+export const capitalize = (str: string) => {
+  return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+};
+
+// Helper function to calculate the time difference
+const calculateTimeUntilNextRun = (nextRunTime: Date) => {
+  const now = new Date();
+  const diffInMilliseconds = nextRunTime.getTime() - now.getTime(); // Get timestamps for the operation
+  const diffInMinutes = Math.floor(diffInMilliseconds / 1000 / 60);
+  const diffInHours = Math.floor(diffInMinutes / 60);
+  const diffInDays = Math.floor(diffInHours / 24);
+
+  const remainingTime = [];
+  
+  if (diffInDays > 0) remainingTime.push(`${diffInDays} day(s)`);
+  if (diffInHours % 24 > 0) remainingTime.push(`${diffInHours % 24} hour(s)`);
+  if (diffInMinutes % 60 > 0) remainingTime.push(`${diffInMinutes % 60} minute(s)`);
+
+  return remainingTime.length ? remainingTime.join(', ') : "Now";  // Concatenate and return
+};
 
 export const cn = (...inputs: ClassValue[]) => {
   return twMerge(clsx(inputs));
@@ -50,6 +71,69 @@ export const extractHeadersFromFile = (fileContent: string, delimiter: string = 
   const rows = fileContent.split('\n');
   const headerRow = rows[0];
   return headerRow.split(delimiter).map(header => header.trim());
+};
+
+// Helper function to estimate next run based on scheduling
+export const getNextRunTime = (scheduling: Scheduling, status: string) => {
+  console.log(scheduling);
+  if (status === "paused") {
+    return "Paused";  // Show Paused if the job is paused
+  }
+
+  const now = new Date();
+  const nextRunTime = new Date(now.getTime()); // Start with the current time
+
+  // Calculate next minute (supporting multiples of 5)
+  if (scheduling.minutes?.length) {
+    const currentMinute = now.getMinutes();
+    const nextMinute = scheduling.minutes.find(min => min > currentMinute) || scheduling.minutes[0];
+    console.log(currentMinute);
+    console.log(nextMinute);
+    
+    // Set the minute and keep the hour if minutes are greater than now, else move to next hour
+    nextRunTime.setMinutes(nextMinute, 0, 0);
+
+    // If the next minute has already passed in the current hour, go to the next hour
+    if (nextMinute <= currentMinute) {
+      nextRunTime.setHours(nextRunTime.getHours() + 1);
+    }
+  } else {
+    nextRunTime.setMinutes(0, 0, 0);  // Default to the top of the hour if no minute is specified
+  }
+
+  // Calculate next hour
+  if (scheduling.hours?.includes(24)) {
+    // "Every Hour" means we leave the hour as it is (any hour is valid)
+    // So we don't change the hour here, it will remain whatever is set after minute calculation
+  } else if (scheduling.hours?.length) {
+    const currentHour = now.getHours();
+    const nextHour = scheduling.hours.find(hour => hour > currentHour) || scheduling.hours[0];  // Get the next hour
+    nextRunTime.setHours(nextHour);
+
+    // If the next hour is earlier than or equal to the current time, move to the next day
+    if (nextHour <= currentHour) {
+      nextRunTime.setDate(nextRunTime.getDate() + 1);
+    }
+  }
+
+  // Calculate next day
+  if (scheduling.days?.includes("Every Day")) {
+    // "Every Day" means we don't need to change the day, as it can run daily
+  } else if (scheduling.days?.length) {
+    const currentDay = now.getDay();
+    const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const nextDay = scheduling.days.map(day => daysOfWeek.indexOf(day))
+      .find(dayIndex => dayIndex > currentDay) || daysOfWeek.indexOf(scheduling.days[0]);
+
+    if (nextDay <= currentDay) {
+      nextRunTime.setDate(nextRunTime.getDate() + (7 - (currentDay - nextDay)));  // Move to the next week if necessary
+    } else {
+      nextRunTime.setDate(nextRunTime.getDate() + (nextDay - currentDay));
+    }
+  }
+
+  const timeUntilNextRun = calculateTimeUntilNextRun(nextRunTime);
+  return `${timeUntilNextRun} (${nextRunTime.toLocaleString()})`;  // Return the time until the next run with the date
 };
 
 // Function to validate JSONPath expressions

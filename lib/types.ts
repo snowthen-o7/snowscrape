@@ -17,10 +17,10 @@ export interface FormData {
 }
 
 export interface Job {
-  crawl_count: number;
   created_at: string;
   file_mapping: FileMapping;
   job_id: string;
+  link_count: number;
   name: string;
   queries: Query[];
   rate_limit: number;
@@ -28,6 +28,8 @@ export interface Job {
   source: string;
   status: string;
   user_id: string;
+  results_s3_key?: string;
+  last_run?: string;
 }
 
 export interface JobDetailsModalProps {
@@ -46,6 +48,7 @@ export interface Query {
 export interface Scheduling {
   days: string[];
   hours: number[];
+  minutes: number[];
 }
 
 export interface JobCardProps {
@@ -53,4 +56,20 @@ export interface JobCardProps {
   onClick: () => void;
   onPause: () => void;
   onDelete: () => void;
+  onDownload?: () => void;
+  onPreview?: () => void;
+}
+
+export interface Template {
+  template_id: string;
+  user_id: string;
+  name: string;
+  description?: string;
+  config: {
+    file_mapping: FileMapping;
+    queries: Query[];
+    scheduling: Scheduling;
+  };
+  created_at: string;
+  last_used?: string | null;
 }
