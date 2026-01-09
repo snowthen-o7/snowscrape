@@ -11,6 +11,7 @@ import requests
 
 from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
+from connection_pool import get_table, get_s3_client
 from datetime import datetime, timezone
 from decimal import Decimal
 from io import StringIO
@@ -18,10 +19,10 @@ from requests.sessions import Session
 from typing import Dict, Any
 from urllib.parse import urlparse
 
-dynamodb = boto3.resource('dynamodb', region_name=os.environ.get('REGION', 'us-east-2'))
-s3 = boto3.client('s3')
-job_table = dynamodb.Table(os.environ['DYNAMODB_JOBS_TABLE'])
-url_table = dynamodb.Table(os.environ['DYNAMODB_URLS_TABLE'])
+# Use connection pool for AWS services
+s3 = get_s3_client()
+job_table = get_table(os.environ['DYNAMODB_JOBS_TABLE'])
+url_table = get_table(os.environ['DYNAMODB_URLS_TABLE'])
 
 # Define a list of common user agents and referrers
 REFERRERS = [
@@ -103,9 +104,60 @@ def convert_scheduling_to_cron(scheduling):
 	return cron_expression
 
 def cron_to_seconds(cron_expression):
-	"""Converts a cron expression to the equivalent interval in seconds."""
-	# Implement logic to convert cron to seconds
-	pass
+	"""
+	Converts a simple cron expression to the equivalent interval in seconds.
+
+	Supports basic periodic cron expressions like:
+	- "0 * * * *" (every hour) -> 3600
+	- "0 0 * * *" (every day) -> 86400
+	- "*/15 * * * *" (every 15 minutes) -> 900
+
+	Args:
+		cron_expression (str): Cron expression in format "minute hour day month weekday"
+
+	Returns:
+		int: Interval in seconds, or None if expression cannot be converted
+	"""
+	if not cron_expression:
+		return None
+
+	parts = cron_expression.strip().split()
+	if len(parts) != 5:
+		print(f"Invalid cron expression format: {cron_expression}")
+		return None
+
+	minute, hour, day, month, weekday = parts
+
+	try:
+		# Handle simple periodic patterns
+		# Pattern: "0 * * * *" = every hour
+		if minute == "0" and hour == "*":
+			return 3600  # 1 hour
+
+		# Pattern: "0 0 * * *" = every day
+		if minute == "0" and hour == "0":
+			return 86400  # 24 hours
+
+		# Pattern: "*/N * * * *" = every N minutes
+		if minute.startswith("*/"):
+			interval = int(minute.split("/")[1])
+			return interval * 60
+
+		# Pattern: "0 */N * * *" = every N hours
+		if hour.startswith("*/") and minute == "0":
+			interval = int(hour.split("/")[1])
+			return interval * 3600
+
+		# If specific minute and hour are set, treat as daily
+		if minute.isdigit() and hour.isdigit():
+			return 86400  # Daily
+
+		print(f"Cron expression pattern not supported for interval conversion: {cron_expression}")
+		return None
+
+	except (ValueError, IndexError) as e:
+		print(f"Error parsing cron expression {cron_expression}: {str(e)}")
+		return None
 
 def decimal_to_float(obj):
 	if isinstance(obj, list):
@@ -397,54 +449,37 @@ def validate_clerk_token(token):
 		raise Exception("Invalid token.")
 
 def validate_job_data(data):
-	if 'name' not in data or not isinstance(data['name'], str):
-		raise ValueError("Job must have a valid 'name' (string).")
+	"""
+	Validate job data using comprehensive validators.
+	This function provides backward compatibility with the original validation
+	while using the new validators module for enhanced security.
+	"""
+	from validators import validate_job_data_strict, ValidationError as ValidatorError
 
-	if 'rate_limit' not in data or not isinstance(data['rate_limit'], int) or not (1 <= data['rate_limit'] <= 8):
-		raise ValueError("Job must have a 'rate_limit' (integer between 1 and 8).")
+	try:
+		# Use the strict validator which provides comprehensive validation
+		validated_data = validate_job_data_strict(data)
 
-	if 'source' not in data or not isinstance(data['source'], str):
-		raise ValueError("Job must have a valid 'source' (string).")
+		# Additional scheduling validation (if present)
+		if 'scheduling' in data and data['scheduling'] is not None:
+			scheduling = data['scheduling']
 
-	if 'file_mapping' not in data or not isinstance(data['file_mapping'], dict):
-		raise ValueError("Job must have a valid 'file_mapping' (object).")
-	else:
-		required_file_mapping_keys = ['delimiter', 'enclosure', 'escape', 'url_column']
-		for key in required_file_mapping_keys:
-			if key not in data['file_mapping']:
-				raise ValueError(f"'file_mapping' must contain '{key}'.")
+			if 'hours' not in scheduling or not isinstance(scheduling['hours'], list):
+				raise ValueError("'scheduling' must include 'hours' as a list.")
+			for hour in scheduling['hours']:
+				if not isinstance(hour, int) or not (0 <= hour <= 24):
+					raise ValueError("'hours' must be integers between 0 and 23, or 24 for 'Every Hour'.")
 
-		if data['file_mapping']['delimiter'] not in [',', ';', '|', '\\t']:
-			raise ValueError("Invalid 'delimiter'. Must be one of ',', ';', '|', or '\t'. Received: " + data['file_mapping']['delimiter'])
-		if data['file_mapping']['enclosure'] not in ['"', "'", "none"]:
-			raise ValueError("Invalid 'enclosure'. Must be either '\"', '\'', or 'none'. Received: " + data['file_mapping']['enclosure'])
-		if data['file_mapping']['escape'] not in ['\\', '/', '"', "'", "none"]:
-			raise ValueError("Invalid 'escape'. Must be '\\', '/', '\"', '\'', or 'none'. Received: " + data['file_mapping']['escape'])
+			if 'days' not in scheduling or not isinstance(scheduling['days'], list):
+				raise ValueError("'scheduling' must include 'days' as a list.")
+			valid_days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Every Day']
+			for day in scheduling['days']:
+				if day not in valid_days:
+					raise ValueError(f"'days' must be one of {', '.join(valid_days)}.")
 
-	if 'scheduling' in data:
-		if 'hours' not in data['scheduling'] or not isinstance(data['scheduling']['hours'], list):
-			raise ValueError("'scheduling' must include 'hours' as a list.")
-		for hour in data['scheduling']['hours']:
-			if not isinstance(hour, int) or not (0 <= hour <= 24):
-				raise ValueError("'hours' must be integers between 0 and 23, or 'Every Hour'.")
-
-		if 'days' not in data['scheduling'] or not isinstance(data['scheduling']['days'], list):
-			raise ValueError("'scheduling' must include 'days' as a list.")
-		valid_days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Every Day']
-		for day in data['scheduling']['days']:
-			if day not in valid_days:
-				raise ValueError(f"'days' must be one of {', '.join(valid_days)}.")
-
-	if 'queries' not in data or not isinstance(data['queries'], list):
-		raise ValueError("Job must have a 'queries' (array).")
-	else:
-		for query in data['queries']:
-			if 'name' not in query or not isinstance(query['name'], str):
-				raise ValueError("Each query must have a valid 'name' (string).")
-			if 'type' not in query or query['type'] not in ['xpath', 'regex', 'jsonpath']:
-				raise ValueError("Each query must have a valid 'type' (xpath, regex, or jsonpath).")
-			if 'query' not in query or not isinstance(query['query'], str):
-				raise ValueError("Each query must have a valid 'query' (string).")
+	except ValidatorError as e:
+		# Convert ValidationError to ValueError for backward compatibility
+		raise ValueError(str(e))
 
 def fetch_file_content(file_url):
 	"""

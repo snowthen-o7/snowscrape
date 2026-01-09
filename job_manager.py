@@ -2,29 +2,39 @@ import boto3
 import json
 import os
 import requests
+import time
 
 from botocore.exceptions import ClientError
+from connection_pool import get_table, get_cached_session_data, set_cached_session_data, get_http_session, close_http_session
 from crawl_manager import process_queries
 from datetime import datetime, timezone
+from logger import get_logger, log_exception
+from metrics import get_metrics_emitter
 from typing import Any, Dict
 from utils import decimal_to_float, delete_job_links, fetch_url_with_session, fetch_urls_for_job, initialize_session, parse_links_from_file, save_results_to_s3, save_session_data, update_job_status, update_url_status, validate_job_data
 
-dynamodb = boto3.resource('dynamodb', region_name=os.environ.get('REGION', 'us-east-2'))
-job_table = dynamodb.Table(os.environ['DYNAMODB_JOBS_TABLE'])
-url_table = dynamodb.Table(os.environ['DYNAMODB_URLS_TABLE'])
+# Initialize logger and metrics
+logger = get_logger(__name__)
+metrics = get_metrics_emitter()
+
+# Use connection pool for DynamoDB tables
+job_table = get_table(os.environ['DYNAMODB_JOBS_TABLE'])
+url_table = get_table(os.environ['DYNAMODB_URLS_TABLE'])
 
 # Create a new job in DynamoDB
 def create_job(job_data):
 	try:
 		# Parse the list of URLs from the external source
-		links = parse_links_from_file(job_data['file_mapping'], job_data['source'])  # Assuming 'source' is the URL to the list
-		print(f"Parsed links: {links}")
+		logger.info("Parsing source file for URLs", source=job_data['source'])
+		links = parse_links_from_file(job_data['file_mapping'], job_data['source'])
+		logger.info("URLs parsed successfully", url_count=len(links))
 
 		# Assign a job_id if it doesn't exist
 		job_id = job_data.get('job_id')
 		if not job_id:
 			import uuid
 			job_data['job_id'] = str(uuid.uuid4())
+			logger.debug("Generated job_id", job_id=job_data['job_id'])
 
 		# Ensure all necessary fields are present in job_data and add defaults if needed
 		job_item = {
@@ -43,27 +53,36 @@ def create_job(job_data):
 			'user_id': job_data['user_id'],
 		}
 
-		print(f"Creating job: {job_item}")
 		# Insert job data into DynamoDB
+		logger.info("Creating job in DynamoDB", job_id=job_data['job_id'], job_name=job_data['name'])
 		response = job_table.put_item(Item=job_item)
-		print(f"DynamoDB put_item response: {response}")
-  
-  	# Insert URLs into the URL tracking table with state 'ready'
-		for url in links:
-			url_item = {
-				'job_id': job_data['job_id'],
-				'url': url,
-				'state': 'ready',
-				'last_updated': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
-			}
-			url_table.put_item(Item=url_item)
-  
+		logger.debug("Job created in DynamoDB", job_id=job_data['job_id'])
+
+  	# Insert URLs into the URL tracking table with state 'ready' (using batch writer for performance)
+		logger.info("Inserting URLs into tracking table", job_id=job_data['job_id'], url_count=len(links))
+		timestamp = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+		# Use batch_writer for efficient bulk inserts (up to 25 items per batch)
+		with url_table.batch_writer() as batch:
+			for url in links:
+				batch.put_item(Item={
+					'job_id': job_data['job_id'],
+					'url': url,
+					'state': 'ready',
+					'last_updated': timestamp
+				})
+
+		logger.info("Job created successfully", job_id=job_data['job_id'], url_count=len(links))
 		return job_data['job_id']
+
 	except ValueError as e:
-		print(f"Job validation failed: {str(e)}")
+		log_exception(logger, "Job validation failed", e, job_name=job_data.get('name'))
 		return None
 	except ClientError as e:
-		print(f"Error creating job: {e.response['Error']['Message']}")
+		log_exception(logger, "DynamoDB error creating job", e, job_name=job_data.get('name'))
+		return None
+	except Exception as e:
+		log_exception(logger, "Unexpected error creating job", e, job_name=job_data.get('name'))
 		return None
 
 # Delete a job and its related links from DynamoDB
@@ -82,17 +101,55 @@ def delete_job(job_id):
 		return None
 
 # Retrieve all job statuses
-def get_all_jobs():
+def get_all_jobs(limit=None, last_evaluated_key=None, projection=None):
+	"""
+	Retrieve all jobs with pagination support and projection optimization.
+
+	Args:
+		limit: Maximum number of items to return
+		last_evaluated_key: Key to continue pagination from
+		projection: List of attributes to retrieve (reduces data transfer)
+
+	Returns:
+		Dictionary with 'items' and optionally 'last_evaluated_key'
+	"""
 	try:
-		response = job_table.scan()
-		print(f"Retrieved jobs response: {response}")
+		scan_params = {}
+
+		# Add projection expression to fetch only needed fields
+		if projection:
+			scan_params['ProjectionExpression'] = ', '.join(projection)
+		else:
+			# Default projection for list views (exclude large fields)
+			scan_params['ProjectionExpression'] = 'job_id, #name, #status, created_at, last_run, link_count, user_id'
+			scan_params['ExpressionAttributeNames'] = {
+				'#name': 'name',
+				'#status': 'status'
+			}
+
+		# Add pagination
+		if limit:
+			scan_params['Limit'] = limit
+
+		if last_evaluated_key:
+			scan_params['ExclusiveStartKey'] = last_evaluated_key
+
+		response = job_table.scan(**scan_params)
+		logger.info("Retrieved jobs", count=len(response.get('Items', [])))
+
 		jobs = response.get('Items', [])
-		print(f"Jobs: {jobs}")
-		jobs_cleaned = decimal_to_float(jobs)  # Convert Decimals
-		return jobs_cleaned
+		jobs_cleaned = decimal_to_float(jobs)
+
+		result = {'items': jobs_cleaned}
+
+		# Include pagination key if there are more results
+		if 'LastEvaluatedKey' in response:
+			result['last_evaluated_key'] = response['LastEvaluatedKey']
+
+		return result
 	except ClientError as e:
-		print(f"Error retrieving jobs: {e.response['Error']['Message']}")
-		return []
+		log_exception(logger, "Error retrieving jobs", e)
+		return {'items': []}
 
 # Retrieve details of a specific job
 def get_job(job_id):
@@ -133,10 +190,38 @@ def pause_job(job_id):
 		print(f"Error pausing job: {e.response['Error']['Message']}")
 		return None
 
+# Cancel a job (update status to "cancelled")
+def cancel_job(job_id):
+	"""
+	Cancel a job by setting its status to 'cancelled'.
+	This will prevent the job from being processed further.
+
+	Args:
+		job_id (str): The ID of the job to cancel
+
+	Returns:
+		str: Success message, or None on error
+	"""
+	try:
+		job_table.update_item(
+			Key={'job_id': job_id},
+			UpdateExpression="set #st = :s, cancelled_at = :ct",
+			ExpressionAttributeNames={'#st': 'status'},
+			ExpressionAttributeValues={
+				':s': 'cancelled',
+				':ct': datetime.now(timezone.utc).isoformat()
+			}
+		)
+		print(f"Job {job_id} cancelled successfully.")
+		return f"Job {job_id} cancelled successfully."
+	except ClientError as e:
+		print(f"Error cancelling job: {e.response['Error']['Message']}")
+		return None
+
 def process_job(job_data: Dict[str, Any]) -> Dict[str, Any]:
 	"""
 	Perform the job by scraping and processing URLs based on the job's queries.
-	
+
 	Args:
 	- job_data (dict): The data of the job containing the list of URLs to scrape, queries, etc.
 
@@ -146,6 +231,14 @@ def process_job(job_data: Dict[str, Any]) -> Dict[str, Any]:
 	results = {}
 	job_id = job_data['job_id']
 	queries = job_data.get('queries', [])  # The list of queries to apply to each URL
+	timeout_seconds = job_data.get('timeout', 900)  # Default 15 minutes
+	start_time = datetime.now(timezone.utc)
+
+	# Check if job is cancelled before starting
+	job = get_job(job_id)
+	if job and job.get('status') == 'cancelled':
+		print(f"Job {job_id} is cancelled. Skipping processing.")
+		return {'status': 'cancelled', 'message': 'Job was cancelled'}
 
 	try:
 		# Fetch URLs from the url_table associated with the job
@@ -159,31 +252,137 @@ def process_job(job_data: Dict[str, Any]) -> Dict[str, Any]:
 		print(f"General error fetching URLs for job {job_id}: {str(e)}")
 		return {'status': 'error', 'message': f"General error: {str(e)}"}
 
+	# Initialize progress tracking
+	total_urls = len(urls)
+	processed_urls = 0
+	failed_urls = 0
+
+	# Update job with initial progress
+	try:
+		job_table.update_item(
+			Key={'job_id': job_id},
+			UpdateExpression="SET progress = :progress, #status = :status",
+			ExpressionAttributeNames={'#status': 'status'},
+			ExpressionAttributeValues={
+				':progress': {
+					'total': total_urls,
+					'processed': 0,
+					'failed': 0,
+					'percentage': 0
+				},
+				':status': 'processing'
+			}
+		)
+	except Exception as e:
+		print(f"Error updating progress: {str(e)}")
+
 	# Initialize session with random user agent, referrer, and cookie handling
 	session, session_data = initialize_session(job_id)
 
 	try:
 		# Process each URL
-		for url_item in urls:
+		for idx, url_item in enumerate(urls):
+			url_start_time = time.time()
 			url = url_item['url']
-			response = fetch_url_with_session(url, session, job_id)
 
-			if response['status'] == 'success':
-				# Process the page content
-				page_content = response['content']
-				url_results = process_queries(page_content, queries)
+			try:
+				# Check for timeout
+				elapsed = (datetime.now(timezone.utc) - start_time).total_seconds()
+				if elapsed > timeout_seconds:
+					logger.warning("Job timeout reached", job_id=job_id, elapsed_seconds=elapsed)
+					update_job_status(job_id, 'timeout')
+					return {'status': 'timeout', 'message': f"Job timed out after {elapsed} seconds"}
 
-				# Store the results for this URL
+				# Check if job was cancelled during processing
+				job = get_job(job_id)
+				if job and job.get('status') == 'cancelled':
+					logger.info("Job cancellation detected", job_id=job_id)
+					return {'status': 'cancelled', 'message': 'Job was cancelled during processing'}
+
+				# Fetch URL
+				response = fetch_url_with_session(url, session, job_id)
+
+				if response['status'] == 'success':
+					# Process the page content
+					page_content = response['content']
+					url_results = process_queries(page_content, queries)
+
+					# Store the results for this URL
+					results[url] = {
+						'status': 'success',
+						'data': url_results
+					}
+					update_url_status(job_id, url, 'finished')
+					processed_urls += 1
+
+					# Log successful crawl
+					url_duration_ms = (time.time() - url_start_time) * 1000
+					logger.log_url_crawl(job_id, url, 'success', url_duration_ms,
+									   queries_executed=len(queries))
+
+					# Emit crawl success metric
+					try:
+						metrics.emit_crawl_success(job_id, url, url_duration_ms)
+					except Exception:
+						pass  # Ignore metrics errors
+
+				else:
+					# Handle failure
+					results[url] = response
+					update_url_status(job_id, url, 'error')
+					failed_urls += 1
+
+					# Log failed crawl
+					url_duration_ms = (time.time() - url_start_time) * 1000
+					logger.log_url_crawl(job_id, url, 'error', url_duration_ms,
+									   error_message=response.get('message', 'Unknown error'))
+
+					# Emit crawl failure metric
+					try:
+						error_type = response.get('message', 'unknown').split(':')[0].lower()
+						metrics.emit_crawl_failure(job_id, url, error_type)
+					except Exception:
+						pass  # Ignore metrics errors
+
+			except Exception as e:
+				# Log exception during URL processing
+				url_duration_ms = (time.time() - url_start_time) * 1000
+				log_exception(logger, f"Error processing URL {url}", e, job_id=job_id, url=url)
+
 				results[url] = {
-					'status': 'success',
-					'data': url_results
+					'status': 'error',
+					'message': str(e)
 				}
-				update_url_status(job_id, url, 'finished')
-
-			else:
-				# Handle failure
-				results[url] = response
 				update_url_status(job_id, url, 'error')
+				failed_urls += 1
+
+				logger.log_url_crawl(job_id, url, 'error', url_duration_ms, error_message=str(e))
+
+				# Emit crawl failure metric
+				try:
+					error_type = type(e).__name__.lower()
+					metrics.emit_crawl_failure(job_id, url, error_type)
+				except Exception:
+					pass  # Ignore metrics errors
+
+			# Update progress every 10 URLs or on last URL
+			if (idx + 1) % 10 == 0 or (idx + 1) == total_urls:
+				percentage = int(((processed_urls + failed_urls) / total_urls) * 100)
+				try:
+					job_table.update_item(
+						Key={'job_id': job_id},
+						UpdateExpression="SET progress = :progress",
+						ExpressionAttributeValues={
+							':progress': {
+								'total': total_urls,
+								'processed': processed_urls,
+								'failed': failed_urls,
+								'percentage': percentage
+							}
+						}
+					)
+				except Exception as e:
+					print(f"Error updating progress: {str(e)}")
 
 	except Exception as e:
 		print(f"Error processing job {job_id}: {str(e)}")
@@ -220,6 +419,13 @@ def process_job(job_data: Dict[str, Any]) -> Dict[str, Any]:
 	except Exception as e:
 		print(f"Error updating job status for job {job_id}: {str(e)}")
 		return {'status': 'error', 'message': f"Failed to update job status: {str(e)}"}
+
+	# Emit crawl success rate metric
+	try:
+		if total_urls > 0:
+			metrics.emit_crawl_success_rate(job_id, processed_urls, total_urls)
+	except Exception:
+		pass  # Ignore metrics errors
 
 	return results
 

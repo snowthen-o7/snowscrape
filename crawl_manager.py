@@ -1,4 +1,5 @@
 import boto3
+import json
 import jsonpath_ng
 import os
 import re
@@ -11,8 +12,48 @@ dynamodb = boto3.resource('dynamodb', region_name=os.environ.get('REGION', 'us-e
 table = dynamodb.Table(os.environ['DYNAMODB_JOBS_TABLE'])
 
 def get_crawl(job_id, crawl_id):
-	# Logic to retrieve details of a specific crawl
-	pass
+	"""
+	Retrieve details of a specific URL crawl for a job.
+
+	Args:
+		job_id (str): The job ID
+		crawl_id (str): The crawl ID (URL or URL hash)
+
+	Returns:
+		dict: Crawl details including URL, status, results, timestamps
+		None: If crawl not found
+	"""
+	url_table = dynamodb.Table(os.environ['DYNAMODB_URLS_TABLE'])
+
+	try:
+		# Query the URL table for the specific crawl
+		# crawl_id is assumed to be the URL or a URL identifier
+		response = url_table.get_item(
+			Key={
+				'job_id': job_id,
+				'url': crawl_id  # Assuming crawl_id is the URL
+			}
+		)
+
+		item = response.get('Item')
+		if item:
+			return {
+				'job_id': item.get('job_id'),
+				'url': item.get('url'),
+				'state': item.get('state', 'unknown'),
+				'attempts': item.get('attempts', 0),
+				'last_crawled': item.get('last_crawled'),
+				'error': item.get('error'),
+				'http_code': item.get('http_code'),
+				'results': item.get('results', {})
+			}
+		else:
+			print(f"Crawl not found for job_id: {job_id}, crawl_id: {crawl_id}")
+			return None
+
+	except Exception as e:
+		print(f"Error retrieving crawl details: {str(e)}")
+		return None
 
 def process_queries(page_content: bytes, queries: List[Dict[str, Any]]) -> Dict[str, Any]:
 	"""
