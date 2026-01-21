@@ -26,12 +26,11 @@ pycparser>=2.22
 # File transfer
 paramiko>=3.5.0
 
-# Data processing
-pandas>=2.2.3
-numpy>=2.2.1
+# Data processing (lightweight)
 python-dateutil>=2.9.0
 pytz>=2024.2
 tzdata>=2024.2
+openpyxl>=3.1.2
 
 # JSON path parsing
 jsonpath-ng>=1.7.0
@@ -40,11 +39,3 @@ ply>=3.11
 # Utilities
 jmespath>=1.0.1
 six>=1.16.0
-
-# Testing dependencies
-pytest>=8.3.4
-pytest-cov>=6.0.0
-pytest-mock>=3.14.0
-pytest-env>=1.1.5
-moto>=5.0.24
-responses>=0.25.3

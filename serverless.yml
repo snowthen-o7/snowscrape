@@ -1,35 +1,37 @@
 # "org" ensures this Service is used with the correct Serverless Framework Access Key.
-org: snowscrape
+# org: snowscrape  # Commented out for deployment without Serverless Dashboard
 # "app" enables Serverless Framework Dashboard features and sharing them with other Services.
-app: snowscrape-backend
+# app: snowscrape-backend  # Commented out for deployment without Serverless Dashboard
 # "service" is the name of this project. This will also be added to your AWS resource names.
 service: snowscrape
 
 provider:
   name: aws
-  runtime: python3.12
+  runtime: python3.11
   region: us-east-2
   stage: ${opt:stage, 'dev'} # Default to 'dev' if no stage is specified
   tracing:
     lambda: true  # Enable X-Ray tracing for Lambda
-    apiGateway: true  # Enable X-Ray tracing for API Gateway
+    apiGateway: false  # Disabled temporarily to avoid CloudWatch role issues
   apiGateway:
     minimumCompressionSize: 1024  # Enable compression for responses > 1KB
     shouldStartNameWithService: true
-    metrics: true  # Enable CloudWatch metrics
-    throttle:
-      burstLimit: 200  # Maximum concurrent requests
-      rateLimit: 100   # Requests per second
+    metrics: false  # Disabled temporarily to avoid CloudWatch role issues
+    # throttle:  # (Serverless V4+ only)
+    #   burstLimit: 200  # Maximum concurrent requests
+    #   rateLimit: 100   # Requests per second
   logs:
     restApi:
-      accessLogging: true
-      executionLogging: true
+      accessLogging: false  # Disabled temporarily to avoid CloudWatch role issues
+      executionLogging: false  # Disabled temporarily to avoid CloudWatch role issues
       level: INFO
       fullExecutionData: true
   layers:
     # Lambda Insights extension for enhanced monitoring
     # Version 21 is the latest stable version for Python 3.12
     - arn:aws:lambda:${self:provider.region}:580247275435:layer:LambdaInsightsExtension:21
+    # Python requirements layer (automatically created by serverless-python-requirements plugin)
+    - Ref: PythonRequirementsLambdaLayer
   environment:
     CLERK_JWT_PUBLIC_KEY: ${self:custom.clerkJwtPublicKey.${self:provider.stage}}  # Conditional key based on the stage
     CLERK_JWT_SECRET_KEY: ${self:custom.clerkJwtSecretKey.${self:provider.stage}}  # Conditional key based on the stage
@@ -37,10 +39,15 @@ provider:
     DYNAMODB_SESSION_TABLE: ${self:custom.dynamoDbSessionTable}
     DYNAMODB_URLS_TABLE: ${self:custom.dynamoDbUrlsTable}
     DYNAMODB_TEMPLATES_TABLE: ${self:custom.dynamoDbTemplatesTable}
+    DYNAMODB_WEBHOOKS_TABLE: ${self:custom.dynamoDbWebhooksTable}
+    DYNAMODB_WEBHOOK_DELIVERIES_TABLE: ${self:custom.dynamoDbWebhookDeliveriesTable}
+    DYNAMODB_PROXY_POOL_TABLE: ${self:custom.dynamoDbProxyPoolTable}
     REGION: ${self:provider.region}
     S3_BUCKET: ${self:custom.s3Bucket}
     SQS_JOB_QUEUE: ${self:custom.sqsJobQueue}
     SQS_JOB_QUEUE_URL: ${self:custom.sqsJobQueueUrl}
+    SQS_WEBHOOK_QUEUE: ${self:custom.sqsWebhookQueue}
+    SQS_WEBHOOK_QUEUE_URL: ${self:custom.sqsWebhookQueueUrl}
     # Observatory integration for centralized monitoring
     SNOWGLOBE_URL: ${self:custom.snowglobeUrl}
     SNOWGLOBE_API_KEY: ${env:SNOWGLOBE_API_KEY}  # Set via environment variable
@@ -73,6 +80,33 @@ provider:
 
     - Effect: "Allow"
       Action:
+        - "dynamodb:*"
+      Resource:
+        - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.dynamoDbWebhooksTable}"
+        - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.dynamoDbWebhooksTable}/index/*"
+
+    - Effect: "Allow"
+      Action:
+        - "dynamodb:*"
+      Resource:
+        - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.dynamoDbWebhookDeliveriesTable}"
+        - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.dynamoDbWebhookDeliveriesTable}/index/*"
+
+    - Effect: "Allow"
+      Action:
+        - "dynamodb:*"
+      Resource:
+        - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.dynamoDbProxyPoolTable}"
+
+    - Effect: "Allow"
+      Action:
+        - "secretsmanager:GetSecretValue"
+        - "secretsmanager:UpdateSecret"
+      Resource:
+        - "arn:aws:secretsmanager:${self:provider.region}:*:secret:snowscrape/proxy-pool-*"
+
+    - Effect: "Allow"
+      Action:
         - "s3:*"
       Resource:
         - "arn:aws:s3:::${self:custom.s3Bucket}/*"
@@ -83,6 +117,8 @@ provider:
       Resource:
         - "arn:aws:sqs:${self:provider.region}:*:${self:custom.sqsJobQueue}"
         - "arn:aws:sqs:${self:provider.region}:*:${self:custom.sqsJobQueue}-DLQ"
+        - "arn:aws:sqs:${self:provider.region}:*:${self:custom.sqsWebhookQueue}"
+        - "arn:aws:sqs:${self:provider.region}:*:${self:custom.sqsWebhookQueue}-DLQ"
 
     - Effect: "Allow"
       Action:
@@ -102,6 +138,21 @@ provider:
         - "logs:CreateLogStream"
         - "logs:PutLogEvents"
       Resource: "*"
+
+package:
+  individually: false
+  patterns:
+    - '!venv/**'
+    - '!node_modules/**'
+    - '!.git/**'
+    - '!.github/**'
+    - '!tests/**'
+    - '!__pycache__/**'
+    - '!*.pyc'
+    - '!.pytest_cache/**'
+    - '!.serverless/**'
+    - '!*.md'
+    - '!deployment-log.txt'
 
 functions:
   createJob:
@@ -199,7 +250,7 @@ functions:
     handler: handler.process_job_handler
     timeout: 900  # 15 minutes (max Lambda timeout)
     memorySize: 1024  # 1GB memory
-    reservedConcurrency: 10  # Limit concurrent executions
+    # reservedConcurrency: 10  # Disabled for dev to avoid concurrency limit issues
     events:
       - sqs:
           arn:
@@ -207,7 +258,7 @@ functions:
               - JobQueue
               - Arn
           batchSize: 5  # Controls how many messages are processed at once
-          maximumBatchingWindowInSeconds: 10  # Wait up to 10s to gather batch
+          # maximumBatchingWindowInSeconds: 10  # Wait up to 10s to gather batch (Serverless V4+ only)
           functionResponseType: ReportBatchItemFailures  # Partial batch failures
 
   refreshJob:
@@ -355,6 +406,93 @@ functions:
           enabled: true
     maximumRetryAttempts: 0
 
+  # Webhook Management Functions
+  createWebhook:
+    name: snowscrape-create-webhook
+    handler: handler.create_webhook_handler
+    timeout: 10
+    events:
+      - http:
+          path: webhooks
+          method: post
+          cors: true
+    maximumRetryAttempts: 0
+
+  listWebhooks:
+    name: snowscrape-list-webhooks
+    handler: handler.list_webhooks_handler
+    timeout: 10
+    events:
+      - http:
+          path: webhooks
+          method: get
+          cors: true
+    maximumRetryAttempts: 0
+
+  deleteWebhook:
+    name: snowscrape-delete-webhook
+    handler: handler.delete_webhook_handler
+    timeout: 10
+    events:
+      - http:
+          path: webhooks/{webhook_id}
+          method: delete
+          cors: true
+    maximumRetryAttempts: 0
+
+  testWebhook:
+    name: snowscrape-test-webhook
+    handler: handler.test_webhook_handler
+    timeout: 10
+    events:
+      - http:
+          path: webhooks/{webhook_id}/test
+          method: post
+          cors: true
+    maximumRetryAttempts: 0
+
+  # Webhook Delivery Handler (SQS triggered)
+  webhookDelivery:
+    name: snowscrape-webhook-delivery
+    handler: webhook_delivery_handler.webhook_delivery_handler
+    timeout: 60
+    memorySize: 512
+    events:
+      - sqs:
+          arn:
+            Fn::GetAtt:
+              - WebhookQueue
+              - Arn
+          batchSize: 10
+          # maximumBatchingWindowInSeconds: 5  # (Serverless V4+ only)
+          functionResponseType: ReportBatchItemFailures
+    maximumRetryAttempts: 0
+
+  # Proxy Health Checker (Scheduled)
+  proxyHealthChecker:
+    name: snowscrape-proxy-health-checker
+    handler: handler.proxy_health_checker_handler
+    timeout: 60
+    memorySize: 256
+    events:
+      - schedule:
+          name: "ProxyHealthCheckEvery5Minutes"
+          description: "Check health of all proxies every 5 minutes"
+          rate: rate(5 minutes)
+          enabled: true
+    maximumRetryAttempts: 0
+
+  # JavaScript Renderer (Container-based Lambda)
+  # jsRenderer:  # Temporarily commented out - deploy after building container
+  #   name: snowscrape-js-renderer
+  #   image: ${env:AWS_ACCOUNT_ID}.dkr.ecr.${self:provider.region}.amazonaws.com/snowscrape-js-renderer:latest
+  #   memorySize: 2048
+  #   timeout: 120
+  #   reservedConcurrency: 5
+  #   environment:
+  #     PLAYWRIGHT_BROWSERS_PATH: /tmp/ms-playwright
+  #   maximumRetryAttempts: 0
+
 resources:
   Resources:
     JobsDynamoDbTable:
@@ -444,6 +582,96 @@ resources:
         PointInTimeRecoverySpecification:
           PointInTimeRecoveryEnabled: true
 
+    WebhooksDynamoDbTable:
+      Type: "AWS::DynamoDB::Table"
+      Properties:
+        TableName: ${self:custom.dynamoDbWebhooksTable}
+        AttributeDefinitions:
+          - AttributeName: webhook_id  # Primary key
+            AttributeType: S
+          - AttributeName: user_id  # GSI to query webhooks by user
+            AttributeType: S
+        KeySchema:
+          - AttributeName: webhook_id
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: UserIdIndex  # Index to query webhooks by user
+            KeySchema:
+              - AttributeName: user_id
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+        BillingMode: PAY_PER_REQUEST
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+
+    WebhookDeliveriesDynamoDbTable:
+      Type: "AWS::DynamoDB::Table"
+      Properties:
+        TableName: ${self:custom.dynamoDbWebhookDeliveriesTable}
+        AttributeDefinitions:
+          - AttributeName: delivery_id  # Primary key
+            AttributeType: S
+          - AttributeName: webhook_id  # GSI to query deliveries by webhook
+            AttributeType: S
+          - AttributeName: timestamp  # Sort key for webhook_id GSI
+            AttributeType: N
+        KeySchema:
+          - AttributeName: delivery_id
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: WebhookIdIndex  # Index to query deliveries by webhook
+            KeySchema:
+              - AttributeName: webhook_id
+                KeyType: HASH
+              - AttributeName: timestamp
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+        BillingMode: PAY_PER_REQUEST
+        TimeToLiveSpecification:
+          AttributeName: ttl
+          Enabled: true  # Auto-delete old delivery records after 30 days
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+
+    ProxyPoolDynamoDbTable:
+      Type: "AWS::DynamoDB::Table"
+      Properties:
+        TableName: ${self:custom.dynamoDbProxyPoolTable}
+        AttributeDefinitions:
+          - AttributeName: proxy_id  # Primary key (proxy URL)
+            AttributeType: S
+        KeySchema:
+          - AttributeName: proxy_id
+            KeyType: HASH
+        BillingMode: PAY_PER_REQUEST
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+
+    # Dead Letter Queue for failed webhooks
+    WebhookDeadLetterQueue:
+      Type: "AWS::SQS::Queue"
+      Properties:
+        QueueName: ${self:custom.sqsWebhookQueue}-DLQ
+        MessageRetentionPeriod: 1209600  # 14 days
+        VisibilityTimeout: 60
+
+    # SQS Queue for webhook delivery
+    WebhookQueue:
+      Type: "AWS::SQS::Queue"
+      Properties:
+        QueueName: ${self:custom.sqsWebhookQueue}
+        VisibilityTimeout: 60  # Matches Lambda timeout
+        MessageRetentionPeriod: 345600  # 4 days
+        ReceiveMessageWaitTimeSeconds: 20  # Long polling
+        RedrivePolicy:
+          deadLetterTargetArn:
+            Fn::GetAtt:
+              - WebhookDeadLetterQueue
+              - Arn
+          maxReceiveCount: 3  # Retry up to 3 times before sending to DLQ
+
     # Dead Letter Queue for failed jobs
     JobDeadLetterQueue:
       Type: "AWS::SQS::Queue"
@@ -511,53 +739,53 @@ resources:
         LogGroupName: /aws/lambda/${self:service}-${self:provider.stage}-createJob
         RetentionInDays: 14
 
-    # Metric Filter for Errors
-    ErrorMetricFilter:
-      Type: "AWS::Logs::MetricFilter"
-      Properties:
-        FilterPattern: '{ $.level = "ERROR" }'
-        LogGroupName: /aws/lambda/${self:service}-${self:provider.stage}-processJob
-        MetricTransformations:
-          - MetricName: JobProcessingErrors
-            MetricNamespace: ${self:service}/${self:provider.stage}
-            MetricValue: "1"
-            DefaultValue: 0
-
-    # Metric Filter for Job Completions
-    JobCompletionMetricFilter:
-      Type: "AWS::Logs::MetricFilter"
-      Properties:
-        FilterPattern: '{ $.job_event = "completed" }'
-        LogGroupName: /aws/lambda/${self:service}-${self:provider.stage}-processJob
-        MetricTransformations:
-          - MetricName: JobCompletions
-            MetricNamespace: ${self:service}/${self:provider.stage}
-            MetricValue: "1"
-            DefaultValue: 0
-
-    # Metric Filter for Job Cancellations
-    JobCancellationMetricFilter:
-      Type: "AWS::Logs::MetricFilter"
-      Properties:
-        FilterPattern: '{ $.job_event = "cancelled" }'
-        LogGroupName: /aws/lambda/${self:service}-${self:provider.stage}-processJob
-        MetricTransformations:
-          - MetricName: JobCancellations
-            MetricNamespace: ${self:service}/${self:provider.stage}
-            MetricValue: "1"
-            DefaultValue: 0
-
-    # Metric Filter for Job Timeouts
-    JobTimeoutMetricFilter:
-      Type: "AWS::Logs::MetricFilter"
-      Properties:
-        FilterPattern: '{ $.job_event = "timeout" }'
-        LogGroupName: /aws/lambda/${self:service}-${self:provider.stage}-processJob
-        MetricTransformations:
-          - MetricName: JobTimeouts
-            MetricNamespace: ${self:service}/${self:provider.stage}
-            MetricValue: "1"
-            DefaultValue: 0
+#    # Metric Filter for Errors
+#    ErrorMetricFilter:
+#      Type: "AWS::Logs::MetricFilter"
+#      Properties:
+#        FilterPattern: '{ $.level = "ERROR" }'
+#        LogGroupName: /aws/lambda/${self:service}-${self:provider.stage}-processJob
+#        MetricTransformations:
+#          - MetricName: JobProcessingErrors
+#            MetricNamespace: ${self:service}/${self:provider.stage}
+#            MetricValue: "1"
+#            DefaultValue: 0
+#
+#    # Metric Filter for Job Completions
+#    JobCompletionMetricFilter:
+#      Type: "AWS::Logs::MetricFilter"
+#      Properties:
+#        FilterPattern: '{ $.job_event = "completed" }'
+#        LogGroupName: /aws/lambda/${self:service}-${self:provider.stage}-processJob
+#        MetricTransformations:
+#          - MetricName: JobCompletions
+#            MetricNamespace: ${self:service}/${self:provider.stage}
+#            MetricValue: "1"
+#            DefaultValue: 0
+#
+#    # Metric Filter for Job Cancellations
+#    JobCancellationMetricFilter:
+#      Type: "AWS::Logs::MetricFilter"
+#      Properties:
+#        FilterPattern: '{ $.job_event = "cancelled" }'
+#        LogGroupName: /aws/lambda/${self:service}-${self:provider.stage}-processJob
+#        MetricTransformations:
+#          - MetricName: JobCancellations
+#            MetricNamespace: ${self:service}/${self:provider.stage}
+#            MetricValue: "1"
+#            DefaultValue: 0
+#
+#    # Metric Filter for Job Timeouts
+#    JobTimeoutMetricFilter:
+#      Type: "AWS::Logs::MetricFilter"
+#      Properties:
+#        FilterPattern: '{ $.job_event = "timeout" }'
+#        LogGroupName: /aws/lambda/${self:service}-${self:provider.stage}-processJob
+#        MetricTransformations:
+#          - MetricName: JobTimeouts
+#            MetricNamespace: ${self:service}/${self:provider.stage}
+#            MetricValue: "1"
+#            DefaultValue: 0
 
     # SNS Topic for Alarm Notifications
     AlarmNotificationTopic:
@@ -672,228 +900,230 @@ resources:
         ValidateRequestParameters: true
 
     # CloudWatch Dashboard for Operational Metrics
-    OperationalDashboard:
-      Type: AWS::CloudWatch::Dashboard
-      Properties:
-        DashboardName: ${self:service}-${self:provider.stage}-operations
-        DashboardBody:
-          Fn::Sub: |
-            {
-              "widgets": [
-                {
-                  "type": "metric",
-                  "x": 0,
-                  "y": 0,
-                  "width": 12,
-                  "height": 6,
-                  "properties": {
-                    "title": "Lambda Invocations",
-                    "region": "${AWS::Region}",
-                    "metrics": [
-                      ["AWS/Lambda", "Invocations", {"stat": "Sum", "label": "Total Invocations"}],
-                      [".", "Errors", {"stat": "Sum", "label": "Errors"}],
-                      [".", "Throttles", {"stat": "Sum", "label": "Throttles"}]
-                    ],
-                    "view": "timeSeries",
-                    "stacked": false,
-                    "period": 300,
-                    "yAxis": {
-                      "left": {"min": 0}
-                    }
-                  }
-                },
-                {
-                  "type": "metric",
-                  "x": 12,
-                  "y": 0,
-                  "width": 12,
-                  "height": 6,
-                  "properties": {
-                    "title": "Lambda Duration (ms)",
-                    "region": "${AWS::Region}",
-                    "metrics": [
-                      ["AWS/Lambda", "Duration", {"stat": "Average", "label": "Avg Duration"}],
-                      ["...", {"stat": "Maximum", "label": "Max Duration"}],
-                      ["...", {"stat": "p99", "label": "P99 Duration"}]
-                    ],
-                    "view": "timeSeries",
-                    "stacked": false,
-                    "period": 300,
-                    "yAxis": {
-                      "left": {"min": 0}
-                    }
-                  }
-                },
-                {
-                  "type": "metric",
-                  "x": 0,
-                  "y": 6,
-                  "width": 12,
-                  "height": 6,
-                  "properties": {
-                    "title": "API Gateway Requests",
-                    "region": "${AWS::Region}",
-                    "metrics": [
-                      ["AWS/ApiGateway", "Count", {"stat": "Sum", "label": "Total Requests"}],
-                      [".", "4XXError", {"stat": "Sum", "label": "4xx Errors"}],
-                      [".", "5XXError", {"stat": "Sum", "label": "5xx Errors"}]
-                    ],
-                    "view": "timeSeries",
-                    "stacked": false,
-                    "period": 300,
-                    "yAxis": {
-                      "left": {"min": 0}
-                    }
-                  }
-                },
-                {
-                  "type": "metric",
-                  "x": 12,
-                  "y": 6,
-                  "width": 12,
-                  "height": 6,
-                  "properties": {
-                    "title": "API Gateway Latency (ms)",
-                    "region": "${AWS::Region}",
-                    "metrics": [
-                      ["AWS/ApiGateway", "Latency", {"stat": "Average", "label": "Avg Latency"}],
-                      ["...", {"stat": "p99", "label": "P99 Latency"}],
-                      [".", "IntegrationLatency", {"stat": "Average", "label": "Integration Latency"}]
-                    ],
-                    "view": "timeSeries",
-                    "stacked": false,
-                    "period": 300,
-                    "yAxis": {
-                      "left": {"min": 0}
-                    }
-                  }
-                },
-                {
-                  "type": "metric",
-                  "x": 0,
-                  "y": 12,
-                  "width": 8,
-                  "height": 6,
-                  "properties": {
-                    "title": "SQS Queue Metrics",
-                    "region": "${AWS::Region}",
-                    "metrics": [
-                      ["AWS/SQS", "ApproximateNumberOfMessagesVisible", {"dimensions": {"QueueName": "${self:custom.sqsJobQueue}"}, "label": "Messages Visible"}],
-                      [".", "ApproximateAgeOfOldestMessage", {"dimensions": {"QueueName": "${self:custom.sqsJobQueue}"}, "label": "Oldest Message Age (s)"}],
-                      [".", "NumberOfMessagesSent", {"dimensions": {"QueueName": "${self:custom.sqsJobQueue}"}, "stat": "Sum", "label": "Messages Sent"}],
-                      [".", "NumberOfMessagesReceived", {"dimensions": {"QueueName": "${self:custom.sqsJobQueue}"}, "stat": "Sum", "label": "Messages Received"}]
-                    ],
-                    "view": "timeSeries",
-                    "stacked": false,
-                    "period": 300,
-                    "yAxis": {
-                      "left": {"min": 0}
-                    }
-                  }
-                },
-                {
-                  "type": "metric",
-                  "x": 8,
-                  "y": 12,
-                  "width": 8,
-                  "height": 6,
-                  "properties": {
-                    "title": "DLQ Messages",
-                    "region": "${AWS::Region}",
-                    "metrics": [
-                      ["AWS/SQS", "ApproximateNumberOfMessagesVisible", {"dimensions": {"QueueName": "${self:custom.sqsJobQueue}-DLQ"}, "label": "DLQ Messages"}]
-                    ],
-                    "view": "timeSeries",
-                    "stacked": false,
-                    "period": 300,
-                    "yAxis": {
-                      "left": {"min": 0}
-                    },
-                    "annotations": {
-                      "horizontal": [{
-                        "label": "Alert Threshold",
-                        "value": 1,
-                        "fill": "above",
-                        "color": "#d62728"
-                      }]
-                    }
-                  }
-                },
-                {
-                  "type": "metric",
-                  "x": 16,
-                  "y": 12,
-                  "width": 8,
-                  "height": 6,
-                  "properties": {
-                    "title": "DynamoDB Operations",
-                    "region": "${AWS::Region}",
-                    "metrics": [
-                      ["AWS/DynamoDB", "ConsumedReadCapacityUnits", {"dimensions": {"TableName": "${self:custom.dynamoDbJobsTable}"}, "stat": "Sum", "label": "Jobs Read Units"}],
-                      [".", "ConsumedWriteCapacityUnits", {"dimensions": {"TableName": "${self:custom.dynamoDbJobsTable}"}, "stat": "Sum", "label": "Jobs Write Units"}],
-                      [".", "ConsumedReadCapacityUnits", {"dimensions": {"TableName": "${self:custom.dynamoDbUrlsTable}"}, "stat": "Sum", "label": "URLs Read Units"}],
-                      [".", "ConsumedWriteCapacityUnits", {"dimensions": {"TableName": "${self:custom.dynamoDbUrlsTable}"}, "stat": "Sum", "label": "URLs Write Units"}]
-                    ],
-                    "view": "timeSeries",
-                    "stacked": false,
-                    "period": 300,
-                    "yAxis": {
-                      "left": {"min": 0}
-                    }
-                  }
-                },
-                {
-                  "type": "text",
-                  "x": 0,
-                  "y": 18,
-                  "width": 12,
-                  "height": 6,
-                  "properties": {
-                    "markdown": "## Business Metrics\n\nFor business KPIs and cross-application metrics, visit:\n\n**[Snowglobe Observatory](https://snowglobe.alexdiaz.me/observatory)**\n\nMetrics available:\n- Jobs processed & success rate\n- URLs crawled\n- Average crawl duration\n- Error rates\n- Queue depth\n\n_Updated hourly_"
-                  }
-                },
-                {
-                  "type": "metric",
-                  "x": 12,
-                  "y": 18,
-                  "width": 12,
-                  "height": 6,
-                  "properties": {
-                    "title": "Lambda Concurrent Executions",
-                    "region": "${AWS::Region}",
-                    "metrics": [
-                      ["AWS/Lambda", "ConcurrentExecutions", {"stat": "Maximum", "label": "Concurrent Executions"}]
-                    ],
-                    "view": "timeSeries",
-                    "stacked": false,
-                    "period": 300,
-                    "yAxis": {
-                      "left": {"min": 0}
-                    },
-                    "annotations": {
-                      "horizontal": [{
-                        "label": "Reserved Concurrency (processJob)",
-                        "value": 10,
-                        "fill": "above",
-                        "color": "#ff7f0e"
-                      }]
-                    }
-                  }
-                },
-                {
-                  "type": "log",
-                  "x": 0,
-                  "y": 24,
-                  "width": 24,
-                  "height": 6,
-                  "properties": {
-                    "title": "Recent Errors",
-                    "region": "${AWS::Region}",
-                    "query": "SOURCE '/aws/lambda/${self:service}-${self:provider.stage}-processJob'\n| SOURCE '/aws/lambda/${self:service}-${self:provider.stage}-createJob'\n| fields @timestamp, @message, level, job_id, error\n| filter level = \"ERROR\"\n| sort @timestamp desc\n| limit 20"
-                  }
-                }
-              ]
-            }
+#    # Commented out temporarily due to metric format validation issues
+#    # TODO: Fix CloudWatch dashboard metric format and re-enable
+#    # OperationalDashboard:
+#    #   Type: AWS::CloudWatch::Dashboard
+#    #   Properties:
+#        DashboardName: ${self:service}-${self:provider.stage}-operations
+#        DashboardBody:
+#          Fn::Sub: |
+#            {
+#              "widgets": [
+#                {
+#                  "type": "metric",
+#                  "x": 0,
+#                  "y": 0,
+#                  "width": 12,
+#                  "height": 6,
+#                  "properties": {
+#                    "title": "Lambda Invocations",
+#                    "region": "${AWS::Region}",
+#                    "metrics": [
+#                      ["AWS/Lambda", "Invocations", {"stat": "Sum", "label": "Total Invocations"}],
+#                      [".", "Errors", {"stat": "Sum", "label": "Errors"}],
+#                      [".", "Throttles", {"stat": "Sum", "label": "Throttles"}]
+#                    ],
+#                    "view": "timeSeries",
+#                    "stacked": false,
+#                    "period": 300,
+#                    "yAxis": {
+#                      "left": {"min": 0}
+#                    }
+#                  }
+#                },
+#                {
+#                  "type": "metric",
+#                  "x": 12,
+#                  "y": 0,
+#                  "width": 12,
+#                  "height": 6,
+#                  "properties": {
+#                    "title": "Lambda Duration (ms)",
+#                    "region": "${AWS::Region}",
+#                    "metrics": [
+#                      ["AWS/Lambda", "Duration", {"stat": "Average", "label": "Avg Duration"}],
+#                      ["...", {"stat": "Maximum", "label": "Max Duration"}],
+#                      ["...", {"stat": "p99", "label": "P99 Duration"}]
+#                    ],
+#                    "view": "timeSeries",
+#                    "stacked": false,
+#                    "period": 300,
+#                    "yAxis": {
+#                      "left": {"min": 0}
+#                    }
+#                  }
+#                },
+#                {
+#                  "type": "metric",
+#                  "x": 0,
+#                  "y": 6,
+#                  "width": 12,
+#                  "height": 6,
+#                  "properties": {
+#                    "title": "API Gateway Requests",
+#                    "region": "${AWS::Region}",
+#                    "metrics": [
+#                      ["AWS/ApiGateway", "Count", {"stat": "Sum", "label": "Total Requests"}],
+#                      [".", "4XXError", {"stat": "Sum", "label": "4xx Errors"}],
+#                      [".", "5XXError", {"stat": "Sum", "label": "5xx Errors"}]
+#                    ],
+#                    "view": "timeSeries",
+#                    "stacked": false,
+#                    "period": 300,
+#                    "yAxis": {
+#                      "left": {"min": 0}
+#                    }
+#                  }
+#                },
+#                {
+#                  "type": "metric",
+#                  "x": 12,
+#                  "y": 6,
+#                  "width": 12,
+#                  "height": 6,
+#                  "properties": {
+#                    "title": "API Gateway Latency (ms)",
+#                    "region": "${AWS::Region}",
+#                    "metrics": [
+#                      ["AWS/ApiGateway", "Latency", {"stat": "Average", "label": "Avg Latency"}],
+#                      ["...", {"stat": "p99", "label": "P99 Latency"}],
+#                      [".", "IntegrationLatency", {"stat": "Average", "label": "Integration Latency"}]
+#                    ],
+#                    "view": "timeSeries",
+#                    "stacked": false,
+#                    "period": 300,
+#                    "yAxis": {
+#                      "left": {"min": 0}
+#                    }
+#                  }
+#                },
+#                {
+#                  "type": "metric",
+#                  "x": 0,
+#                  "y": 12,
+#                  "width": 8,
+#                  "height": 6,
+#                  "properties": {
+#                    "title": "SQS Queue Metrics",
+#                    "region": "${AWS::Region}",
+#                    "metrics": [
+#                      ["AWS/SQS", "ApproximateNumberOfMessagesVisible", {"dimensions": {"QueueName": "${self:custom.sqsJobQueue}"}, "label": "Messages Visible"}],
+#                      [".", "ApproximateAgeOfOldestMessage", {"dimensions": {"QueueName": "${self:custom.sqsJobQueue}"}, "label": "Oldest Message Age (s)"}],
+#                      [".", "NumberOfMessagesSent", {"dimensions": {"QueueName": "${self:custom.sqsJobQueue}"}, "stat": "Sum", "label": "Messages Sent"}],
+#                      [".", "NumberOfMessagesReceived", {"dimensions": {"QueueName": "${self:custom.sqsJobQueue}"}, "stat": "Sum", "label": "Messages Received"}]
+#                    ],
+#                    "view": "timeSeries",
+#                    "stacked": false,
+#                    "period": 300,
+#                    "yAxis": {
+#                      "left": {"min": 0}
+#                    }
+#                  }
+#                },
+#                {
+#                  "type": "metric",
+#                  "x": 8,
+#                  "y": 12,
+#                  "width": 8,
+#                  "height": 6,
+#                  "properties": {
+#                    "title": "DLQ Messages",
+#                    "region": "${AWS::Region}",
+#                    "metrics": [
+#                      ["AWS/SQS", "ApproximateNumberOfMessagesVisible", {"dimensions": {"QueueName": "${self:custom.sqsJobQueue}-DLQ"}, "label": "DLQ Messages"}]
+#                    ],
+#                    "view": "timeSeries",
+#                    "stacked": false,
+#                    "period": 300,
+#                    "yAxis": {
+#                      "left": {"min": 0}
+#                    },
+#                    "annotations": {
+#                      "horizontal": [{
+#                        "label": "Alert Threshold",
+#                        "value": 1,
+#                        "fill": "above",
+#                        "color": "#d62728"
+#                      }]
+#                    }
+#                  }
+#                },
+#                {
+#                  "type": "metric",
+#                  "x": 16,
+#                  "y": 12,
+#                  "width": 8,
+#                  "height": 6,
+#                  "properties": {
+#                    "title": "DynamoDB Operations",
+#                    "region": "${AWS::Region}",
+#                    "metrics": [
+#                      ["AWS/DynamoDB", "ConsumedReadCapacityUnits", {"dimensions": {"TableName": "${self:custom.dynamoDbJobsTable}"}, "stat": "Sum", "label": "Jobs Read Units"}],
+#                      [".", "ConsumedWriteCapacityUnits", {"dimensions": {"TableName": "${self:custom.dynamoDbJobsTable}"}, "stat": "Sum", "label": "Jobs Write Units"}],
+#                      [".", "ConsumedReadCapacityUnits", {"dimensions": {"TableName": "${self:custom.dynamoDbUrlsTable}"}, "stat": "Sum", "label": "URLs Read Units"}],
+#                      [".", "ConsumedWriteCapacityUnits", {"dimensions": {"TableName": "${self:custom.dynamoDbUrlsTable}"}, "stat": "Sum", "label": "URLs Write Units"}]
+#                    ],
+#                    "view": "timeSeries",
+#                    "stacked": false,
+#                    "period": 300,
+#                    "yAxis": {
+#                      "left": {"min": 0}
+#                    }
+#                  }
+#                },
+#                {
+#                  "type": "text",
+#                  "x": 0,
+#                  "y": 18,
+#                  "width": 12,
+#                  "height": 6,
+#                  "properties": {
+#                    "markdown": "## Business Metrics\n\nFor business KPIs and cross-application metrics, visit:\n\n**[Snowglobe Observatory](https://snowglobe.alexdiaz.me/observatory)**\n\nMetrics available:\n- Jobs processed & success rate\n- URLs crawled\n- Average crawl duration\n- Error rates\n- Queue depth\n\n_Updated hourly_"
+#                  }
+#                },
+#                {
+#                  "type": "metric",
+#                  "x": 12,
+#                  "y": 18,
+#                  "width": 12,
+#                  "height": 6,
+#                  "properties": {
+#                    "title": "Lambda Concurrent Executions",
+#                    "region": "${AWS::Region}",
+#                    "metrics": [
+#                      ["AWS/Lambda", "ConcurrentExecutions", {"stat": "Maximum", "label": "Concurrent Executions"}]
+#                    ],
+#                    "view": "timeSeries",
+#                    "stacked": false,
+#                    "period": 300,
+#                    "yAxis": {
+#                      "left": {"min": 0}
+#                    },
+#                    "annotations": {
+#                      "horizontal": [{
+#                        "label": "Reserved Concurrency (processJob)",
+#                        "value": 10,
+#                        "fill": "above",
+#                        "color": "#ff7f0e"
+#                      }]
+#                    }
+#                  }
+#                },
+#                {
+#                  "type": "log",
+#                  "x": 0,
+#                  "y": 24,
+#                  "width": 24,
+#                  "height": 6,
+#                  "properties": {
+#                    "title": "Recent Errors",
+#                    "region": "${AWS::Region}",
+#                    "query": "SOURCE '/aws/lambda/${self:service}-${self:provider.stage}-processJob'\n| SOURCE '/aws/lambda/${self:service}-${self:provider.stage}-createJob'\n| fields @timestamp, @message, level, job_id, error\n| filter level = \"ERROR\"\n| sort @timestamp desc\n| limit 20"
+#                  }
+#                }
+#              ]
+#            }
 
 plugins:
   - serverless-python-requirements
@@ -901,6 +1131,9 @@ plugins:
 custom:
   pythonRequirements:
     dockerizePip: true  # Ensures proper packaging of dependencies in a Docker container
+    slim: true  # Use pre-built wheels to avoid compilation issues
+    strip: false  # Don't strip binaries (can cause issues with some packages)
+    layer: true  # Use Lambda layer to avoid package size limits
 
   # CORS configuration
   corsConfig:
@@ -929,9 +1162,14 @@ custom:
   dynamoDbSessionTable: SnowscrapeSessions
   dynamoDbUrlsTable: SnowscrapeUrls
   dynamoDbTemplatesTable: SnowscrapeTemplates
-  s3Bucket: snowscrape-results
+  dynamoDbWebhooksTable: SnowscrapeWebhooks
+  dynamoDbWebhookDeliveriesTable: SnowscrapeWebhookDeliveries
+  dynamoDbProxyPoolTable: SnowscrapeProxyPool
+  s3Bucket: snowscrape-results-${env:AWS_ACCOUNT_ID, '282128795857'}-${self:provider.region}
   sqsJobQueue: SnowscrapeJobQueue
   sqsJobQueueUrl: https://sqs.us-east-2.amazonaws.com/390844772519/SnowscrapeJobQueue
+  sqsWebhookQueue: SnowscrapeWebhookQueue
+  sqsWebhookQueueUrl: https://sqs.us-east-2.amazonaws.com/390844772519/SnowscrapeWebhookQueue
   clerkJwtPublicKey:
     dev: |
       -----BEGIN PUBLIC KEY-----

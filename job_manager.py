@@ -12,6 +12,7 @@ from logger import get_logger, log_exception
 from metrics import get_metrics_emitter
 from typing import Any, Dict
 from utils import decimal_to_float, delete_job_links, fetch_url_with_session, fetch_urls_for_job, initialize_session, parse_links_from_file, save_results_to_s3, save_session_data, update_job_status, update_url_status, validate_job_data
+from webhook_dispatcher import WebhookDispatcher
 
 # Initialize logger and metrics
 logger = get_logger(__name__)
@@ -51,6 +52,23 @@ def create_job(job_data):
 			'source': job_data['source'],
 			'status': job_data.get('status', 'ready'),  # Default job status
 			'user_id': job_data['user_id'],
+			'proxy_config': job_data.get('proxy_config', {
+				'enabled': False,
+				'geo_targeting': 'any',
+				'rotation_strategy': 'random',
+				'max_retries': 3,
+				'fallback_to_direct': True
+			}),
+			'render_config': job_data.get('render_config', {
+				'enabled': False,
+				'wait_strategy': 'networkidle',
+				'wait_timeout_ms': 30000,
+				'wait_for_selector': None,
+				'capture_screenshot': False,
+				'screenshot_full_page': False,
+				'block_resources': [],
+				'fallback_to_standard': True
+			}),
 		}
 
 		# Insert job data into DynamoDB
@@ -73,6 +91,17 @@ def create_job(job_data):
 				})
 
 		logger.info("Job created successfully", job_id=job_data['job_id'], url_count=len(links))
+
+		# Dispatch job.created webhook event
+		try:
+			WebhookDispatcher.dispatch_job_created(
+				job_id=job_data['job_id'],
+				user_id=job_data['user_id'],
+				job_data=job_item
+			)
+		except Exception as e:
+			logger.warning("Failed to dispatch job.created webhook", error=str(e))
+
 		return job_data['job_id']
 
 	except ValueError as e:
@@ -203,6 +232,10 @@ def cancel_job(job_id):
 		str: Success message, or None on error
 	"""
 	try:
+		# Get job data for webhook dispatch
+		response = job_table.get_item(Key={'job_id': job_id})
+		job_data = response.get('Item', {})
+
 		job_table.update_item(
 			Key={'job_id': job_id},
 			UpdateExpression="set #st = :s, cancelled_at = :ct",
@@ -212,6 +245,17 @@ def cancel_job(job_id):
 				':ct': datetime.now(timezone.utc).isoformat()
 			}
 		)
+
+		# Dispatch job.cancelled webhook event
+		try:
+			WebhookDispatcher.dispatch_job_cancelled(
+				job_id=job_id,
+				user_id=job_data.get('user_id'),
+				job_data=job_data
+			)
+		except Exception as webhook_error:
+			logger.warning("Failed to dispatch job.cancelled webhook", error=str(webhook_error))
+
 		print(f"Job {job_id} cancelled successfully.")
 		return f"Job {job_id} cancelled successfully."
 	except ClientError as e:
@@ -273,11 +317,24 @@ def process_job(job_data: Dict[str, Any]) -> Dict[str, Any]:
 				':status': 'processing'
 			}
 		)
+
+		# Dispatch job.started webhook event
+		try:
+			WebhookDispatcher.dispatch_job_started(
+				job_id=job_id,
+				user_id=job_data.get('user_id'),
+				job_data=job_data
+			)
+		except Exception as webhook_error:
+			logger.warning("Failed to dispatch job.started webhook", error=str(webhook_error))
+
 	except Exception as e:
 		print(f"Error updating progress: {str(e)}")
 
-	# Initialize session with random user agent, referrer, and cookie handling
-	session, session_data = initialize_session(job_id)
+	# Initialize session with random user agent, referrer, proxy, and cookie handling
+	proxy_config = job_data.get('proxy_config')
+	render_config = job_data.get('render_config')
+	session, session_data = initialize_session(job_id, proxy_config=proxy_config)
 
 	try:
 		# Process each URL
@@ -299,8 +356,8 @@ def process_job(job_data: Dict[str, Any]) -> Dict[str, Any]:
 					logger.info("Job cancellation detected", job_id=job_id)
 					return {'status': 'cancelled', 'message': 'Job was cancelled during processing'}
 
-				# Fetch URL
-				response = fetch_url_with_session(url, session, job_id)
+				# Fetch URL (with proxy if configured)
+				response = fetch_url_with_session(url, session, job_id, proxy_config=proxy_config, render_config=render_config)
 
 				if response['status'] == 'success':
 					# Process the page content
@@ -388,6 +445,18 @@ def process_job(job_data: Dict[str, Any]) -> Dict[str, Any]:
 		print(f"Error processing job {job_id}: {str(e)}")
 		# Optionally update job status as failed
 		update_job_status(job_id, 'error')
+
+		# Dispatch job.failed webhook event
+		try:
+			WebhookDispatcher.dispatch_job_failed(
+				job_id=job_id,
+				user_id=job_data.get('user_id'),
+				job_data=job_data,
+				error=str(e)
+			)
+		except Exception as webhook_error:
+			logger.warning("Failed to dispatch job.failed webhook", error=str(webhook_error))
+
 		return {'status': 'error', 'message': f"Error processing job: {str(e)}"}
 
 	# Save session data for future reuse (this can be stored in DynamoDB or another persistent store)
@@ -416,6 +485,24 @@ def process_job(job_data: Dict[str, Any]) -> Dict[str, Any]:
 				':results_s3_key': results_file_key
 			}
 		)
+
+		# Dispatch job.completed webhook event
+		try:
+			results_summary = {
+				'total_urls': total_urls,
+				'processed': processed_urls,
+				'failed': failed_urls,
+				'success_rate': (processed_urls / total_urls * 100) if total_urls > 0 else 0
+			}
+			WebhookDispatcher.dispatch_job_completed(
+				job_id=job_id,
+				user_id=job_data.get('user_id'),
+				job_data=job_data,
+				results_summary=results_summary
+			)
+		except Exception as webhook_error:
+			logger.warning("Failed to dispatch job.completed webhook", error=str(webhook_error))
+
 	except Exception as e:
 		print(f"Error updating job status for job {job_id}: {str(e)}")
 		return {'status': 'error', 'message': f"Failed to update job status: {str(e)}"}

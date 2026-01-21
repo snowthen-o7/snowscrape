@@ -3,11 +3,22 @@ import csv
 import json
 import jwt
 import os
-import pandas as pd
-import paramiko
 import random
 import re
 import requests
+
+# Optional imports - used only for specific features
+try:
+    import pandas as pd
+    PANDAS_AVAILABLE = True
+except ImportError:
+    PANDAS_AVAILABLE = False
+
+try:
+    import paramiko
+    PARAMIKO_AVAILABLE = True
+except ImportError:
+    PARAMIKO_AVAILABLE = False
 
 from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
@@ -264,30 +275,174 @@ def extract_token_from_event(event):
 	return None
 
 # Use this function for each URL request, and pass the session across requests within the job
-def fetch_url_with_session(url: str, session: Session, job_id: str) -> dict:
+def fetch_url_with_session(url: str, session: Session, job_id: str, proxy_config: dict = None, render_config: dict = None) -> dict:
 	"""
-	Fetches the URL using the provided session, handling retries and exceptions.
-	
+	Fetches the URL using the provided session with optional proxy retry logic and JS rendering.
+
 	Args:
 	- url: The URL to scrape.
 	- session: The requests.Session object.
 	- job_id: The job ID for logging or tracking.
+	- proxy_config: Optional. Proxy configuration for retry logic.
+	- render_config: Optional. JavaScript rendering configuration.
 
 	Returns:
 	- dict: Contains the status and response content or error message.
 	"""
-	try:
-		print(f"Fetching URL: {url} for job: {job_id}")
-		response = session.get(url)
-		print(response)
-		response.raise_for_status()  # Raise an exception for HTTP errors
-		
-		# Return the content and status
-		return {"status": "success", "content": response.content}
-	
-	except requests.RequestException as e:
-		print(f"Error fetching {url} for job {job_id}: {str(e)}")
-		return {"status": "error", "message": str(e)}
+	from proxy_manager import get_proxy_manager
+	import time
+	import boto3
+
+	# Check if JavaScript rendering is enabled
+	if render_config and render_config.get('enabled'):
+		try:
+			print(f"[Job {job_id}] Using JavaScript rendering for {url}")
+
+			# Get proxy URL if proxy is enabled
+			proxy_url = None
+			if proxy_config and proxy_config.get('enabled') and session.proxies:
+				proxy_url = session.proxies.get('http') or session.proxies.get('https')
+
+			# Prepare render config for Lambda
+			lambda_render_config = {
+				'wait_strategy': render_config.get('wait_strategy', 'networkidle'),
+				'wait_timeout_ms': render_config.get('wait_timeout_ms', 30000),
+				'wait_for_selector': render_config.get('wait_for_selector'),
+				'viewport': render_config.get('viewport', {'width': 1920, 'height': 1080}),
+				'capture_screenshot': render_config.get('capture_screenshot', False),
+				'screenshot_full_page': render_config.get('screenshot_full_page', False),
+				'block_resources': render_config.get('block_resources', []),
+				'user_agent': session.headers.get('User-Agent'),
+				'proxy_url': proxy_url
+			}
+
+			# Invoke JS renderer Lambda
+			lambda_client = boto3.client('lambda')
+			response = lambda_client.invoke(
+				FunctionName='snowscrape-js-renderer',
+				InvocationType='RequestResponse',
+				Payload=json.dumps({
+					'url': url,
+					'render_config': lambda_render_config
+				})
+			)
+
+			# Parse response
+			result = json.loads(response['Payload'].read())
+			body = json.loads(result.get('body', '{}'))
+
+			if body.get('status') == 'success':
+				print(f"[Job {job_id}] JavaScript rendering successful for {url}")
+				return {
+					'status': 'success',
+					'content': body['content'].encode('utf-8'),
+					'http_code': 200
+				}
+			else:
+				error_msg = body.get('error', 'Unknown rendering error')
+				print(f"[Job {job_id}] JavaScript rendering failed for {url}: {error_msg}")
+
+				# Fallback to standard request if configured
+				if render_config.get('fallback_to_standard', True):
+					print(f"[Job {job_id}] Falling back to standard request")
+				else:
+					return {'status': 'error', 'message': f"JS rendering failed: {error_msg}"}
+
+		except Exception as e:
+			print(f"[Job {job_id}] Error invoking JS renderer: {str(e)}")
+
+			# Fallback to standard request if configured
+			if not render_config.get('fallback_to_standard', True):
+				return {'status': 'error', 'message': f"JS renderer invocation failed: {str(e)}"}
+
+	# Standard request logic (or fallback from JS rendering)
+	max_retries = proxy_config.get('max_retries', 3) if proxy_config and proxy_config.get('enabled') else 1
+
+	for attempt in range(max_retries):
+		try:
+			print(f"[Job {job_id}] Fetching URL: {url} (attempt {attempt + 1}/{max_retries})")
+			response = session.get(url, timeout=30)
+
+			# Success - status code < 400
+			if response.status_code < 400:
+				print(f"[Job {job_id}] Successfully fetched {url}")
+
+				# Track proxy usage if using proxy
+				if proxy_config and proxy_config.get('enabled') and session.proxies:
+					try:
+						proxy_manager = get_proxy_manager()
+						proxy_url = session.proxies.get('http') or session.proxies.get('https')
+						content_length = len(response.content) if response.content else 0
+						proxy_manager.track_usage(proxy_url, success=True, bytes_transferred=content_length)
+					except Exception as e:
+						print(f"[Job {job_id}] Failed to track proxy usage: {str(e)}")
+
+				return {"status": "success", "content": response.content, "http_code": response.status_code}
+
+			# Proxy errors - rotate and retry
+			if response.status_code in [407, 502, 504] and attempt < max_retries - 1:
+				print(f"[Job {job_id}] Proxy error (HTTP {response.status_code}), rotating proxy...")
+
+				if proxy_config and proxy_config.get('enabled'):
+					try:
+						# Mark current proxy as failed
+						if session.proxies:
+							proxy_manager = get_proxy_manager()
+							proxy_url = session.proxies.get('http') or session.proxies.get('https')
+							proxy_manager.mark_proxy_failed(proxy_url, f"HTTP {response.status_code}")
+
+						# Get new proxy
+						proxy_manager = get_proxy_manager()
+						new_proxy = proxy_manager.get_proxy_url(proxy_config)
+
+						if new_proxy:
+							session.proxies = {'http': new_proxy, 'https': new_proxy}
+							print(f"[Job {job_id}] Rotated to new proxy")
+							time.sleep(2 ** attempt)
+							continue
+					except Exception as e:
+						print(f"[Job {job_id}] Failed to rotate proxy: {str(e)}")
+
+			# Other HTTP errors
+			return {"status": "error", "message": f"HTTP {response.status_code}", "http_code": response.status_code}
+
+		except requests.exceptions.Timeout:
+			print(f"[Job {job_id}] Request timeout for {url}")
+
+			# Mark proxy as failed
+			if proxy_config and proxy_config.get('enabled') and session.proxies:
+				try:
+					proxy_manager = get_proxy_manager()
+					proxy_url = session.proxies.get('http') or session.proxies.get('https')
+					proxy_manager.mark_proxy_failed(proxy_url, "Timeout")
+				except Exception as e:
+					print(f"[Job {job_id}] Failed to mark proxy as failed: {str(e)}")
+
+			if attempt < max_retries - 1:
+				time.sleep(2 ** attempt)
+				continue
+
+			return {"status": "error", "message": "Request timeout"}
+
+		except requests.RequestException as e:
+			print(f"[Job {job_id}] Error fetching {url}: {str(e)}")
+
+			# Mark proxy as failed
+			if proxy_config and proxy_config.get('enabled') and session.proxies:
+				try:
+					proxy_manager = get_proxy_manager()
+					proxy_url = session.proxies.get('http') or session.proxies.get('https')
+					proxy_manager.mark_proxy_failed(proxy_url, str(e))
+				except Exception:
+					pass
+
+			if attempt < max_retries - 1:
+				time.sleep(2 ** attempt)
+				continue
+
+			return {"status": "error", "message": str(e)}
+
+	return {"status": "error", "message": "Max retries exceeded"}
 
 def fetch_urls_for_job(job_id: str) -> list:
 	"""
@@ -304,25 +459,32 @@ def fetch_urls_for_job(job_id: str) -> list:
 		return []
 
 # This utility function initializes a session, rotates user agents, referrers, and manages session cookies.
-def initialize_session(job_id: str, session_data: dict = None) -> Session:
+def initialize_session(job_id: str, session_data: dict = None, proxy_config: dict = None) -> Session:
 	"""
-	Initialize a session with random user agent, referrer, and optionally use previous session data.
-	
+	Initialize a session with random user agent, referrer, proxy (optional), and session data.
+
 	Args:
 	- job_id: The job ID associated with this session.
 	- session_data: Optional. Contains user agent, referrer, and cookies from previous requests.
+	- proxy_config: Optional. Proxy configuration dict with:
+		- enabled: bool
+		- geo_targeting: str ('us', 'eu', 'as', 'any')
+		- rotation_strategy: str ('random', 'round-robin')
+		- fallback_to_direct: bool
 
 	Returns:
-	- A requests.Session object pre-configured with user agent, referrer, and cookies.
+	- A tuple (session, session_data) with configured requests.Session object
 	"""
+	from proxy_manager import get_proxy_manager
+
 	session = Session()
-	
+
 	# Rotate or reuse user agent and referrer
 	if session_data:
 		user_agent = session_data.get("user_agent")
 		referrer = session_data.get("referrer")
 		cookies = session_data.get("cookies")
-		
+
 		# If there are previous cookies, reuse them
 		if cookies:
 			session.cookies.update(cookies)
@@ -330,20 +492,42 @@ def initialize_session(job_id: str, session_data: dict = None) -> Session:
 		# Randomly select a new user agent and referrer
 		user_agent = random.choice(USER_AGENTS)
 		referrer = random.choice(REFERRERS)
-	
+
 	headers = {
 		"User-Agent": user_agent,
 		"Referer": referrer,
 	}
 	session.headers.update(headers)
-	
+
+	# Configure proxy if enabled
+	if proxy_config and proxy_config.get('enabled'):
+		try:
+			proxy_manager = get_proxy_manager()
+			proxy_url = proxy_manager.get_proxy_url(proxy_config)
+
+			if proxy_url:
+				session.proxies = {
+					'http': proxy_url,
+					'https': proxy_url
+				}
+				session.verify = True
+				print(f"[Job {job_id}] Session configured with proxy")
+			elif proxy_config.get('fallback_to_direct', True):
+				print(f"[Job {job_id}] No proxy available, using direct connection")
+			else:
+				raise Exception("No proxy available and fallback disabled")
+		except Exception as e:
+			print(f"[Job {job_id}] Error configuring proxy: {str(e)}")
+			if not proxy_config.get('fallback_to_direct', True):
+				raise
+
 	# Save session data for reuse in future calls within the same job
 	session_data = {
 		"user_agent": user_agent,
 		"referrer": referrer,
 		"cookies": session.cookies.get_dict()  # Store session cookies
 	}
-	
+
 	return session, session_data
 
 def load_from_s3(bucket_name, key):
@@ -520,7 +704,9 @@ def parse_links_from_file(file_mapping, file_url):
 		# Fetch file content from the given URL (HTTP/HTTPS or SFTP)
 		file_content = fetch_file_content(file_url)
 
-		# Step 1: Try using pandas to autodetect CSV structure and extract links
+		# Step 1: Try using pandas to autodetect CSV structure and extract links (if available)
+		if not PANDAS_AVAILABLE:
+			raise ImportError("Pandas not available, using fallback CSV parser")
 		df = pd.read_csv(StringIO(file_content), on_bad_lines="skip")  # Using StringIO to treat file content as a file-like object
 		
 		# Handle the "default" option for URL column

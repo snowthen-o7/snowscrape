@@ -1,9 +1,9 @@
 import boto3
 import json
 import os
-import paramiko
 import time
 import uuid
+# paramiko is imported lazily in validate_sftp_url_handler when needed
 
 from connection_pool import get_table, get_s3_client, get_sqs_client
 from crawl_manager import get_crawl
@@ -14,6 +14,8 @@ from metrics import get_metrics_emitter
 from observatory_client import get_observatory_client
 from urllib.parse import urlparse
 from utils import decimal_to_float, detect_csv_settings, extract_token_from_event, parse_links_from_file, refresh_job_urls, validate_clerk_token, validate_job_data
+from webhook_dispatcher import WebhookDispatcher
+from proxy_manager import get_proxy_manager
 
 # Initialize logger, metrics, and observatory
 logger = get_logger(__name__)
@@ -23,6 +25,8 @@ observatory = get_observatory_client()
 # Use connection pool for AWS services
 job_table = get_table(os.environ['DYNAMODB_JOBS_TABLE'])
 template_table = get_table(os.environ['DYNAMODB_TEMPLATES_TABLE'])
+webhook_table = get_table(os.environ['DYNAMODB_WEBHOOKS_TABLE'])
+webhook_deliveries_table = get_table(os.environ['DYNAMODB_WEBHOOK_DELIVERIES_TABLE'])
 s3 = get_s3_client()
 sqs = get_sqs_client()
 
@@ -942,6 +946,9 @@ def update_job_handler(event, context):
 	}
 
 def validate_sftp_url_handler(event, context):
+	# Lazy import paramiko only when needed for SFTP validation
+	import paramiko
+
 	# Extract URL from the request body
 	body = json.loads(event.get('body', '{}'))
 	sftp_url = body.get('sftp_url')
@@ -1034,7 +1041,7 @@ def validate_sftp_url_handler(event, context):
 def download_results_handler(event, context):
 	"""
 	Generate a pre-signed S3 URL for downloading job results.
-	Supports both JSON and CSV formats.
+	Supports multiple formats: JSON, CSV, XLSX, Parquet, SQL.
 	"""
 	start_time = time.time()
 	log_lambda_invocation(event, context, logger)
@@ -1070,28 +1077,32 @@ def download_results_handler(event, context):
 		# Get job ID from path
 		job_id = event['pathParameters']['job_id']
 
-		# Get format from query parameters (default to json)
+		# Get query parameters
 		query_params = event.get('queryStringParameters') or {}
 		file_format = query_params.get('format', 'json').lower()
+		flatten = query_params.get('flatten', 'false').lower() == 'true'
+		sql_table_name = query_params.get('sql_table_name', 'scraped_data')
 
-		if file_format not in ['json', 'csv']:
+		# Validate format
+		valid_formats = ['json', 'csv', 'xlsx', 'parquet', 'sql']
+		if file_format not in valid_formats:
 			return {
 				"statusCode": 400,
-				"body": json.dumps({"message": "Invalid format. Use 'json' or 'csv'"}),
+				"body": json.dumps({
+					"message": f"Invalid format. Supported formats: {', '.join(valid_formats)}"
+				}),
 				"headers": {
 					'Access-Control-Allow-Origin': '*',
 					"Content-Type": "application/json"
 				}
 			}
 
-		# Construct S3 key
-		s3_key = f'jobs/{job_id}/result.json'
-
-		# Check if file exists
+		# Check if original JSON results exist
+		original_s3_key = f'jobs/{job_id}/result.json'
 		try:
-			s3.head_object(Bucket=os.environ['S3_BUCKET'], Key=s3_key)
+			s3.head_object(Bucket=os.environ['S3_BUCKET'], Key=original_s3_key)
 		except Exception:
-			logger.warning("Results file not found", job_id=job_id, s3_key=s3_key)
+			logger.warning("Results file not found", job_id=job_id, s3_key=original_s3_key)
 			return {
 				"statusCode": 404,
 				"body": json.dumps({"message": "Results not found for this job"}),
@@ -1101,26 +1112,84 @@ def download_results_handler(event, context):
 				}
 			}
 
+		# Determine the S3 key for the requested format
+		if file_format == 'json':
+			# For JSON, use the original file
+			result_s3_key = original_s3_key
+		else:
+			# For other formats, construct converted file key
+			result_s3_key = f'jobs/{job_id}/result.{file_format}'
+
+			# Check if converted file already exists
+			try:
+				s3.head_object(Bucket=os.environ['S3_BUCKET'], Key=result_s3_key)
+				logger.info("Using cached converted file", job_id=job_id, format=file_format)
+			except:
+				# File doesn't exist, need to convert
+				logger.info("Converting results to format", job_id=job_id, format=file_format)
+
+				# Load original JSON results
+				response = s3.get_object(Bucket=os.environ['S3_BUCKET'], Key=original_s3_key)
+				results_data = json.loads(response['Body'].read().decode('utf-8'))
+
+				# Import FormatConverter
+				from format_converter import FormatConverter
+
+				# Create converter and convert
+				converter = FormatConverter(job_id, results_data, os.environ['S3_BUCKET'])
+				converter.prepare_dataframe(flatten=flatten)
+
+				try:
+					if file_format == 'csv':
+						converter.convert_to_csv(result_s3_key)
+					elif file_format == 'xlsx':
+						converter.convert_to_xlsx(result_s3_key)
+					elif file_format == 'parquet':
+						converter.convert_to_parquet(result_s3_key)
+					elif file_format == 'sql':
+						converter.convert_to_sql(result_s3_key, sql_table_name)
+
+					logger.info("Format conversion successful", job_id=job_id, format=file_format)
+				except Exception as conv_error:
+					logger.error("Format conversion failed", job_id=job_id, format=file_format, error=str(conv_error))
+					return {
+						"statusCode": 500,
+						"body": json.dumps({"message": f"Failed to convert to {file_format}: {str(conv_error)}"}),
+						"headers": {
+							'Access-Control-Allow-Origin': '*',
+							"Content-Type": "application/json"
+						}
+					}
+
 		# Generate pre-signed URL (valid for 1 hour)
 		presigned_url = s3.generate_presigned_url(
 			'get_object',
 			Params={
 				'Bucket': os.environ['S3_BUCKET'],
-				'Key': s3_key,
+				'Key': result_s3_key,
 				'ResponseContentDisposition': f'attachment; filename="job_{job_id}_results.{file_format}"'
 			},
 			ExpiresIn=3600  # 1 hour
 		)
 
+		# Get file size
+		try:
+			file_info = s3.head_object(Bucket=os.environ['S3_BUCKET'], Key=result_s3_key)
+			file_size = file_info.get('ContentLength', 0)
+		except:
+			file_size = 0
+
 		duration_ms = (time.time() - start_time) * 1000
-		logger.info("Download URL generated", job_id=job_id, format=file_format, duration_ms=duration_ms)
+		logger.info("Download URL generated", job_id=job_id, format=file_format,
+		           duration_ms=duration_ms, file_size=file_size)
 
 		return {
 			"statusCode": 200,
 			"body": json.dumps({
 				"download_url": presigned_url,
 				"expires_in": 3600,
-				"format": file_format
+				"format": file_format,
+				"file_size_bytes": file_size
 			}),
 			"headers": {
 				'Access-Control-Allow-Origin': '*',
@@ -1760,6 +1829,532 @@ def cleanup_old_results_handler(event, context):
 		return {
 			"statusCode": 500,
 			"body": json.dumps({"message": "Failed to run cleanup", "error": str(e)})
+		}
+	finally:
+		logger.clear_context()
+
+
+# ============================================
+# WEBHOOK MANAGEMENT HANDLERS
+# ============================================
+
+def create_webhook_handler(event, context):
+	"""
+	Create a new webhook for the authenticated user.
+	"""
+	log_lambda_invocation(event, context, logger)
+
+	try:
+		# Extract and validate token
+		token = extract_token_from_event(event)
+		user_id = validate_clerk_token(token)
+
+		if not user_id:
+			return {
+				"statusCode": 401,
+				"body": json.dumps({"message": "Unauthorized"}),
+				"headers": {"Content-Type": "application/json"}
+			}
+
+		# Parse request body
+		body = json.loads(event.get('body', '{}'))
+
+		webhook_url = body.get('url')
+		events = body.get('events', [])
+		job_id = body.get('job_id')  # Optional: webhook for specific job only
+
+		# Validation
+		if not webhook_url:
+			return {
+				"statusCode": 400,
+				"body": json.dumps({"message": "Webhook URL is required"}),
+				"headers": {"Content-Type": "application/json"}
+			}
+
+		if not events or not isinstance(events, list):
+			return {
+				"statusCode": 400,
+				"body": json.dumps({"message": "Events array is required"}),
+				"headers": {"Content-Type": "application/json"}
+			}
+
+		# Validate event types
+		valid_events = ['job.created', 'job.started', 'job.completed', 'job.failed', 'job.cancelled']
+		for event_type in events:
+			if event_type not in valid_events:
+				return {
+					"statusCode": 400,
+					"body": json.dumps({
+						"message": f"Invalid event type: {event_type}",
+						"valid_events": valid_events
+					}),
+					"headers": {"Content-Type": "application/json"}
+				}
+
+		# Generate webhook ID and secret
+		webhook_id = str(uuid.uuid4())
+		webhook_secret = str(uuid.uuid4())  # Unique secret for HMAC signatures
+
+		# Create webhook item
+		webhook_item = {
+			'webhook_id': webhook_id,
+			'user_id': user_id,
+			'url': webhook_url,
+			'events': events,
+			'secret': webhook_secret,
+			'active': True,
+			'created_at': datetime.now(timezone.utc).isoformat(),
+			'total_deliveries': 0,
+			'failed_deliveries': 0
+		}
+
+		# Add job_id if specified
+		if job_id:
+			webhook_item['job_id'] = job_id
+
+		# Save to DynamoDB
+		webhook_table.put_item(Item=webhook_item)
+
+		logger.info("Webhook created", webhook_id=webhook_id, user_id=user_id, events=events)
+
+		return {
+			"statusCode": 201,
+			"body": json.dumps({
+				"message": "Webhook created successfully",
+				"webhook": {
+					'webhook_id': webhook_id,
+					'url': webhook_url,
+					'events': events,
+					'secret': webhook_secret,
+					'active': True,
+					'created_at': webhook_item['created_at']
+				}
+			}),
+			"headers": {"Content-Type": "application/json"}
+		}
+
+	except Exception as e:
+		log_exception(logger, "Failed to create webhook", e)
+		return {
+			"statusCode": 500,
+			"body": json.dumps({"message": "Failed to create webhook", "error": str(e)}),
+			"headers": {"Content-Type": "application/json"}
+		}
+	finally:
+		logger.clear_context()
+
+
+def list_webhooks_handler(event, context):
+	"""
+	List all webhooks for the authenticated user.
+	"""
+	log_lambda_invocation(event, context, logger)
+
+	try:
+		# Extract and validate token
+		token = extract_token_from_event(event)
+		user_id = validate_clerk_token(token)
+
+		if not user_id:
+			return {
+				"statusCode": 401,
+				"body": json.dumps({"message": "Unauthorized"}),
+				"headers": {"Content-Type": "application/json"}
+			}
+
+		# Query webhooks by user_id (using GSI)
+		response = webhook_table.query(
+			IndexName='UserIdIndex',
+			KeyConditionExpression='user_id = :user_id',
+			ExpressionAttributeValues={':user_id': user_id}
+		)
+
+		webhooks = response.get('Items', [])
+
+		# Convert to JSON-serializable format
+		webhooks_list = []
+		for webhook in webhooks:
+			webhook_data = {
+				'webhook_id': webhook['webhook_id'],
+				'url': webhook['url'],
+				'events': webhook['events'],
+				'active': webhook.get('active', True),
+				'created_at': webhook['created_at'],
+				'total_deliveries': webhook.get('total_deliveries', 0),
+				'failed_deliveries': webhook.get('failed_deliveries', 0),
+				'job_id': webhook.get('job_id')
+			}
+			webhooks_list.append(webhook_data)
+
+		logger.info("Listed webhooks", user_id=user_id, count=len(webhooks_list))
+
+		return {
+			"statusCode": 200,
+			"body": json.dumps(webhooks_list),
+			"headers": {"Content-Type": "application/json"}
+		}
+
+	except Exception as e:
+		log_exception(logger, "Failed to list webhooks", e)
+		return {
+			"statusCode": 500,
+			"body": json.dumps({"message": "Failed to list webhooks", "error": str(e)}),
+			"headers": {"Content-Type": "application/json"}
+		}
+	finally:
+		logger.clear_context()
+
+
+def delete_webhook_handler(event, context):
+	"""
+	Delete a webhook by ID (soft delete by setting active=false).
+	"""
+	log_lambda_invocation(event, context, logger)
+
+	try:
+		# Extract and validate token
+		token = extract_token_from_event(event)
+		user_id = validate_clerk_token(token)
+
+		if not user_id:
+			return {
+				"statusCode": 401,
+				"body": json.dumps({"message": "Unauthorized"}),
+				"headers": {"Content-Type": "application/json"}
+			}
+
+		# Get webhook_id from path parameters
+		webhook_id = event.get('pathParameters', {}).get('webhook_id')
+
+		if not webhook_id:
+			return {
+				"statusCode": 400,
+				"body": json.dumps({"message": "Webhook ID is required"}),
+				"headers": {"Content-Type": "application/json"}
+			}
+
+		# Get webhook to verify ownership
+		response = webhook_table.get_item(Key={'webhook_id': webhook_id})
+		webhook = response.get('Item')
+
+		if not webhook:
+			return {
+				"statusCode": 404,
+				"body": json.dumps({"message": "Webhook not found"}),
+				"headers": {"Content-Type": "application/json"}
+			}
+
+		# Verify ownership
+		if webhook.get('user_id') != user_id:
+			return {
+				"statusCode": 403,
+				"body": json.dumps({"message": "Access denied"}),
+				"headers": {"Content-Type": "application/json"}
+			}
+
+		# Soft delete: set active=false
+		webhook_table.update_item(
+			Key={'webhook_id': webhook_id},
+			UpdateExpression='SET active = :false',
+			ExpressionAttributeValues={':false': False}
+		)
+
+		logger.info("Webhook deleted", webhook_id=webhook_id, user_id=user_id)
+
+		return {
+			"statusCode": 200,
+			"body": json.dumps({"message": "Webhook deleted successfully"}),
+			"headers": {"Content-Type": "application/json"}
+		}
+
+	except Exception as e:
+		log_exception(logger, "Failed to delete webhook", e)
+		return {
+			"statusCode": 500,
+			"body": json.dumps({"message": "Failed to delete webhook", "error": str(e)}),
+			"headers": {"Content-Type": "application/json"}
+		}
+	finally:
+		logger.clear_context()
+
+
+def test_webhook_handler(event, context):
+	"""
+	Send a test event to a webhook.
+	"""
+	log_lambda_invocation(event, context, logger)
+
+	try:
+		# Extract and validate token
+		token = extract_token_from_event(event)
+		user_id = validate_clerk_token(token)
+
+		if not user_id:
+			return {
+				"statusCode": 401,
+				"body": json.dumps({"message": "Unauthorized"}),
+				"headers": {"Content-Type": "application/json"}
+			}
+
+		# Get webhook_id from path parameters
+		webhook_id = event.get('pathParameters', {}).get('webhook_id')
+
+		if not webhook_id:
+			return {
+				"statusCode": 400,
+				"body": json.dumps({"message": "Webhook ID is required"}),
+				"headers": {"Content-Type": "application/json"}
+			}
+
+		# Get webhook to verify ownership
+		response = webhook_table.get_item(Key={'webhook_id': webhook_id})
+		webhook = response.get('Item')
+
+		if not webhook:
+			return {
+				"statusCode": 404,
+				"body": json.dumps({"message": "Webhook not found"}),
+				"headers": {"Content-Type": "application/json"}
+			}
+
+		# Verify ownership
+		if webhook.get('user_id') != user_id:
+			return {
+				"statusCode": 403,
+				"body": json.dumps({"message": "Access denied"}),
+				"headers": {"Content-Type": "application/json"}
+			}
+
+		# Create test payload
+		test_payload = {
+			'event': 'webhook.test',
+			'webhook_id': webhook_id,
+			'timestamp': datetime.now(timezone.utc).isoformat(),
+			'message': 'This is a test webhook event from SnowScrape'
+		}
+
+		# Dispatch test event
+		WebhookDispatcher.dispatch_event(
+			event_type='webhook.test',
+			job_id='test',
+			user_id=user_id,
+			payload=test_payload
+		)
+
+		logger.info("Test webhook dispatched", webhook_id=webhook_id, user_id=user_id)
+
+		return {
+			"statusCode": 200,
+			"body": json.dumps({
+				"message": "Test webhook sent successfully",
+				"payload": test_payload
+			}),
+			"headers": {"Content-Type": "application/json"}
+		}
+
+	except Exception as e:
+		log_exception(logger, "Failed to test webhook", e)
+		return {
+			"statusCode": 500,
+			"body": json.dumps({"message": "Failed to test webhook", "error": str(e)}),
+			"headers": {"Content-Type": "application/json"}
+		}
+	finally:
+		logger.clear_context()
+
+
+# ============================================
+# PROXY HEALTH CHECKER
+# ============================================
+
+def proxy_health_checker_handler(event, context):
+	"""
+	Scheduled function to check health of all proxies every 5 minutes.
+	Tests each proxy and updates status in Secrets Manager.
+	"""
+	log_lambda_invocation(event, context, logger)
+
+	try:
+		import requests
+		proxy_manager = get_proxy_manager()
+
+		# Get all proxies from pool
+		proxies = proxy_manager.get_proxy_pool()
+
+		if not proxies:
+			logger.warning("No proxies in pool to health check")
+			return {
+				"statusCode": 200,
+				"body": json.dumps({"message": "No proxies to check", "proxies_checked": 0})
+			}
+
+		healthy_count = 0
+		unhealthy_count = 0
+		results = []
+
+		for proxy in proxies:
+			proxy_url = proxy['url']
+			proxy_id = proxy_manager._get_proxy_id(proxy_url)
+
+			try:
+				# Test proxy by fetching a test URL
+				response = requests.get(
+					'https://ipinfo.io/json',
+					proxies={'http': proxy_url, 'https': proxy_url},
+					timeout=10
+				)
+
+				if response.status_code == 200:
+					proxy['status'] = 'healthy'
+					healthy_count += 1
+
+					# Log successful check
+					logger.info(
+						"Proxy health check passed",
+						proxy_id=proxy_id,
+						region=proxy.get('region')
+					)
+
+					# Reset failure counter in DynamoDB
+					proxy_manager.proxy_table.update_item(
+						Key={'proxy_id': proxy_id},
+						UpdateExpression='SET consecutive_failures = :zero',
+						ExpressionAttributeValues={':zero': 0}
+					)
+
+					results.append({
+						'proxy_id': proxy_id,
+						'status': 'healthy',
+						'http_code': response.status_code
+					})
+				else:
+					proxy['status'] = 'unhealthy'
+					unhealthy_count += 1
+
+					logger.warning(
+						"Proxy health check failed",
+						proxy_id=proxy_id,
+						http_code=response.status_code
+					)
+
+					proxy_manager.mark_proxy_failed(
+						proxy_url,
+						f"HTTP {response.status_code}"
+					)
+
+					results.append({
+						'proxy_id': proxy_id,
+						'status': 'unhealthy',
+						'http_code': response.status_code,
+						'error': f"HTTP {response.status_code}"
+					})
+
+			except requests.exceptions.Timeout:
+				proxy['status'] = 'unhealthy'
+				unhealthy_count += 1
+
+				logger.warning("Proxy health check timeout", proxy_id=proxy_id)
+				proxy_manager.mark_proxy_failed(proxy_url, "Timeout")
+
+				results.append({
+					'proxy_id': proxy_id,
+					'status': 'unhealthy',
+					'error': 'Timeout'
+				})
+
+			except Exception as e:
+				proxy['status'] = 'unhealthy'
+				unhealthy_count += 1
+
+				logger.error(
+					"Proxy health check error",
+					proxy_id=proxy_id,
+					error=str(e)
+				)
+
+				proxy_manager.mark_proxy_failed(proxy_url, str(e))
+
+				results.append({
+					'proxy_id': proxy_id,
+					'status': 'unhealthy',
+					'error': str(e)
+				})
+
+		# Update Secrets Manager with new proxy statuses
+		try:
+			secrets_client = boto3.client('secretsmanager')
+
+			# Get current secret value
+			secret = secrets_client.get_secret_value(SecretId='snowscrape/proxy-pool')
+			secret_data = json.loads(secret['SecretString'])
+
+			# Update proxy statuses
+			secret_data['proxies'] = proxies
+
+			# Update secret
+			secrets_client.update_secret(
+				SecretId='snowscrape/proxy-pool',
+				SecretString=json.dumps(secret_data)
+			)
+
+			logger.info(
+				"Updated proxy statuses in Secrets Manager",
+				healthy=healthy_count,
+				unhealthy=unhealthy_count
+			)
+
+		except Exception as e:
+			logger.error("Failed to update Secrets Manager", error=str(e))
+
+		# Emit CloudWatch metrics
+		try:
+			cloudwatch = boto3.client('cloudwatch')
+			cloudwatch.put_metric_data(
+				Namespace='SnowScrape/Proxies',
+				MetricData=[
+					{
+						'MetricName': 'HealthyProxies',
+						'Value': healthy_count,
+						'Unit': 'Count'
+					},
+					{
+						'MetricName': 'UnhealthyProxies',
+						'Value': unhealthy_count,
+						'Unit': 'Count'
+					},
+					{
+						'MetricName': 'TotalProxies',
+						'Value': len(proxies),
+						'Unit': 'Count'
+					}
+				]
+			)
+		except Exception as e:
+			logger.warning("Failed to emit CloudWatch metrics", error=str(e))
+
+		logger.info(
+			"Proxy health check completed",
+			total=len(proxies),
+			healthy=healthy_count,
+			unhealthy=unhealthy_count
+		)
+
+		return {
+			"statusCode": 200,
+			"body": json.dumps({
+				"message": "Health check completed",
+				"total_proxies": len(proxies),
+				"healthy": healthy_count,
+				"unhealthy": unhealthy_count,
+				"results": results
+			})
+		}
+
+	except Exception as e:
+		log_exception(logger, "Failed to run proxy health check", e)
+		return {
+			"statusCode": 500,
+			"body": json.dumps({"message": "Failed to run health check", "error": str(e)})
 		}
 	finally:
 		logger.clear_context()
