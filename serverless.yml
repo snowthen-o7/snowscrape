@@ -50,7 +50,7 @@ provider:
     SQS_WEBHOOK_QUEUE_URL: ${self:custom.sqsWebhookQueueUrl}
     # Observatory integration for centralized monitoring
     SNOWGLOBE_URL: ${self:custom.snowglobeUrl}
-    SNOWGLOBE_API_KEY: ${env:SNOWGLOBE_API_KEY}  # Set via environment variable
+    SNOWGLOBE_API_KEY: ${env:SNOWGLOBE_API_KEY, ''}  # Set via environment variable (optional)
     SNOWGLOBE_SITE_ID: ${self:custom.snowglobeSiteId}
   iamRoleStatements:
     - Effect: "Allow"
@@ -1151,6 +1151,7 @@ custom:
   # Alarm email notification configuration
   alarmEmail:
     dev: 'dev-alerts@example.com'  # Replace with your dev team email
+    staging: 'dev-alerts@example.com'  # Same as dev for staging
     prod: 'ops-alerts@example.com'  # Replace with your ops team email
 
   # Observatory integration configuration
@@ -1167,11 +1168,21 @@ custom:
   dynamoDbProxyPoolTable: SnowscrapeProxyPool
   s3Bucket: snowscrape-results-${env:AWS_ACCOUNT_ID, '282128795857'}-${self:provider.region}
   sqsJobQueue: SnowscrapeJobQueue
-  sqsJobQueueUrl: https://sqs.us-east-2.amazonaws.com/390844772519/SnowscrapeJobQueue
+  sqsJobQueueUrl: https://sqs.us-east-2.amazonaws.com/282128795857/SnowscrapeJobQueue
   sqsWebhookQueue: SnowscrapeWebhookQueue
-  sqsWebhookQueueUrl: https://sqs.us-east-2.amazonaws.com/390844772519/SnowscrapeWebhookQueue
+  sqsWebhookQueueUrl: https://sqs.us-east-2.amazonaws.com/282128795857/SnowscrapeWebhookQueue
   clerkJwtPublicKey:
     dev: |
+      -----BEGIN PUBLIC KEY-----
+      MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAoZVvkucSn5kVAbJNzz0O
+      9ylvrQA6svwe3K4WitLygsQIqbyjz5hUVAMj668n8xft/JTKkxOCorbpj0Y90lN+
+      Z6Ge7k9gqMgTOJw8WE6w/j5RcTzLw3Fd81OU3T6D2SF6/51uNsvP3F4KieAJoImH
+      Vg2fUHjNFuRwh7TyB5X5f1q3nk6uVqSUOGbf6P0uvoYXI9n8EppTgn5/LbV0K9kF
+      jo2x0vyRmSun/klUoNCuBAPAbrG0bqwADvzvhPsHdXz61jxnBaLO+yD3kXEBzety
+      7XTZhm8r8oaAmfup+3aIt7BCiAXRWQ5UfPNZ+tv+93HOqsOJfI96q6z9vgF+7QOr
+      xQIDAQAB
+      -----END PUBLIC KEY-----
+    staging: |
       -----BEGIN PUBLIC KEY-----
       MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAoZVvkucSn5kVAbJNzz0O
       9ylvrQA6svwe3K4WitLygsQIqbyjz5hUVAMj668n8xft/JTKkxOCorbpj0Y90lN+
@@ -1184,5 +1195,7 @@ custom:
     prod: "your-clerk-public-key-for-prod"
   clerkJwtSecretKey:
     dev: |
+      sk_test_xFXzGKYU7lhtFBel98iewFsgkNwwyCgWAARdRaU5dA
+    staging: |
       sk_test_xFXzGKYU7lhtFBel98iewFsgkNwwyCgWAARdRaU5dA
     prod: "your-clerk-secret-key-for-prod"
