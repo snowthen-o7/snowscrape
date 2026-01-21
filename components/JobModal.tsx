@@ -11,7 +11,7 @@ import { Switch } from "@/components/ui/switch"
 
 import { X, Loader2, Plus, Trash2, Save, FolderOpen } from 'lucide-react'
 import { SessionResource } from '@clerk/types';
-import { FormData, FileMapping, Job, Query, Scheduling, Template } from '@/lib/types';
+import { FormData, FileMapping, Job, Query, Scheduling, Template, ProxyConfig, RenderConfig, ExportConfig, NotificationConfig } from '@/lib/types';
 import { validateQueries, validateHTTP, validateSFTP } from '@/lib/utils';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -28,7 +28,42 @@ export function JobModal({ closeModal, jobDetails, session }: {
     source: '',
     file_mapping: { delimiter: ',', enclosure: '', escape: '', url_column: '' } as FileMapping,
     scheduling: { days: [], hours: [], minutes: [] } as Scheduling, // Array for selected days and hours
-    queries: [{ name: '', type: 'xpath', query: '', join: false }] as Query[] // Explicitly type the queries as an array of Query
+    queries: [{ name: '', type: 'xpath', query: '', join: false }] as Query[], // Explicitly type the queries as an array of Query
+    proxy_config: {
+      enabled: false,
+      geo_targeting: 'any',
+      rotation_strategy: 'random',
+      max_retries: 3,
+      fallback_to_direct: true
+    } as ProxyConfig,
+    render_config: {
+      enabled: false,
+      wait_strategy: 'networkidle',
+      wait_timeout_ms: 30000,
+      wait_for_selector: null,
+      capture_screenshot: false,
+      screenshot_full_page: false,
+      block_resources: [],
+      fallback_to_standard: true
+    } as RenderConfig,
+    export_config: {
+      enabled: false,
+      formats: ['json'],
+      destination: 's3',
+      s3_bucket: null,
+      webhook_url: null,
+      include_screenshots: false,
+      compress: false
+    } as ExportConfig,
+    notification_config: {
+      enabled: false,
+      email_on_success: false,
+      email_on_failure: true,
+      email_addresses: [],
+      webhook_on_success: false,
+      webhook_on_failure: true,
+      webhook_url: null
+    } as NotificationConfig
   });
 
   const [sourceError, setSourceError] = useState<string | null>(null);
@@ -67,7 +102,42 @@ export function JobModal({ closeModal, jobDetails, session }: {
         queries: jobDetails.queries.map(query => ({
           ...query,
           join: !!query.join, // Convert join to a boolean value
-        }))
+        })),
+        proxy_config: jobDetails.proxy_config || {
+          enabled: false,
+          geo_targeting: 'any',
+          rotation_strategy: 'random',
+          max_retries: 3,
+          fallback_to_direct: true
+        },
+        render_config: jobDetails.render_config || {
+          enabled: false,
+          wait_strategy: 'networkidle',
+          wait_timeout_ms: 30000,
+          wait_for_selector: null,
+          capture_screenshot: false,
+          screenshot_full_page: false,
+          block_resources: [],
+          fallback_to_standard: true
+        },
+        export_config: jobDetails.export_config || {
+          enabled: false,
+          formats: ['json'],
+          destination: 's3',
+          s3_bucket: null,
+          webhook_url: null,
+          include_screenshots: false,
+          compress: false
+        },
+        notification_config: jobDetails.notification_config || {
+          enabled: false,
+          email_on_success: false,
+          email_on_failure: true,
+          email_addresses: [],
+          webhook_on_success: false,
+          webhook_on_failure: true,
+          webhook_url: null
+        }
       });
 
       // Set headers if available
@@ -329,6 +399,7 @@ export function JobModal({ closeModal, jobDetails, session }: {
   const minutes = Array.from({ length: 12 }, (_, i) => i * 5); // Multiples of 5 minutes
 
   return (
+    <>
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
       <div className="bg-gray-800 text-white rounded-lg shadow-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto">
         <div className="p-6 space-y-6">
@@ -586,6 +657,633 @@ export function JobModal({ closeModal, jobDetails, session }: {
                   <Plus className="h-4 w-4 mr-2" />
                   Add Query
                 </Button>
+              )}
+            </div>
+
+            {/* Proxy Configuration */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xl font-semibold">Proxy Configuration</h3>
+                <Switch
+                  checked={formData.proxy_config?.enabled || false}
+                  onCheckedChange={(checked) =>
+                    setFormData({
+                      ...formData,
+                      proxy_config: { ...formData.proxy_config!, enabled: checked }
+                    })
+                  }
+                />
+              </div>
+
+              {formData.proxy_config?.enabled && (
+                <div className="p-4 bg-gray-700 rounded-lg space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="geoTargeting">Geo-Targeting</Label>
+                      <Select
+                        value={formData.proxy_config?.geo_targeting || 'any'}
+                        onValueChange={(value) =>
+                          setFormData({
+                            ...formData,
+                            proxy_config: {
+                              ...formData.proxy_config!,
+                              geo_targeting: value as 'us' | 'eu' | 'as' | 'any'
+                            }
+                          })
+                        }
+                      >
+                        <SelectTrigger id="geoTargeting">
+                          <SelectValue placeholder="Select region" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="any">Any Region</SelectItem>
+                          <SelectItem value="us">United States</SelectItem>
+                          <SelectItem value="eu">Europe</SelectItem>
+                          <SelectItem value="as">Asia</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-gray-400 mt-1">
+                        Target specific geographic regions for your proxies
+                      </p>
+                    </div>
+
+                    <div>
+                      <Label htmlFor="rotationStrategy">Rotation Strategy</Label>
+                      <Select
+                        value={formData.proxy_config?.rotation_strategy || 'random'}
+                        onValueChange={(value) =>
+                          setFormData({
+                            ...formData,
+                            proxy_config: {
+                              ...formData.proxy_config!,
+                              rotation_strategy: value as 'random' | 'round-robin'
+                            }
+                          })
+                        }
+                      >
+                        <SelectTrigger id="rotationStrategy">
+                          <SelectValue placeholder="Select strategy" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="random">Random</SelectItem>
+                          <SelectItem value="round-robin">Round Robin</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-gray-400 mt-1">
+                        How proxies are selected for each request
+                      </p>
+                    </div>
+
+                    <div>
+                      <Label htmlFor="maxRetries">Max Retries</Label>
+                      <Input
+                        id="maxRetries"
+                        type="number"
+                        min={1}
+                        max={10}
+                        value={formData.proxy_config?.max_retries || 3}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            proxy_config: {
+                              ...formData.proxy_config!,
+                              max_retries: parseInt(e.target.value)
+                            }
+                          })
+                        }
+                      />
+                      <p className="text-xs text-gray-400 mt-1">
+                        Number of retry attempts on proxy failure
+                      </p>
+                    </div>
+
+                    <div className="flex items-center space-x-2">
+                      <Switch
+                        id="fallbackToDirect"
+                        checked={formData.proxy_config?.fallback_to_direct !== false}
+                        onCheckedChange={(checked) =>
+                          setFormData({
+                            ...formData,
+                            proxy_config: {
+                              ...formData.proxy_config!,
+                              fallback_to_direct: checked
+                            }
+                          })
+                        }
+                      />
+                      <Label htmlFor="fallbackToDirect" className="text-sm">
+                        Fallback to direct connection if no proxy available
+                      </Label>
+                    </div>
+                  </div>
+
+                  <div className="bg-blue-900 bg-opacity-20 border border-blue-500 rounded p-3 text-sm">
+                    <p className="text-blue-300 font-medium mb-1">Proxy Pool Information</p>
+                    <p className="text-gray-300">
+                      Using AWS-based proxy pool with servers in multiple regions.
+                      Proxies are automatically health-checked every 5 minutes.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* JavaScript Rendering Configuration */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xl font-semibold">JavaScript Rendering</h3>
+                <Switch
+                  checked={formData.render_config?.enabled || false}
+                  onCheckedChange={(checked) =>
+                    setFormData({
+                      ...formData,
+                      render_config: { ...formData.render_config!, enabled: checked }
+                    })
+                  }
+                />
+              </div>
+
+              {formData.render_config?.enabled && (
+                <div className="p-4 bg-gray-700 rounded-lg space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="waitStrategy">Wait Strategy</Label>
+                      <Select
+                        value={formData.render_config?.wait_strategy || 'networkidle'}
+                        onValueChange={(value) =>
+                          setFormData({
+                            ...formData,
+                            render_config: {
+                              ...formData.render_config!,
+                              wait_strategy: value as 'load' | 'domcontentloaded' | 'networkidle'
+                            }
+                          })
+                        }
+                      >
+                        <SelectTrigger id="waitStrategy">
+                          <SelectValue placeholder="Select wait strategy" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="load">Load (fastest)</SelectItem>
+                          <SelectItem value="domcontentloaded">DOM Content Loaded</SelectItem>
+                          <SelectItem value="networkidle">Network Idle (recommended)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-gray-400 mt-1">
+                        When to consider the page loaded
+                      </p>
+                    </div>
+
+                    <div>
+                      <Label htmlFor="waitTimeout">Wait Timeout (ms)</Label>
+                      <Input
+                        id="waitTimeout"
+                        type="number"
+                        min={5000}
+                        max={120000}
+                        step={1000}
+                        value={formData.render_config?.wait_timeout_ms || 30000}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            render_config: {
+                              ...formData.render_config!,
+                              wait_timeout_ms: parseInt(e.target.value)
+                            }
+                          })
+                        }
+                      />
+                      <p className="text-xs text-gray-400 mt-1">
+                        Maximum time to wait for page load (5-120 seconds)
+                      </p>
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <Label htmlFor="waitForSelector">Wait for Selector (optional)</Label>
+                      <Input
+                        id="waitForSelector"
+                        type="text"
+                        placeholder="e.g., .product-list, #content"
+                        value={formData.render_config?.wait_for_selector || ''}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            render_config: {
+                              ...formData.render_config!,
+                              wait_for_selector: e.target.value || null
+                            }
+                          })
+                        }
+                      />
+                      <p className="text-xs text-gray-400 mt-1">
+                        CSS selector to wait for before considering page ready
+                      </p>
+                    </div>
+
+                    <div className="flex items-center space-x-2">
+                      <Switch
+                        id="captureScreenshot"
+                        checked={formData.render_config?.capture_screenshot || false}
+                        onCheckedChange={(checked) =>
+                          setFormData({
+                            ...formData,
+                            render_config: {
+                              ...formData.render_config!,
+                              capture_screenshot: checked
+                            }
+                          })
+                        }
+                      />
+                      <Label htmlFor="captureScreenshot" className="text-sm">
+                        Capture screenshot of rendered page
+                      </Label>
+                    </div>
+
+                    {formData.render_config?.capture_screenshot && (
+                      <div className="flex items-center space-x-2">
+                        <Switch
+                          id="screenshotFullPage"
+                          checked={formData.render_config?.screenshot_full_page || false}
+                          onCheckedChange={(checked) =>
+                            setFormData({
+                              ...formData,
+                              render_config: {
+                                ...formData.render_config!,
+                                screenshot_full_page: checked
+                              }
+                            })
+                          }
+                        />
+                        <Label htmlFor="screenshotFullPage" className="text-sm">
+                          Full page screenshot (may increase size)
+                        </Label>
+                      </div>
+                    )}
+
+                    <div className="flex items-center space-x-2">
+                      <Switch
+                        id="fallbackToStandard"
+                        checked={formData.render_config?.fallback_to_standard !== false}
+                        onCheckedChange={(checked) =>
+                          setFormData({
+                            ...formData,
+                            render_config: {
+                              ...formData.render_config!,
+                              fallback_to_standard: checked
+                            }
+                          })
+                        }
+                      />
+                      <Label htmlFor="fallbackToStandard" className="text-sm">
+                        Fallback to standard requests if rendering fails
+                      </Label>
+                    </div>
+                  </div>
+
+                  <div className="bg-blue-900 bg-opacity-20 border border-blue-500 rounded p-3 text-sm">
+                    <p className="text-blue-300 font-medium mb-1">JavaScript Rendering Information</p>
+                    <p className="text-gray-300">
+                      Uses Playwright headless browser to render JavaScript-heavy websites (SPAs).
+                      Ideal for React, Vue, Angular applications. Note: Increases processing time and cost.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Export Settings */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xl font-semibold">Export Settings</h3>
+                <Switch
+                  checked={formData.export_config?.enabled || false}
+                  onCheckedChange={(checked) =>
+                    setFormData({
+                      ...formData,
+                      export_config: { ...formData.export_config!, enabled: checked }
+                    })
+                  }
+                />
+              </div>
+
+              {formData.export_config?.enabled && (
+                <div className="p-4 bg-gray-700 rounded-lg space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="exportFormats">Export Formats</Label>
+                      <div className="space-y-2 mt-2">
+                        {(['json', 'csv', 'xlsx'] as const).map((format) => (
+                          <div key={format} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`format-${format}`}
+                              checked={formData.export_config?.formats?.includes(format) || false}
+                              onCheckedChange={(checked) => {
+                                const currentFormats = formData.export_config?.formats || [];
+                                const newFormats = checked
+                                  ? [...currentFormats, format]
+                                  : currentFormats.filter(f => f !== format);
+                                setFormData({
+                                  ...formData,
+                                  export_config: {
+                                    ...formData.export_config!,
+                                    formats: newFormats.length > 0 ? newFormats : ['json']
+                                  }
+                                });
+                              }}
+                            />
+                            <Label htmlFor={`format-${format}`} className="text-sm uppercase">
+                              {format}
+                            </Label>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-xs text-gray-400 mt-2">
+                        Select one or more export formats
+                      </p>
+                    </div>
+
+                    <div>
+                      <Label htmlFor="exportDestination">Destination</Label>
+                      <Select
+                        value={formData.export_config?.destination || 's3'}
+                        onValueChange={(value) =>
+                          setFormData({
+                            ...formData,
+                            export_config: {
+                              ...formData.export_config!,
+                              destination: value as 's3' | 'local' | 'webhook'
+                            }
+                          })
+                        }
+                      >
+                        <SelectTrigger id="exportDestination">
+                          <SelectValue placeholder="Select destination" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="s3">S3 Bucket</SelectItem>
+                          <SelectItem value="local">Local Storage</SelectItem>
+                          <SelectItem value="webhook">Webhook POST</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-gray-400 mt-1">
+                        Where to store exported data
+                      </p>
+                    </div>
+
+                    {formData.export_config?.destination === 's3' && (
+                      <div className="md:col-span-2">
+                        <Label htmlFor="s3Bucket">S3 Bucket Name</Label>
+                        <Input
+                          id="s3Bucket"
+                          type="text"
+                          placeholder="my-bucket-name"
+                          value={formData.export_config?.s3_bucket || ''}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              export_config: {
+                                ...formData.export_config!,
+                                s3_bucket: e.target.value || null
+                              }
+                            })
+                          }
+                        />
+                        <p className="text-xs text-gray-400 mt-1">
+                          S3 bucket for storing results
+                        </p>
+                      </div>
+                    )}
+
+                    {formData.export_config?.destination === 'webhook' && (
+                      <div className="md:col-span-2">
+                        <Label htmlFor="webhookUrl">Webhook URL</Label>
+                        <Input
+                          id="webhookUrl"
+                          type="url"
+                          placeholder="https://example.com/webhook"
+                          value={formData.export_config?.webhook_url || ''}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              export_config: {
+                                ...formData.export_config!,
+                                webhook_url: e.target.value || null
+                              }
+                            })
+                          }
+                        />
+                        <p className="text-xs text-gray-400 mt-1">
+                          POST results to this URL
+                        </p>
+                      </div>
+                    )}
+
+                    <div className="flex items-center space-x-2">
+                      <Switch
+                        id="includeScreenshots"
+                        checked={formData.export_config?.include_screenshots || false}
+                        onCheckedChange={(checked) =>
+                          setFormData({
+                            ...formData,
+                            export_config: {
+                              ...formData.export_config!,
+                              include_screenshots: checked
+                            }
+                          })
+                        }
+                      />
+                      <Label htmlFor="includeScreenshots" className="text-sm">
+                        Include screenshots in export (if captured)
+                      </Label>
+                    </div>
+
+                    <div className="flex items-center space-x-2">
+                      <Switch
+                        id="compressExport"
+                        checked={formData.export_config?.compress || false}
+                        onCheckedChange={(checked) =>
+                          setFormData({
+                            ...formData,
+                            export_config: {
+                              ...formData.export_config!,
+                              compress: checked
+                            }
+                          })
+                        }
+                      />
+                      <Label htmlFor="compressExport" className="text-sm">
+                        Compress exported files (ZIP)
+                      </Label>
+                    </div>
+                  </div>
+
+                  <div className="bg-blue-900 bg-opacity-20 border border-blue-500 rounded p-3 text-sm">
+                    <p className="text-blue-300 font-medium mb-1">Export Information</p>
+                    <p className="text-gray-300">
+                      Configure how and where your scraped data is exported.
+                      Results are automatically exported after each job run.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Notification Settings */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xl font-semibold">Notification Settings</h3>
+                <Switch
+                  checked={formData.notification_config?.enabled || false}
+                  onCheckedChange={(checked) =>
+                    setFormData({
+                      ...formData,
+                      notification_config: { ...formData.notification_config!, enabled: checked }
+                    })
+                  }
+                />
+              </div>
+
+              {formData.notification_config?.enabled && (
+                <div className="p-4 bg-gray-700 rounded-lg space-y-4">
+                  <div className="space-y-3">
+                    <h4 className="text-sm font-semibold text-gray-200">Email Notifications</h4>
+
+                    <div className="flex items-center space-x-2">
+                      <Switch
+                        id="emailOnSuccess"
+                        checked={formData.notification_config?.email_on_success || false}
+                        onCheckedChange={(checked) =>
+                          setFormData({
+                            ...formData,
+                            notification_config: {
+                              ...formData.notification_config!,
+                              email_on_success: checked
+                            }
+                          })
+                        }
+                      />
+                      <Label htmlFor="emailOnSuccess" className="text-sm">
+                        Send email on successful job completion
+                      </Label>
+                    </div>
+
+                    <div className="flex items-center space-x-2">
+                      <Switch
+                        id="emailOnFailure"
+                        checked={formData.notification_config?.email_on_failure !== false}
+                        onCheckedChange={(checked) =>
+                          setFormData({
+                            ...formData,
+                            notification_config: {
+                              ...formData.notification_config!,
+                              email_on_failure: checked
+                            }
+                          })
+                        }
+                      />
+                      <Label htmlFor="emailOnFailure" className="text-sm">
+                        Send email on job failure
+                      </Label>
+                    </div>
+
+                    <div>
+                      <Label htmlFor="emailAddresses">Email Addresses</Label>
+                      <Input
+                        id="emailAddresses"
+                        type="text"
+                        placeholder="email1@example.com, email2@example.com"
+                        value={formData.notification_config?.email_addresses?.join(', ') || ''}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            notification_config: {
+                              ...formData.notification_config!,
+                              email_addresses: e.target.value
+                                .split(',')
+                                .map(email => email.trim())
+                                .filter(email => email.length > 0)
+                            }
+                          })
+                        }
+                      />
+                      <p className="text-xs text-gray-400 mt-1">
+                        Comma-separated email addresses for notifications
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 pt-3 border-t border-gray-600">
+                    <h4 className="text-sm font-semibold text-gray-200">Webhook Notifications</h4>
+
+                    <div className="flex items-center space-x-2">
+                      <Switch
+                        id="webhookOnSuccess"
+                        checked={formData.notification_config?.webhook_on_success || false}
+                        onCheckedChange={(checked) =>
+                          setFormData({
+                            ...formData,
+                            notification_config: {
+                              ...formData.notification_config!,
+                              webhook_on_success: checked
+                            }
+                          })
+                        }
+                      />
+                      <Label htmlFor="webhookOnSuccess" className="text-sm">
+                        Trigger webhook on successful job completion
+                      </Label>
+                    </div>
+
+                    <div className="flex items-center space-x-2">
+                      <Switch
+                        id="webhookOnFailure"
+                        checked={formData.notification_config?.webhook_on_failure !== false}
+                        onCheckedChange={(checked) =>
+                          setFormData({
+                            ...formData,
+                            notification_config: {
+                              ...formData.notification_config!,
+                              webhook_on_failure: checked
+                            }
+                          })
+                        }
+                      />
+                      <Label htmlFor="webhookOnFailure" className="text-sm">
+                        Trigger webhook on job failure
+                      </Label>
+                    </div>
+
+                    <div>
+                      <Label htmlFor="notificationWebhookUrl">Webhook URL</Label>
+                      <Input
+                        id="notificationWebhookUrl"
+                        type="url"
+                        placeholder="https://example.com/notify"
+                        value={formData.notification_config?.webhook_url || ''}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            notification_config: {
+                              ...formData.notification_config!,
+                              webhook_url: e.target.value || null
+                            }
+                          })
+                        }
+                      />
+                      <p className="text-xs text-gray-400 mt-1">
+                        POST job status updates to this URL
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="bg-blue-900 bg-opacity-20 border border-blue-500 rounded p-3 text-sm">
+                    <p className="text-blue-300 font-medium mb-1">Notification Information</p>
+                    <p className="text-gray-300">
+                      Receive real-time updates about your jobs via email or webhook.
+                      Email notifications use your Clerk account email by default.
+                    </p>
+                  </div>
+                </div>
               )}
             </div>
 

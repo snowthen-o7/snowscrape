@@ -37,3 +37,19 @@ next-env.d.ts
 
 .vercel
 .env*.local
+
+# serverless
+/serverless
+/.serverless
+
+# sentry
+.sentryclirc
+.sentry-source-maps
+
+# playwright
+/test-results/
+/playwright-report/
+/playwright/.cache/
+
+# lighthouse
+/.lighthouseci/

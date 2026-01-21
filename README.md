@@ -7,17 +7,42 @@ Modern Next.js 16 web application for managing and monitoring web scraping jobs,
 ## Table of Contents
 
 - [Overview](#overview)
+- [Documentation](#documentation)
+- [Quick Start](#quick-start)
 - [Tech Stack](#tech-stack)
 - [Setup](#setup)
 - [Development](#development)
 - [Building](#building)
 - [Deployment](#deployment)
 - [Project Structure](#project-structure)
-- [Components](#components)
-- [Authentication](#authentication)
-- [API Integration](#api-integration)
-- [Styling](#styling)
-- [Troubleshooting](#troubleshooting)
+
+---
+
+## Documentation
+
+All documentation is consolidated in the `docs/` folder:
+
+| Document | Description |
+|----------|-------------|
+| [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md) | Local setup, testing, workflows |
+| [docs/LAUNCH.md](./docs/LAUNCH.md) | Beta preparation, production readiness |
+| [docs/TECHNICAL.md](./docs/TECHNICAL.md) | Security, accessibility, analytics |
+| [docs/RELEASE_NOTES.md](./docs/RELEASE_NOTES.md) | Phase completion history |
+| [docs/brand-guidelines.md](./docs/brand-guidelines.md) | Brand identity and design tokens |
+
+---
+
+## Quick Start
+
+```bash
+cd frontend/snowscrape
+pnpm install
+cp .env.example .env.local
+pnpm dev
+# Open http://localhost:3000
+```
+
+For detailed setup, see [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md).
 
 ---
 
