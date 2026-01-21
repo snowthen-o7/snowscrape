@@ -201,21 +201,46 @@ export default function Dashboard() {
     );
   }
 
-  // Show error state
+  // Show error state with helpful options
   if (isError) {
     return (
       <AppLayout>
         <div className="flex min-h-[60vh] items-center justify-center">
-          <EmptyState
-            icon={<XCircleIcon className="h-12 w-12" />}
-            title="Failed to load jobs"
-            description="There was an error loading your jobs. Please try again."
-            action={{
-              label: 'Retry',
-              onClick: handleRefresh,
-            }}
-          />
+          <div className="text-center space-y-4">
+            <EmptyState
+              icon={<XCircleIcon className="h-12 w-12" />}
+              title="Unable to load jobs"
+              description="We couldn't connect to the server. This might be a temporary issue."
+              action={{
+                label: 'Try Again',
+                onClick: handleRefresh,
+              }}
+            />
+            <div className="pt-4 border-t border-border">
+              <p className="text-sm text-muted-foreground mb-3">
+                Or start fresh by creating a new job
+              </p>
+              <Button
+                variant="outline"
+                onClick={() => setJobModalOpen({ isOpen: true, jobDetails: null })}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Create New Job
+              </Button>
+            </div>
+          </div>
         </div>
+
+        {/* Keep modal available even in error state */}
+        {jobModalOpen.isOpen && (
+          <JobModal
+            closeModal={() =>
+              setJobModalOpen({ isOpen: false, jobDetails: null })
+            }
+            jobDetails={jobModalOpen.jobDetails}
+            session={(window as any).Clerk?.session || null}
+          />
+        )}
       </AppLayout>
     );
   }

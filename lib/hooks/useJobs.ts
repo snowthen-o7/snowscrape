@@ -22,11 +22,28 @@ export function useJobs() {
     queryFn: async () => {
       const token = await session?.getToken();
       if (!token) throw new Error('Not authenticated');
-      return jobsAPI.list(token);
+      try {
+        const jobs = await jobsAPI.list(token);
+        // Ensure we always return an array
+        return Array.isArray(jobs) ? jobs : [];
+      } catch (error: any) {
+        // Treat 404 as empty list (no jobs yet)
+        if (error?.status === 404) {
+          return [];
+        }
+        throw error;
+      }
     },
     enabled: !!session,
     // Refetch every 30 seconds to keep data fresh
     refetchInterval: 30000,
+    // Retry network errors but not auth errors
+    retry: (failureCount, error: any) => {
+      // Don't retry auth errors
+      if (error?.status === 401 || error?.status === 403) return false;
+      // Retry up to 3 times for other errors
+      return failureCount < 3;
+    },
   });
 }
 
