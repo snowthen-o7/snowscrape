@@ -1172,30 +1172,32 @@ custom:
   sqsWebhookQueue: SnowscrapeWebhookQueue
   sqsWebhookQueueUrl: https://sqs.us-east-2.amazonaws.com/282128795857/SnowscrapeWebhookQueue
   clerkJwtPublicKey:
+    # Updated to match frontend Clerk account (lucky-skylark-5.clerk.accounts.dev)
     dev: |
       -----BEGIN PUBLIC KEY-----
-      MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAoZVvkucSn5kVAbJNzz0O
-      9ylvrQA6svwe3K4WitLygsQIqbyjz5hUVAMj668n8xft/JTKkxOCorbpj0Y90lN+
-      Z6Ge7k9gqMgTOJw8WE6w/j5RcTzLw3Fd81OU3T6D2SF6/51uNsvP3F4KieAJoImH
-      Vg2fUHjNFuRwh7TyB5X5f1q3nk6uVqSUOGbf6P0uvoYXI9n8EppTgn5/LbV0K9kF
-      jo2x0vyRmSun/klUoNCuBAPAbrG0bqwADvzvhPsHdXz61jxnBaLO+yD3kXEBzety
-      7XTZhm8r8oaAmfup+3aIt7BCiAXRWQ5UfPNZ+tv+93HOqsOJfI96q6z9vgF+7QOr
-      xQIDAQAB
+      MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvUrM5FDtGQ4tZZCSoyT7
+      b42o5WpjfzLhB8lfwP1nfa+Rxyvqvjr0Ngw5oTBjUVhp8fqLLq2SW+Bg3HPBXJ9Q
+      ov1MDEqzUMhiIbP1Q72ZEMTCDWOyn+D8rW8KtYwxmH5iyNarKNs1ULez4zNzSKiP
+      hNt48wMEvYPoI75/7C4gmOVaUxPZp+D31IKehRwJ7z3FpUO3BXLn2IyhVw6IxO8o
+      J3zWnNHtZDcok3zfT0tIC4/ARmAau/G4kosr3A5bSIp1bBAySkpCqrcl3Ads/L58
+      sVSCEdTPym53eFV8/AVln9saqrEelDDoUXYLx6QnGKYOzAlpJ4VtLnSXY1n4UgwV
+      EQIDAQAB
       -----END PUBLIC KEY-----
     staging: |
       -----BEGIN PUBLIC KEY-----
-      MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAoZVvkucSn5kVAbJNzz0O
-      9ylvrQA6svwe3K4WitLygsQIqbyjz5hUVAMj668n8xft/JTKkxOCorbpj0Y90lN+
-      Z6Ge7k9gqMgTOJw8WE6w/j5RcTzLw3Fd81OU3T6D2SF6/51uNsvP3F4KieAJoImH
-      Vg2fUHjNFuRwh7TyB5X5f1q3nk6uVqSUOGbf6P0uvoYXI9n8EppTgn5/LbV0K9kF
-      jo2x0vyRmSun/klUoNCuBAPAbrG0bqwADvzvhPsHdXz61jxnBaLO+yD3kXEBzety
-      7XTZhm8r8oaAmfup+3aIt7BCiAXRWQ5UfPNZ+tv+93HOqsOJfI96q6z9vgF+7QOr
-      xQIDAQAB
+      MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvUrM5FDtGQ4tZZCSoyT7
+      b42o5WpjfzLhB8lfwP1nfa+Rxyvqvjr0Ngw5oTBjUVhp8fqLLq2SW+Bg3HPBXJ9Q
+      ov1MDEqzUMhiIbP1Q72ZEMTCDWOyn+D8rW8KtYwxmH5iyNarKNs1ULez4zNzSKiP
+      hNt48wMEvYPoI75/7C4gmOVaUxPZp+D31IKehRwJ7z3FpUO3BXLn2IyhVw6IxO8o
+      J3zWnNHtZDcok3zfT0tIC4/ARmAau/G4kosr3A5bSIp1bBAySkpCqrcl3Ads/L58
+      sVSCEdTPym53eFV8/AVln9saqrEelDDoUXYLx6QnGKYOzAlpJ4VtLnSXY1n4UgwV
+      EQIDAQAB
       -----END PUBLIC KEY-----
     prod: "your-clerk-public-key-for-prod"
   clerkJwtSecretKey:
+    # Updated to match frontend Clerk account
     dev: |
-      sk_test_xFXzGKYU7lhtFBel98iewFsgkNwwyCgWAARdRaU5dA
+      sk_test_fZLQoisjKTfP1qVDSnWDrv0ZJ1kvt7d7oFpMnDPtLc
     staging: |
-      sk_test_xFXzGKYU7lhtFBel98iewFsgkNwwyCgWAARdRaU5dA
+      sk_test_fZLQoisjKTfP1qVDSnWDrv0ZJ1kvt7d7oFpMnDPtLc
     prod: "your-clerk-secret-key-for-prod"
