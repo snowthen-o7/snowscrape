@@ -60,7 +60,12 @@ export class JobsAPI {
    * List all jobs for the authenticated user
    */
   async list(token: string): Promise<Job[]> {
-    return this.client.request<Job[]>('/jobs', token);
+    // Backend endpoint is /jobs/status (returns { jobs: Job[], count: number })
+    const response = await this.client.request<{ jobs: Job[]; count: number }>(
+      '/jobs/status',
+      token
+    );
+    return response.jobs || [];
   }
 
   /**

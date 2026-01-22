@@ -2,10 +2,17 @@
 
 import React from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { UserButton, useUser } from '@clerk/nextjs';
-import { SearchIcon, MenuIcon } from 'lucide-react';
+import { SearchIcon, MenuIcon, HelpCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { NotificationCenter } from '@/components/NotificationCenter';
 import { cn } from '@/lib/utils';
 
@@ -36,9 +43,13 @@ export function AppTopNav({ className, onMenuClick }: AppTopNavProps) {
 
       {/* Logo for mobile */}
       <Link href="/" className="flex items-center space-x-2 md:hidden">
-        <div className="h-8 w-8 rounded-lg bg-brand-primary flex items-center justify-center">
-          <span className="text-white font-bold text-sm">SS</span>
-        </div>
+        <Image
+          src="/logo.png"
+          alt="SnowForge"
+          width={32}
+          height={32}
+          className="rounded-lg"
+        />
       </Link>
 
       {/* Search */}
@@ -48,8 +59,23 @@ export function AppTopNav({ className, onMenuClick }: AppTopNavProps) {
           <Input
             type="search"
             placeholder="Search jobs, templates..."
-            className="pl-10 w-full"
+            className="pl-10 pr-9 w-full"
           />
+          <TooltipProvider delayDuration={100}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  <HelpCircle className="h-4 w-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-xs">
+                <p>Search by job name, template name, or source URL</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
       </div>
 

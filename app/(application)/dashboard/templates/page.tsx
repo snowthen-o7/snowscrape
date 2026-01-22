@@ -166,21 +166,32 @@ export default function TemplatesPage() {
 
       try {
         const token = await session.getToken();
+
+        // Don't make request if token is not available
+        if (!token) {
+          console.warn('[Templates] No auth token available, skipping fetch');
+          setLoading(false);
+          return;
+        }
+
         const response = await fetch(
           `${process.env.NEXT_PUBLIC_API_BASE_URL}/templates`,
           {
             headers: {
               Authorization: `Bearer ${token}`,
-              ...(process.env.NEXT_PUBLIC_API_KEY && {
-                'x-api-key': process.env.NEXT_PUBLIC_API_KEY,
-              }),
+              'Content-Type': 'application/json',
             },
           }
         );
 
         if (response.ok) {
           const data = await response.json();
-          setUserTemplates(data);
+          // API returns { templates: [...], count: N }
+          setUserTemplates(data.templates || data || []);
+        } else if (response.status === 401) {
+          console.warn('[Templates] Auth token expired or invalid');
+        } else {
+          console.error('[Templates] Failed to fetch:', response.status);
         }
       } catch (error) {
         console.error('Error fetching templates', error);

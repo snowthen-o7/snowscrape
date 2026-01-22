@@ -179,25 +179,29 @@ export class RealtimeClient {
 
     const poll = async () => {
       try {
-        // Fetch jobs data via REST API
-        const response = await fetch('/api/jobs', {
+        // Fetch jobs data via REST API (use external API, not local route)
+        const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || '';
+        const response = await fetch(`${apiBaseUrl}/jobs/status`, {
           headers: {
             Authorization: `Bearer ${this.config.token}`,
+            'Content-Type': 'application/json',
           },
         });
 
         if (response.ok) {
-          const data = await response.json();
+          const responseData = await response.json();
+          // API returns { jobs: Job[], count: number }
+          const jobs = responseData.jobs || [];
 
           // Check if data changed
-          if (JSON.stringify(data) !== JSON.stringify(this.lastPollData)) {
-            this.lastPollData = data;
+          if (JSON.stringify(jobs) !== JSON.stringify(this.lastPollData)) {
+            this.lastPollData = jobs;
 
             // Emit as message
             this.messageHandlers.forEach((handler) =>
               handler({
                 type: 'jobs:update',
-                data,
+                data: jobs,
               })
             );
           }

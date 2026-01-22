@@ -3,7 +3,7 @@
 	"version": "0.1.0",
 	"private": true,
 	"scripts": {
-		"dev": "next dev",
+		"dev": "next dev -p 3001",
 		"build": "next build",
 		"start": "next start",
 		"lint": "next lint",
@@ -14,7 +14,7 @@
 		"test:e2e:ui": "playwright test --ui",
 		"test:e2e:a11y": "playwright test accessibility.spec.ts",
 		"lighthouse": "lhci autorun",
-		"lighthouse:report": "lighthouse http://localhost:3000 --view"
+		"lighthouse:report": "lighthouse http://localhost:3001 --view"
 	},
 	"dependencies": {
 		"@clerk/nextjs": "latest",

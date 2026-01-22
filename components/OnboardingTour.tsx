@@ -131,22 +131,12 @@ export function OnboardingTour() {
   const step = ONBOARDING_STEPS[currentStep];
 
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) handleSkip(); }}>
       <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
-          <div className="flex items-center justify-between">
-            <Badge variant="outline">
-              Step {currentStep + 1} of {ONBOARDING_STEPS.length}
-            </Badge>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleSkip}
-              className="h-8 w-8"
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
+          <Badge variant="outline">
+            Step {currentStep + 1} of {ONBOARDING_STEPS.length}
+          </Badge>
         </DialogHeader>
 
         <div className="space-y-6 py-4">

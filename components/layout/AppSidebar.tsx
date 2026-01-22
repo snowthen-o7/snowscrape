@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import {
@@ -72,9 +73,13 @@ export function AppSidebar({ className }: AppSidebarProps) {
       <div className="flex h-16 items-center justify-between px-4 border-b">
         {!collapsed && (
           <Link href="/" className="flex items-center space-x-2">
-            <div className="h-8 w-8 rounded-lg bg-brand-primary flex items-center justify-center">
-              <span className="text-white font-bold text-sm">SS</span>
-            </div>
+            <Image
+              src="/logo.png"
+              alt="SnowForge"
+              width={32}
+              height={32}
+              className="rounded-lg"
+            />
             <span className="font-bold text-lg">SnowScrape</span>
           </Link>
         )}

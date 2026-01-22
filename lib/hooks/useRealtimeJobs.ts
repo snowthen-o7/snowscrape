@@ -150,15 +150,19 @@ export function useRealtimeJobs(options: UseRealtimeJobsOptions = {}) {
       const token = await getToken();
       if (!token) return;
 
-      const response = await fetch('/api/jobs', {
+      const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || '';
+      const response = await fetch(`${apiBaseUrl}/jobs/status`, {
         headers: {
           Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
         },
       });
 
       if (response.ok) {
-        const data = await response.json();
-        setJobs(data);
+        const responseData = await response.json();
+        // API returns { jobs: Job[], count: number }
+        const jobs = responseData.jobs || [];
+        setJobs(jobs);
       }
     } catch (error) {
       console.error('[useRealtimeJobs] Refresh error:', error);

@@ -5,7 +5,7 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useSession } from '@clerk/nextjs';
 import { AppLayout } from '@/components/layout/AppLayout';
@@ -26,6 +26,8 @@ import {
   Copy,
 } from 'lucide-react';
 import { toast } from '@/lib/toast';
+import { JobModal } from '@/components/JobModal';
+import { Job } from '@/lib/types';
 
 // Template configurations (in production, these would come from a database or CMS)
 const TEMPLATE_CONFIGS: any = {
@@ -152,6 +154,191 @@ const TEMPLATE_CONFIGS: any = {
     ],
     compatibleSites: ['zillow.com'],
   },
+  'google-serp': {
+    name: 'Google Search Results',
+    description:
+      'Scrape Google search results including organic listings, featured snippets, and related searches',
+    category: 'SEO',
+    difficulty: 'Easy',
+    rating: 4.9,
+    usageCount: 2100,
+    author: 'SnowScrape Team',
+    lastUpdated: '2026-01-18',
+    queries: [
+      { name: 'title', type: 'xpath', query: '//h3[@class="LC20lb"]/text()' },
+      { name: 'url', type: 'xpath', query: '//div[@class="yuRUbf"]/a/@href' },
+      { name: 'description', type: 'xpath', query: '//div[@class="VwiC3b"]/span/text()' },
+      { name: 'position', type: 'xpath', query: 'count(preceding::div[@class="g"])+1' },
+      {
+        name: 'featured_snippet',
+        type: 'xpath',
+        query: '//div[@class="xpdopen"]//span/text()',
+      },
+    ],
+    sampleData: [
+      {
+        title: 'Web Scraping - Wikipedia',
+        url: 'https://en.wikipedia.org/wiki/Web_scraping',
+        description: 'Web scraping, web harvesting, or web data extraction is data scraping used for extracting data from websites...',
+        position: 1,
+        featured_snippet: null,
+      },
+    ],
+    usageNotes: [
+      'Google frequently changes their DOM structure - verify selectors',
+      'Use proxies to avoid IP blocking',
+      'Respect rate limits (1-2 requests per second max)',
+      'Consider using Google Search API for production use',
+      'JavaScript rendering may be required for some results',
+    ],
+    compatibleSites: ['google.com', 'google.co.uk', 'google.de', 'google.fr'],
+  },
+  'news-articles': {
+    name: 'News Article Scraper',
+    description:
+      'Extract article content, headlines, author information, and publication dates from news websites',
+    category: 'Content',
+    difficulty: 'Easy',
+    rating: 4.5,
+    usageCount: 650,
+    author: 'SnowScrape Team',
+    lastUpdated: '2026-01-08',
+    queries: [
+      { name: 'headline', type: 'xpath', query: '//h1/text()' },
+      { name: 'author', type: 'xpath', query: '//span[@class="byline"]//text()' },
+      { name: 'publish_date', type: 'xpath', query: '//time/@datetime' },
+      { name: 'content', type: 'xpath', query: '//article//p/text()' },
+      { name: 'category', type: 'xpath', query: '//meta[@property="article:section"]/@content' },
+    ],
+    sampleData: [
+      {
+        headline: 'Tech Giants Report Record Earnings',
+        author: 'Jane Smith',
+        publish_date: '2026-01-20T10:30:00Z',
+        content: 'Major technology companies announced quarterly results that exceeded...',
+        category: 'Technology',
+      },
+    ],
+    usageNotes: [
+      'Works best with standard article page structures',
+      'Selectors may need adjustment for different news sites',
+      'Some sites require JavaScript rendering',
+      'Respect robots.txt and copyright considerations',
+    ],
+    compatibleSites: ['Most news websites with standard HTML structure'],
+  },
+  'job-listings-indeed': {
+    name: 'Indeed Job Listings',
+    description:
+      'Extract job postings from Indeed including title, company, location, salary, and full job description',
+    category: 'Jobs',
+    difficulty: 'Medium',
+    rating: 4.6,
+    usageCount: 980,
+    author: 'SnowScrape Team',
+    lastUpdated: '2026-01-14',
+    queries: [
+      { name: 'job_title', type: 'xpath', query: '//h1[@class="jobsearch-JobInfoHeader-title"]/text()' },
+      { name: 'company', type: 'xpath', query: '//div[@data-company-name="true"]/a/text()' },
+      { name: 'location', type: 'xpath', query: '//div[@data-testid="job-location"]/text()' },
+      { name: 'salary', type: 'xpath', query: '//div[@id="salaryInfoAndJobType"]/span/text()' },
+      { name: 'description', type: 'xpath', query: '//div[@id="jobDescriptionText"]//text()' },
+      { name: 'posted_date', type: 'xpath', query: '//span[@class="date"]/text()' },
+    ],
+    sampleData: [
+      {
+        job_title: 'Senior Software Engineer',
+        company: 'Tech Corp Inc.',
+        location: 'San Francisco, CA',
+        salary: '$150,000 - $200,000 a year',
+        description: 'We are looking for an experienced software engineer to join our team...',
+        posted_date: 'Posted 3 days ago',
+      },
+    ],
+    usageNotes: [
+      'Indeed uses dynamic content - enable JavaScript rendering',
+      'Set rate_limit to 1-2 to avoid blocking',
+      'Job listings change frequently, schedule regular scrapes',
+      'Some content may require authentication',
+      'Consider using Indeed API for commercial use',
+    ],
+    compatibleSites: ['indeed.com', 'indeed.co.uk', 'indeed.ca'],
+  },
+  'event-listings': {
+    name: 'Event Listings Scraper',
+    description:
+      'Extract event details from platforms like Eventbrite including name, date, venue, and ticket information',
+    category: 'Events',
+    difficulty: 'Easy',
+    rating: 4.4,
+    usageCount: 430,
+    author: 'SnowScrape Team',
+    lastUpdated: '2026-01-05',
+    queries: [
+      { name: 'event_name', type: 'xpath', query: '//h1[@class="event-title"]/text()' },
+      { name: 'date', type: 'xpath', query: '//time[@class="event-date"]/@datetime' },
+      { name: 'venue', type: 'xpath', query: '//div[@class="location-info"]//p/text()' },
+      { name: 'price', type: 'xpath', query: '//div[@class="ticket-price"]/text()' },
+      { name: 'organizer', type: 'xpath', query: '//a[@class="organizer-name"]/text()' },
+      { name: 'description', type: 'xpath', query: '//div[@class="event-description"]//text()' },
+    ],
+    sampleData: [
+      {
+        event_name: 'Tech Conference 2026',
+        date: '2026-03-15T09:00:00Z',
+        venue: 'Moscone Center, San Francisco, CA',
+        price: '$299 - $899',
+        organizer: 'TechEvents Inc.',
+        description: 'Join us for the biggest tech conference of the year...',
+      },
+    ],
+    usageNotes: [
+      'Works with Eventbrite and similar event platforms',
+      'Event data changes frequently as events sell out',
+      'Some events require login to view ticket prices',
+      'Consider timezone handling for event dates',
+    ],
+    compatibleSites: ['eventbrite.com', 'meetup.com'],
+  },
+  'stock-market-data': {
+    name: 'Stock Market Data',
+    description:
+      'Scrape stock prices, market cap, volume, P/E ratio, and other financial metrics from Yahoo Finance',
+    category: 'Finance',
+    difficulty: 'Medium',
+    rating: 4.7,
+    usageCount: 1120,
+    author: 'SnowScrape Team',
+    lastUpdated: '2026-01-17',
+    queries: [
+      { name: 'symbol', type: 'xpath', query: '//h1[@class="D(ib) Fz(18px)"]/text()' },
+      { name: 'price', type: 'xpath', query: '//fin-streamer[@data-field="regularMarketPrice"]/@value' },
+      { name: 'change', type: 'xpath', query: '//fin-streamer[@data-field="regularMarketChange"]/@value' },
+      { name: 'change_percent', type: 'xpath', query: '//fin-streamer[@data-field="regularMarketChangePercent"]/@value' },
+      { name: 'market_cap', type: 'xpath', query: '//td[@data-test="MARKET_CAP-value"]/text()' },
+      { name: 'volume', type: 'xpath', query: '//td[@data-test="TD_VOLUME-value"]/text()' },
+      { name: 'pe_ratio', type: 'xpath', query: '//td[@data-test="PE_RATIO-value"]/text()' },
+    ],
+    sampleData: [
+      {
+        symbol: 'AAPL',
+        price: '187.44',
+        change: '+2.35',
+        change_percent: '+1.27%',
+        market_cap: '2.91T',
+        volume: '48,234,521',
+        pe_ratio: '29.45',
+      },
+    ],
+    usageNotes: [
+      'Yahoo Finance uses dynamic JavaScript - enable rendering',
+      'Data updates in real-time during market hours',
+      'For historical data, use separate API endpoints',
+      'Consider financial data licensing for commercial use',
+      'Rate limit carefully to avoid IP blocks',
+    ],
+    compatibleSites: ['finance.yahoo.com', 'google.com/finance'],
+  },
 };
 
 export default function TemplateDetailPage() {
@@ -162,6 +349,7 @@ export default function TemplateDetailPage() {
 
   const template = TEMPLATE_CONFIGS[templateId];
   const [copiedQuery, setCopiedQuery] = useState<string | null>(null);
+  const [showJobModal, setShowJobModal] = useState(false);
 
   if (!template) {
     return (
@@ -182,22 +370,68 @@ export default function TemplateDetailPage() {
     );
   }
 
-  const handleUseTemplate = async () => {
-    try {
-      if (!session) {
-        toast.error('Please sign in to use templates');
-        return;
-      }
-
-      // In production, this would create a job with the template configuration
-      toast.success(`Creating job from template: ${template.name}`);
-
-      // Navigate to dashboard where JobModal would open with template data
-      router.push('/dashboard');
-    } catch (error) {
-      console.error('Error using template', error);
-      toast.error('Failed to use template');
+  const handleUseTemplate = () => {
+    if (!session) {
+      toast.error('Please sign in to use templates');
+      return;
     }
+
+    // Open the job modal with template data pre-filled
+    setShowJobModal(true);
+  };
+
+  // Create a Job-like object from template data for the modal
+  const getTemplateAsJobData = (): Partial<Job> | null => {
+    if (!template) return null;
+
+    return {
+      name: `${template.name} Job`,
+      rate_limit: 2,
+      source: template.compatibleSites?.[0] ? `https://${template.compatibleSites[0]}` : '',
+      queries: template.queries.map((q: any) => ({
+        name: q.name,
+        type: q.type,
+        query: q.query,
+        join: false,
+      })),
+      file_mapping: { delimiter: ',', enclosure: '', escape: '', url_column: '' },
+      scheduling: { days: [], hours: [], minutes: [] },
+      proxy_config: {
+        enabled: false,
+        geo_targeting: 'any',
+        rotation_strategy: 'random',
+        max_retries: 3,
+        fallback_to_direct: true,
+      },
+      render_config: {
+        enabled: template.difficulty === 'Medium' || template.difficulty === 'Hard',
+        wait_strategy: 'networkidle',
+        wait_timeout_ms: 30000,
+        wait_for_selector: null,
+        capture_screenshot: false,
+        screenshot_full_page: false,
+        block_resources: [],
+        fallback_to_standard: true,
+      },
+      export_config: {
+        enabled: false,
+        formats: ['json'],
+        destination: 's3',
+        s3_bucket: null,
+        webhook_url: null,
+        include_screenshots: false,
+        compress: false,
+      },
+      notification_config: {
+        enabled: false,
+        email_on_success: false,
+        email_on_failure: true,
+        email_addresses: [],
+        webhook_on_success: false,
+        webhook_on_failure: true,
+        webhook_url: null,
+      },
+    };
   };
 
   const copyQuery = (query: string, index: number) => {
@@ -450,6 +684,15 @@ export default function TemplateDetailPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Job Modal with template data pre-filled */}
+      {showJobModal && (
+        <JobModal
+          closeModal={() => setShowJobModal(false)}
+          jobDetails={getTemplateAsJobData() as Job | null}
+          session={session}
+        />
+      )}
     </AppLayout>
   );
 }

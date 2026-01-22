@@ -2,6 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { UserButton, useUser } from '@clerk/nextjs';
 import { Button } from '@/components/ui/button';
@@ -30,9 +31,13 @@ export function MarketingLayout({ children, className }: MarketingLayoutProps) {
         <div className="container flex h-16 items-center justify-between">
           {/* Logo */}
           <Link href="/" className="flex items-center space-x-2">
-            <div className="h-8 w-8 rounded-lg bg-brand-primary flex items-center justify-center">
-              <span className="text-white font-bold text-sm">SS</span>
-            </div>
+            <Image
+              src="/logo.png"
+              alt="SnowForge"
+              width={32}
+              height={32}
+              className="rounded-lg"
+            />
             <span className="font-bold text-xl">SnowScrape</span>
           </Link>
 
@@ -89,9 +94,13 @@ export function MarketingLayout({ children, className }: MarketingLayoutProps) {
             {/* Brand */}
             <div className="space-y-4">
               <Link href="/" className="flex items-center space-x-2">
-                <div className="h-8 w-8 rounded-lg bg-brand-primary flex items-center justify-center">
-                  <span className="text-white font-bold text-sm">SS</span>
-                </div>
+                <Image
+                  src="/logo.png"
+                  alt="SnowForge"
+                  width={32}
+                  height={32}
+                  className="rounded-lg"
+                />
                 <span className="font-bold text-lg">SnowScrape</span>
               </Link>
               <p className="text-sm text-muted-foreground">

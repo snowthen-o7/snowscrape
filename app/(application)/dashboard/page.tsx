@@ -1,46 +1,29 @@
 /**
- * Dashboard Page (Refactored)
- * Main application dashboard with jobs overview
+ * Dashboard Page
+ * Main application dashboard with analytics overview
  */
 
 'use client';
 
-import { useState } from 'react';
 import { useUser } from '@clerk/nextjs';
-import { JobModal } from '@/components/JobModal';
-import { JobCard } from '@/components/JobCard';
-import { ResultPreviewModal } from '@/components/ResultPreviewModal';
+import Link from 'next/link';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { PageHeader } from '@/components/PageHeader';
 import { StatCard } from '@/components/StatCard';
 import { EmptyState } from '@/components/EmptyState';
 import { DashboardSkeleton } from '@/components/LoadingSkeleton';
 import { ConnectionStatus } from '@/components/ConnectionStatus';
-import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
-  useJobs,
-  useDeleteJob,
-  usePauseJob,
-  useResumeJob,
-} from '@/lib/hooks/useJobs';
+import { useJobs } from '@/lib/hooks/useJobs';
 import { useRealtimeJobs } from '@/lib/hooks/useRealtimeJobs';
-import { Job } from '@/lib/types';
 import {
-  Search,
   RefreshCw,
-  Plus,
   BriefcaseIcon,
   PlayCircleIcon,
   CheckCircle2Icon,
   XCircleIcon,
+  ArrowRightIcon,
+  TrendingUpIcon,
 } from 'lucide-react';
 import { toast } from '@/lib/toast';
 import { LineChart, BarChart } from '@/components/charts';
@@ -66,23 +49,6 @@ export default function Dashboard() {
 
   // Use realtime jobs if available, otherwise use initial jobs
   const jobs = realtimeJobs.length > 0 ? realtimeJobs : initialJobs;
-
-  const deleteJobMutation = useDeleteJob();
-  const pauseJobMutation = usePauseJob();
-  const resumeJobMutation = useResumeJob();
-
-  const [jobModalOpen, setJobModalOpen] = useState<{
-    isOpen: boolean;
-    jobDetails?: Job | null;
-  }>({ isOpen: false, jobDetails: null });
-
-  const [previewModalOpen, setPreviewModalOpen] = useState<{
-    isOpen: boolean;
-    job?: Job | null;
-  }>({ isOpen: false, job: null });
-
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
 
   // Calculate metrics
   const totalJobs = jobs.length;
@@ -111,85 +77,10 @@ export default function Dashboard() {
     { date: 'Jan 20', volume: 110 },
   ];
 
-  // Filter and search jobs
-  const filteredJobs = jobs.filter((job) => {
-    const matchesSearch = job.name
-      .toLowerCase()
-      .includes(searchQuery.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || job.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
-
-  // Handle job actions
-  const handlePauseJob = async (jobId: string) => {
-    try {
-      await pauseJobMutation.mutateAsync(jobId);
-    } catch (error) {
-      // Error is handled by the mutation
-    }
-  };
-
-  const handleResumeJob = async (jobId: string) => {
-    try {
-      await resumeJobMutation.mutateAsync(jobId);
-    } catch (error) {
-      // Error is handled by the mutation
-    }
-  };
-
-  const handleDeleteJob = async (jobId: string) => {
-    try {
-      await deleteJobMutation.mutateAsync(jobId);
-    } catch (error) {
-      // Error is handled by the mutation
-    }
-  };
-
-  const handleDownloadJob = async (jobId: string, format: string) => {
-    try {
-      const token = await (window as any).Clerk?.session?.getToken();
-      if (!token) {
-        toast.error('Not authenticated');
-        return;
-      }
-
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/jobs/${jobId}/download?format=${format}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            ...(process.env.NEXT_PUBLIC_API_KEY && {
-              'x-api-key': process.env.NEXT_PUBLIC_API_KEY,
-            }),
-          },
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error('Failed to download results');
-      }
-
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${jobId}.${format}`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-
-      toast.success('Download started');
-    } catch (error) {
-      console.error('Error downloading job', error);
-      toast.error('Failed to download results');
-    }
-  };
-
   const handleRefresh = () => {
     refetch();
     refreshRealtime();
-    toast.success('Jobs refreshed');
+    toast.success('Data refreshed');
   };
 
   // Show skeleton during initial load
@@ -206,41 +97,18 @@ export default function Dashboard() {
     return (
       <AppLayout>
         <div className="flex min-h-[60vh] items-center justify-center">
-          <div className="text-center space-y-4">
+          <div className="text-center space-y-4 max-w-md">
             <EmptyState
               icon={<XCircleIcon className="h-12 w-12" />}
-              title="Unable to load jobs"
+              title="Unable to load dashboard data"
               description="We couldn't connect to the server. This might be a temporary issue."
               action={{
                 label: 'Try Again',
                 onClick: handleRefresh,
               }}
             />
-            <div className="pt-4 border-t border-border">
-              <p className="text-sm text-muted-foreground mb-3">
-                Or start fresh by creating a new job
-              </p>
-              <Button
-                variant="outline"
-                onClick={() => setJobModalOpen({ isOpen: true, jobDetails: null })}
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                Create New Job
-              </Button>
-            </div>
           </div>
         </div>
-
-        {/* Keep modal available even in error state */}
-        {jobModalOpen.isOpen && (
-          <JobModal
-            closeModal={() =>
-              setJobModalOpen({ isOpen: false, jobDetails: null })
-            }
-            jobDetails={jobModalOpen.jobDetails}
-            session={(window as any).Clerk?.session || null}
-          />
-        )}
       </AppLayout>
     );
   }
@@ -251,7 +119,7 @@ export default function Dashboard() {
         {/* Page Header */}
         <PageHeader
           title="Dashboard"
-          description="Manage your scraping jobs and view analytics"
+          description="Overview of your scraping activity and analytics"
           actions={
             <div className="flex items-center gap-2">
               <ConnectionStatus
@@ -270,15 +138,6 @@ export default function Dashboard() {
                 />
                 Refresh
               </Button>
-              <Button
-                size="sm"
-                onClick={() =>
-                  setJobModalOpen({ isOpen: true, jobDetails: null })
-                }
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                New Job
-              </Button>
             </div>
           }
         />
@@ -288,28 +147,36 @@ export default function Dashboard() {
 
         {/* Stats Cards */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <StatCard
-            title="Total Jobs"
-            value={totalJobs}
-            icon={<BriefcaseIcon className="h-5 w-5" />}
-          />
-          <StatCard
-            title="Running"
-            value={runningJobs}
-            icon={<PlayCircleIcon className="h-5 w-5" />}
-            trend={runningJobs > 0 ? 'up' : 'neutral'}
-          />
-          <StatCard
-            title="Successful"
-            value={successJobs}
-            icon={<CheckCircle2Icon className="h-5 w-5" />}
-          />
-          <StatCard
-            title="Failed"
-            value={failedJobs}
-            icon={<XCircleIcon className="h-5 w-5" />}
-            trend={failedJobs > 0 ? 'down' : 'neutral'}
-          />
+          <Link href="/dashboard/jobs" className="block">
+            <StatCard
+              title="Total Jobs"
+              value={totalJobs}
+              icon={<BriefcaseIcon className="h-5 w-5" />}
+            />
+          </Link>
+          <Link href="/dashboard/jobs?status=running" className="block">
+            <StatCard
+              title="Running"
+              value={runningJobs}
+              icon={<PlayCircleIcon className="h-5 w-5" />}
+              trend={runningJobs > 0 ? 'up' : 'neutral'}
+            />
+          </Link>
+          <Link href="/dashboard/jobs?status=success" className="block">
+            <StatCard
+              title="Successful"
+              value={successJobs}
+              icon={<CheckCircle2Icon className="h-5 w-5" />}
+            />
+          </Link>
+          <Link href="/dashboard/jobs?status=failed" className="block">
+            <StatCard
+              title="Failed"
+              value={failedJobs}
+              icon={<XCircleIcon className="h-5 w-5" />}
+              trend={failedJobs > 0 ? 'down' : 'neutral'}
+            />
+          </Link>
         </div>
 
         {/* Performance Charts */}
@@ -336,104 +203,90 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Filters */}
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="relative flex-1 max-w-sm">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Search jobs..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9"
-            />
+        {/* Quick Actions / Recent Activity */}
+        <div className="grid gap-6 lg:grid-cols-2">
+          {/* Quick Actions */}
+          <div className="rounded-2xl border border-border bg-card p-6">
+            <h3 className="text-lg font-semibold mb-4">Quick Actions</h3>
+            <div className="space-y-3">
+              <Link
+                href="/dashboard/jobs"
+                className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <BriefcaseIcon className="h-5 w-5 text-muted-foreground" />
+                  <span className="font-medium">View All Jobs</span>
+                </div>
+                <ArrowRightIcon className="h-4 w-4 text-muted-foreground" />
+              </Link>
+              <Link
+                href="/dashboard/templates"
+                className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <TrendingUpIcon className="h-5 w-5 text-muted-foreground" />
+                  <span className="font-medium">Browse Templates</span>
+                </div>
+                <ArrowRightIcon className="h-4 w-4 text-muted-foreground" />
+              </Link>
+              <Link
+                href="/dashboard/analytics"
+                className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <TrendingUpIcon className="h-5 w-5 text-muted-foreground" />
+                  <span className="font-medium">View Analytics</span>
+                </div>
+                <ArrowRightIcon className="h-4 w-4 text-muted-foreground" />
+              </Link>
+            </div>
           </div>
 
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-full sm:w-[180px]">
-              <SelectValue placeholder="Filter by status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Statuses</SelectItem>
-              <SelectItem value="running">Running</SelectItem>
-              <SelectItem value="success">Success</SelectItem>
-              <SelectItem value="failed">Failed</SelectItem>
-              <SelectItem value="paused">Paused</SelectItem>
-              <SelectItem value="scheduled">Scheduled</SelectItem>
-            </SelectContent>
-          </Select>
+          {/* Recent Activity Summary */}
+          <div className="rounded-2xl border border-border bg-card p-6">
+            <h3 className="text-lg font-semibold mb-4">Activity Summary</h3>
+            {totalJobs === 0 ? (
+              <div className="text-center py-8">
+                <BriefcaseIcon className="h-12 w-12 mx-auto text-muted-foreground/50 mb-3" />
+                <p className="text-muted-foreground">No jobs yet</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Create your first job using the sidebar
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Success Rate</span>
+                  <span className="font-semibold">
+                    {totalJobs > 0
+                      ? Math.round((successJobs / totalJobs) * 100)
+                      : 0}
+                    %
+                  </span>
+                </div>
+                <div className="w-full bg-muted rounded-full h-2">
+                  <div
+                    className="bg-green-500 h-2 rounded-full transition-all"
+                    style={{
+                      width: `${totalJobs > 0 ? (successJobs / totalJobs) * 100 : 0}%`,
+                    }}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4 pt-2">
+                  <div className="text-center p-3 rounded-lg bg-muted/50">
+                    <p className="text-2xl font-bold text-green-600">{successJobs}</p>
+                    <p className="text-xs text-muted-foreground">Completed</p>
+                  </div>
+                  <div className="text-center p-3 rounded-lg bg-muted/50">
+                    <p className="text-2xl font-bold text-blue-600">{runningJobs}</p>
+                    <p className="text-xs text-muted-foreground">In Progress</p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
-
-        {/* Jobs Grid */}
-        {filteredJobs.length === 0 ? (
-          <EmptyState
-            icon={<BriefcaseIcon className="h-12 w-12" />}
-            title={
-              searchQuery || statusFilter !== 'all'
-                ? 'No jobs found'
-                : 'No jobs yet'
-            }
-            description={
-              searchQuery || statusFilter !== 'all'
-                ? 'Try adjusting your search or filter criteria.'
-                : 'Create your first scraping job to get started.'
-            }
-            action={
-              searchQuery || statusFilter !== 'all'
-                ? {
-                    label: 'Clear Filters',
-                    onClick: () => {
-                      setSearchQuery('');
-                      setStatusFilter('all');
-                    },
-                  }
-                : {
-                    label: 'Create Job',
-                    onClick: () =>
-                      setJobModalOpen({ isOpen: true, jobDetails: null }),
-                  }
-            }
-          />
-        ) : (
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {filteredJobs.map((job) => (
-              <JobCard
-                key={job.job_id}
-                job={job}
-                onClick={() =>
-                  setJobModalOpen({ isOpen: true, jobDetails: job })
-                }
-                onPause={() => handlePauseJob(job.job_id)}
-                onResume={() => handleResumeJob(job.job_id)}
-                onDelete={() => handleDeleteJob(job.job_id)}
-                onDownload={(format) => handleDownloadJob(job.job_id, format)}
-                onPreview={() =>
-                  setPreviewModalOpen({ isOpen: true, job: job })
-                }
-              />
-            ))}
-          </div>
-        )}
       </div>
-
-      {/* Modals */}
-      {jobModalOpen.isOpen && (
-        <JobModal
-          closeModal={() =>
-            setJobModalOpen({ isOpen: false, jobDetails: null })
-          }
-          jobDetails={jobModalOpen.jobDetails}
-          session={(window as any).Clerk?.session || null}
-        />
-      )}
-
-      {previewModalOpen.isOpen && previewModalOpen.job && (
-        <ResultPreviewModal
-          jobId={previewModalOpen.job.job_id}
-          jobName={previewModalOpen.job.name}
-          token={(window as any).Clerk?.session?.lastActiveToken || null}
-          closeModal={() => setPreviewModalOpen({ isOpen: false, job: null })}
-        />
-      )}
 
       {/* Onboarding Tour */}
       <OnboardingTour />
