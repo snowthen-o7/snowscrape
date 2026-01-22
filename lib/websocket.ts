@@ -40,21 +40,25 @@ export class RealtimeClient {
    * Falls back to polling if WebSocket is unavailable
    */
   connect() {
+    // Don't attempt connection if no URL configured
+    if (!this.config.url || this.config.url === 'ws://localhost:8000/ws') {
+      console.log('[WebSocket] No WebSocket URL configured, using polling fallback');
+      this.startPolling();
+      return;
+    }
+
     // Try WebSocket first
     try {
-      this.ws = new WebSocket(this.config.url);
+      // API Gateway WebSocket requires token in query params (can't use headers)
+      const urlWithToken = `${this.config.url}?token=${encodeURIComponent(this.config.token)}`;
+      this.ws = new WebSocket(urlWithToken);
 
       this.ws.onopen = () => {
         console.log('[WebSocket] Connected');
         this.reconnectAttempts = 0;
         this.stopPolling();
 
-        // Send authentication
-        this.send({
-          type: 'auth',
-          token: this.config.token,
-        });
-
+        // No need to send auth message - already authenticated via query param
         this.connectionHandlers.forEach((handler) => handler());
       };
 
@@ -67,8 +71,10 @@ export class RealtimeClient {
         }
       };
 
-      this.ws.onerror = (error) => {
-        console.error('[WebSocket] Error:', error);
+      this.ws.onerror = () => {
+        // WebSocket errors are intentionally silent - the close handler will trigger reconnection
+        // The browser's WebSocket API doesn't expose useful error details anyway
+        console.debug('[WebSocket] Connection error, will attempt reconnection');
       };
 
       this.ws.onclose = () => {
@@ -152,7 +158,7 @@ export class RealtimeClient {
    */
   private handleDisconnection() {
     if (this.reconnectAttempts < this.config.maxReconnectAttempts!) {
-      console.log(
+      console.debug(
         `[WebSocket] Attempting reconnection (${this.reconnectAttempts + 1}/${
           this.config.maxReconnectAttempts
         })`
@@ -163,7 +169,7 @@ export class RealtimeClient {
         this.connect();
       }, this.config.reconnectInterval);
     } else {
-      console.log('[WebSocket] Max reconnection attempts reached, falling back to polling');
+      console.log('[WebSocket] Using polling for real-time updates');
       this.startPolling();
     }
   }

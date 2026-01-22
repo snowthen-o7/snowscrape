@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { UserButton, useUser } from '@clerk/nextjs';
@@ -23,6 +23,12 @@ interface AppTopNavProps {
 
 export function AppTopNav({ className, onMenuClick }: AppTopNavProps) {
   const { user } = useUser();
+  // Track if we're mounted on the client to avoid hydration mismatch
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   return (
     <header
@@ -79,23 +85,27 @@ export function AppTopNav({ className, onMenuClick }: AppTopNavProps) {
         </div>
       </div>
 
-      {/* Right side actions */}
+      {/* Right side actions - only render after mount to avoid hydration mismatch */}
       <div className="flex items-center gap-2">
-        {/* Notifications */}
-        <NotificationCenter />
+        {isMounted && (
+          <>
+            {/* Notifications */}
+            <NotificationCenter />
 
-        {/* User menu */}
-        <div className="flex items-center gap-3">
-          {user && (
-            <div className="hidden md:block text-right">
-              <p className="text-sm font-medium">{user.fullName || user.username}</p>
-              <p className="text-xs text-muted-foreground">
-                {user.primaryEmailAddress?.emailAddress}
-              </p>
+            {/* User menu */}
+            <div className="flex items-center gap-3">
+              {user && (
+                <div className="hidden md:block text-right">
+                  <p className="text-sm font-medium">{user.fullName || user.username}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {user.primaryEmailAddress?.emailAddress}
+                  </p>
+                </div>
+              )}
+              <UserButton afterSignOutUrl="/" />
             </div>
-          )}
-          <UserButton afterSignOutUrl="/" />
-        </div>
+          </>
+        )}
       </div>
     </header>
   );
