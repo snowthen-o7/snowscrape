@@ -67,7 +67,7 @@ const nextConfig = {
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
               "font-src 'self' https://fonts.gstatic.com data:",
               "img-src 'self' data: https: blob:",
-              "connect-src 'self' https://clerk.accounts.dev https://*.clerk.accounts.dev https://api.clerk.dev https://*.api.clerk.dev https://api.snowscrape.com wss://clerk.accounts.dev wss://*.clerk.accounts.dev https://*.ingest.sentry.io ws://localhost:* wss://localhost:* wss://api.snowscrape.com https://*.execute-api.us-east-2.amazonaws.com https://clerk-telemetry.com",
+              "connect-src 'self' https://clerk.accounts.dev https://*.clerk.accounts.dev https://api.clerk.dev https://*.api.clerk.dev https://api.snowscrape.com wss://clerk.accounts.dev wss://*.clerk.accounts.dev https://*.ingest.sentry.io ws://localhost:* wss://localhost:* wss://api.snowscrape.com https://*.execute-api.us-east-2.amazonaws.com wss://*.execute-api.us-east-2.amazonaws.com https://clerk-telemetry.com",
               "frame-src 'self' https://challenges.cloudflare.com https://clerk.accounts.dev https://*.clerk.accounts.dev",
               "object-src 'none'",
               "base-uri 'self'",

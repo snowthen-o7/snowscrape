@@ -1,11 +1,9 @@
 'use client';
 
-import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { PageHeader } from '@/components/PageHeader';
-import { JobModal } from '@/components/JobModal';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -49,7 +47,7 @@ const creationMethods = [
     title: 'Manual Configuration',
     description: 'Full control with custom XPath or CSS selectors',
     icon: Code,
-    action: 'modal',
+    href: '/dashboard/jobs/new/manual',
     features: ['Advanced options', 'Custom queries', 'Full flexibility'],
     recommended: false,
   },
@@ -57,12 +55,9 @@ const creationMethods = [
 
 export default function NewJobPage() {
   const router = useRouter();
-  const [showJobModal, setShowJobModal] = useState(false);
 
   const handleMethodSelect = (method: typeof creationMethods[0]) => {
-    if (method.action === 'modal') {
-      setShowJobModal(true);
-    } else if (method.href) {
+    if (method.href) {
       router.push(method.href);
     }
   };
@@ -152,8 +147,8 @@ export default function NewJobPage() {
                   <p className="text-xs text-muted-foreground mb-2">
                     Paste a URL and we&apos;ll auto-detect scrapeable content
                   </p>
-                  <Button variant="outline" size="sm" onClick={() => setShowJobModal(true)}>
-                    Try It
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href="/dashboard/jobs/new/manual">Try It</Link>
                   </Button>
                 </div>
               </div>
@@ -195,15 +190,6 @@ export default function NewJobPage() {
           </div>
         </div>
       </div>
-
-      {/* Job Modal for Manual Configuration */}
-      {showJobModal && (
-        <JobModal
-          closeModal={() => setShowJobModal(false)}
-          jobDetails={null}
-          session={(typeof window !== 'undefined' && (window as any).Clerk?.session) || null}
-        />
-      )}
     </AppLayout>
   );
 }
