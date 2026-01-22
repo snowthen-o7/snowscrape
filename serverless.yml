@@ -42,12 +42,22 @@ provider:
     DYNAMODB_WEBHOOKS_TABLE: ${self:custom.dynamoDbWebhooksTable}
     DYNAMODB_WEBHOOK_DELIVERIES_TABLE: ${self:custom.dynamoDbWebhookDeliveriesTable}
     DYNAMODB_PROXY_POOL_TABLE: ${self:custom.dynamoDbProxyPoolTable}
+    DYNAMODB_CONNECTIONS_TABLE: ${self:custom.dynamoDbConnectionsTable}
     REGION: ${self:provider.region}
     S3_BUCKET: ${self:custom.s3Bucket}
     SQS_JOB_QUEUE: ${self:custom.sqsJobQueue}
     SQS_JOB_QUEUE_URL: ${self:custom.sqsJobQueueUrl}
     SQS_WEBHOOK_QUEUE: ${self:custom.sqsWebhookQueue}
     SQS_WEBHOOK_QUEUE_URL: ${self:custom.sqsWebhookQueueUrl}
+    # WebSocket API configuration
+    WS_API_DOMAIN:
+      Fn::Join:
+        - ''
+        - - Ref: WebsocketsApi
+          - '.execute-api.'
+          - ${self:provider.region}
+          - '.amazonaws.com'
+    WS_API_STAGE: ${self:provider.stage}
     # Observatory integration for centralized monitoring
     SNOWGLOBE_URL: ${self:custom.snowglobeUrl}
     SNOWGLOBE_API_KEY: ${env:SNOWGLOBE_API_KEY, ''}  # Set via environment variable (optional)
@@ -97,6 +107,18 @@ provider:
         - "dynamodb:*"
       Resource:
         - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.dynamoDbProxyPoolTable}"
+
+    - Effect: "Allow"
+      Action:
+        - "dynamodb:*"
+      Resource:
+        - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.dynamoDbConnectionsTable}"
+
+    - Effect: "Allow"
+      Action:
+        - "execute-api:ManageConnections"
+      Resource:
+        - "arn:aws:execute-api:${self:provider.region}:*:*/@connections/*"
 
     - Effect: "Allow"
       Action:
@@ -493,6 +515,37 @@ functions:
   #     PLAYWRIGHT_BROWSERS_PATH: /tmp/ms-playwright
   #   maximumRetryAttempts: 0
 
+  # WebSocket API Handlers
+  wsConnect:
+    name: snowscrape-ws-connect
+    handler: websocket_handler.ws_connect_handler
+    timeout: 10
+    memorySize: 256
+    events:
+      - websocket:
+          route: $connect
+    maximumRetryAttempts: 0
+
+  wsDisconnect:
+    name: snowscrape-ws-disconnect
+    handler: websocket_handler.ws_disconnect_handler
+    timeout: 10
+    memorySize: 256
+    events:
+      - websocket:
+          route: $disconnect
+    maximumRetryAttempts: 0
+
+  wsDefault:
+    name: snowscrape-ws-default
+    handler: websocket_handler.ws_default_handler
+    timeout: 10
+    memorySize: 256
+    events:
+      - websocket:
+          route: $default
+    maximumRetryAttempts: 0
+
 resources:
   Resources:
     JobsDynamoDbTable:
@@ -648,6 +701,22 @@ resources:
         BillingMode: PAY_PER_REQUEST
         PointInTimeRecoverySpecification:
           PointInTimeRecoveryEnabled: true
+
+    # WebSocket Connections Table
+    ConnectionsDynamoDbTable:
+      Type: "AWS::DynamoDB::Table"
+      Properties:
+        TableName: ${self:custom.dynamoDbConnectionsTable}
+        AttributeDefinitions:
+          - AttributeName: connection_id  # Primary key (WebSocket connection ID)
+            AttributeType: S
+        KeySchema:
+          - AttributeName: connection_id
+            KeyType: HASH
+        BillingMode: PAY_PER_REQUEST
+        TimeToLiveSpecification:
+          AttributeName: ttl
+          Enabled: true  # Auto-delete stale connections after 24 hours
 
     # Dead Letter Queue for failed webhooks
     WebhookDeadLetterQueue:
@@ -1166,6 +1235,7 @@ custom:
   dynamoDbWebhooksTable: SnowscrapeWebhooks
   dynamoDbWebhookDeliveriesTable: SnowscrapeWebhookDeliveries
   dynamoDbProxyPoolTable: SnowscrapeProxyPool
+  dynamoDbConnectionsTable: SnowscrapeConnections
   s3Bucket: snowscrape-results-${env:AWS_ACCOUNT_ID, '282128795857'}-${self:provider.region}
   sqsJobQueue: SnowscrapeJobQueue
   sqsJobQueueUrl: https://sqs.us-east-2.amazonaws.com/282128795857/SnowscrapeJobQueue
