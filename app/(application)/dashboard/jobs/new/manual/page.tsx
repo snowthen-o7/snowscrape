@@ -26,11 +26,16 @@ import {
   FileOutput,
   Bell,
   Shield,
+  Link,
+  FileText,
+  AlertCircle,
+  CheckCircle2,
 } from 'lucide-react';
-import { FormData, FileMapping, Query, Scheduling, Template, ProxyConfig, RenderConfig, ExportConfig, NotificationConfig } from '@/lib/types';
+import { FormData, FileMapping, Query, Scheduling, Template, ProxyConfig, RenderConfig, ExportConfig, NotificationConfig, SourceType, URLPreviewResponse, COMMON_TIMEZONES } from '@/lib/types';
 import { validateQueries, validateHTTP, validateSFTP } from '@/lib/utils';
 import { toast } from '@/lib/toast';
 import { TemplateModal } from '@/components/TemplateModal';
+import { QueryTypeHelpButton } from '@/components/QueryTypeHelp';
 
 export default function ManualConfigurationPage() {
   const router = useRouter();
@@ -38,7 +43,10 @@ export default function ManualConfigurationPage() {
   const [formData, setFormData] = useState<FormData>({
     name: '',
     rate_limit: 1,
+    source_type: 'csv' as SourceType,
     source: '',
+    url_template: '',
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',  // Default to browser timezone
     file_mapping: { delimiter: ',', enclosure: '', escape: '', url_column: '' } as FileMapping,
     scheduling: { days: [], hours: [], minutes: [] } as Scheduling,
     queries: [{ name: '', type: 'xpath', query: '', join: false }] as Query[],
@@ -86,7 +94,18 @@ export default function ManualConfigurationPage() {
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
   const [token, setToken] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [urlPreview, setUrlPreview] = useState<URLPreviewResponse | null>(null);
+  const [urlPreviewLoading, setUrlPreviewLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState('basics');
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string | null>>({});
   const maxQueries = 10;
+
+  // Helper to clear a field error when user starts typing
+  const clearFieldError = (field: string) => {
+    if (fieldErrors[field]) {
+      setFieldErrors(prev => ({ ...prev, [field]: null }));
+    }
+  };
 
   useEffect(() => {
     const fetchToken = async () => {
@@ -128,6 +147,38 @@ export default function ManualConfigurationPage() {
     }
   };
 
+  const previewUrlTemplate = async () => {
+    if (!formData.url_template) {
+      setUrlPreview(null);
+      return;
+    }
+    setUrlPreviewLoading(true);
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/preview-url`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          url_template: formData.url_template,
+          timezone: formData.timezone,
+        }),
+      });
+      const data = await response.json();
+      setUrlPreview(data);
+      if (data.valid) {
+        setSourceError(null);
+      } else {
+        setSourceError(data.error);
+      }
+    } catch (error) {
+      setUrlPreview(null);
+      setSourceError((error as Error).message);
+    } finally {
+      setUrlPreviewLoading(false);
+    }
+  };
+
   const handleInputChange = (field: keyof FormData, value: string | number) => {
     setFormData({ ...formData, [field]: value });
   };
@@ -146,8 +197,9 @@ export default function ManualConfigurationPage() {
     } else if (field === 'join') {
       updatedQueries[index][field] = value as boolean;
     } else if (field === 'type') {
-      if (value === 'xpath' || value === 'regex' || value === 'jsonpath') {
-        updatedQueries[index][field] = value;
+      const validTypes = ['xpath', 'regex', 'jsonpath', 'pdf_text', 'pdf_table', 'pdf_metadata'];
+      if (validTypes.includes(value as string)) {
+        updatedQueries[index][field] = value as Query['type'];
       }
     }
     setFormData({ ...formData, queries: updatedQueries });
@@ -197,17 +249,64 @@ export default function ManualConfigurationPage() {
   };
 
   const handleSubmit = async () => {
-    if (!formData.file_mapping.url_column) {
-      setSourceError("Please select a URL column.");
-      toast.error("Please select a URL column.");
+    // Clear previous field errors
+    setFieldErrors({});
+
+    // Validate job name
+    if (!formData.name || formData.name.trim() === '') {
+      setFieldErrors(prev => ({ ...prev, name: "Please enter a job name." }));
+      toast.error("Please enter a job name.");
+      setActiveTab('basics');
       return;
     }
 
+    // Validation based on source type - switch to basics tab if there are errors
+    if (formData.source_type === 'csv') {
+      if (!formData.source) {
+        setFieldErrors(prev => ({ ...prev, source: "Please enter a source URL." }));
+        setSourceError("Please enter a source URL.");
+        toast.error("Please enter a source URL.");
+        setActiveTab('basics');
+        return;
+      }
+      if (!formData.file_mapping.url_column || formData.file_mapping.url_column === '') {
+        setFieldErrors(prev => ({ ...prev, url_column: "Please select a URL column." }));
+        setSourceError("Please select a URL column.");
+        toast.error("Please select a URL column.");
+        setActiveTab('basics');
+        return;
+      }
+    } else {
+      // direct_url mode
+      if (!formData.url_template) {
+        setFieldErrors(prev => ({ ...prev, url_template: "Please enter a URL template." }));
+        setSourceError("Please enter a URL template.");
+        toast.error("Please enter a URL template.");
+        setActiveTab('basics');
+        return;
+      }
+      if (urlPreview && !urlPreview.valid) {
+        setFieldErrors(prev => ({ ...prev, url_template: urlPreview.error || "Invalid URL template." }));
+        setSourceError(urlPreview.error || "Invalid URL template.");
+        toast.error(urlPreview.error || "Invalid URL template.");
+        setActiveTab('basics');
+        return;
+      }
+    }
+
+    // Validate queries - switch to queries tab if there are errors
     const queryValidationErrors = await validateQueries(formData.queries);
     setQueryErrors(queryValidationErrors);
     const queriesAreValid = queryValidationErrors.every(error => error === null);
 
-    if (!queriesAreValid || sourceError) {
+    if (!queriesAreValid) {
+      toast.error("Please fix the query errors before submitting.");
+      setActiveTab('queries');
+      return;
+    }
+
+    if (sourceError) {
+      setActiveTab('basics');
       return;
     }
 
@@ -225,13 +324,33 @@ export default function ManualConfigurationPage() {
         throw new Error("Session is null or token is unavailable");
       }
 
+      // Build submission data based on source type
+      const submitData = {
+        name: formData.name,
+        rate_limit: formData.rate_limit,
+        source_type: formData.source_type,
+        queries: formData.queries,
+        scheduling: sortedScheduling,
+        proxy_config: formData.proxy_config,
+        render_config: formData.render_config,
+        export_config: formData.export_config,
+        notification_config: formData.notification_config,
+        ...(formData.source_type === 'csv' ? {
+          source: formData.source,
+          file_mapping: formData.file_mapping,
+        } : {
+          url_template: formData.url_template,
+          timezone: formData.timezone,
+        }),
+      };
+
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/jobs`, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ ...formData, scheduling: sortedScheduling }),
+        body: JSON.stringify(submitData),
       });
 
       if (!response.ok) {
@@ -330,7 +449,7 @@ export default function ManualConfigurationPage() {
         </div>
 
         {/* Form Tabs */}
-        <Tabs defaultValue="basics" className="space-y-6">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="basics" className="flex items-center gap-2">
               <Settings className="h-4 w-4" />
@@ -373,8 +492,13 @@ export default function ManualConfigurationPage() {
                       id="name"
                       placeholder="My Scraping Job"
                       value={formData.name}
-                      onChange={e => handleInputChange('name', e.target.value)}
+                      onChange={e => {
+                        handleInputChange('name', e.target.value);
+                        clearFieldError('name');
+                      }}
+                      className={fieldErrors.name ? 'border-red-500 focus-visible:ring-red-500' : ''}
                     />
+                    {fieldErrors.name && <p className="text-sm text-destructive">{fieldErrors.name}</p>}
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="rateLimit">Rate Limit (requests/second)</Label>
@@ -389,101 +513,266 @@ export default function ManualConfigurationPage() {
                     />
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="sourceUrl">Source URL</Label>
-                  <div className="relative">
-                    <Input
-                      id="sourceUrl"
-                      placeholder="https://example.com/data.csv or sftp://..."
-                      value={formData.source}
-                      onChange={e => handleInputChange('source', e.target.value)}
-                      onBlur={validateSource}
-                    />
-                    {sourceLoading && (
-                      <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
-                        <Loader2 className="h-4 w-4 text-brand-accent animate-spin" />
+
+                {/* Source Type Toggle */}
+                <div className="space-y-3">
+                  <Label>Source Type</Label>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant={formData.source_type === 'csv' ? 'default' : 'outline'}
+                      className="flex items-center gap-2"
+                      onClick={() => {
+                        setFormData({ ...formData, source_type: 'csv' });
+                        setSourceError(null);
+                        setUrlPreview(null);
+                      }}
+                    >
+                      <FileText className="h-4 w-4" />
+                      CSV File
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={formData.source_type === 'direct_url' ? 'default' : 'outline'}
+                      className="flex items-center gap-2"
+                      onClick={() => {
+                        setFormData({ ...formData, source_type: 'direct_url' });
+                        setSourceError(null);
+                      }}
+                    >
+                      <Link className="h-4 w-4" />
+                      Direct URL
+                    </Button>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    {formData.source_type === 'csv'
+                      ? 'Parse URLs from a CSV file hosted on HTTP/HTTPS or SFTP'
+                      : 'Use a single URL with optional date/time variables (e.g., {{date:Y-m-d}})'}
+                  </p>
+                </div>
+
+                {/* CSV Source Mode */}
+                {formData.source_type === 'csv' && (
+                  <div className="space-y-2">
+                    <Label htmlFor="sourceUrl">Source URL</Label>
+                    <div className="relative">
+                      <Input
+                        id="sourceUrl"
+                        placeholder="https://example.com/data.csv or sftp://..."
+                        value={formData.source}
+                        onChange={e => {
+                          handleInputChange('source', e.target.value);
+                          clearFieldError('source');
+                        }}
+                        onBlur={validateSource}
+                        className={fieldErrors.source ? 'border-red-500 focus-visible:ring-red-500' : ''}
+                      />
+                      {sourceLoading && (
+                        <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
+                          <Loader2 className="h-4 w-4 text-brand-accent animate-spin" />
+                        </div>
+                      )}
+                    </div>
+                    {sourceError && <p className="text-sm text-destructive">{sourceError}</p>}
+                    {sourceLoading && <p className="text-sm text-muted-foreground">Validating source URL...</p>}
+                  </div>
+                )}
+
+                {/* Direct URL Mode */}
+                {formData.source_type === 'direct_url' && (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2 md:col-span-2">
+                        <Label htmlFor="urlTemplate">URL Template</Label>
+                        <div className="relative">
+                          <Input
+                            id="urlTemplate"
+                            placeholder="https://example.com/report_{{date:Y-m-d}}.pdf"
+                            value={formData.url_template}
+                            onChange={e => {
+                              setFormData({ ...formData, url_template: e.target.value });
+                              setUrlPreview(null);
+                              clearFieldError('url_template');
+                            }}
+                            onBlur={previewUrlTemplate}
+                            className={fieldErrors.url_template ? 'border-red-500 focus-visible:ring-red-500' : ''}
+                          />
+                          {urlPreviewLoading && (
+                            <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
+                              <Loader2 className="h-4 w-4 text-brand-accent animate-spin" />
+                            </div>
+                          )}
+                        </div>
+                        {sourceError && <p className="text-sm text-destructive">{sourceError}</p>}
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="timezone">Timezone</Label>
+                        <Select
+                          value={formData.timezone}
+                          onValueChange={value => {
+                            setFormData({ ...formData, timezone: value });
+                            setUrlPreview(null);
+                            // Trigger preview with new timezone
+                            if (formData.url_template) {
+                              setTimeout(previewUrlTemplate, 100);
+                            }
+                          }}
+                        >
+                          <SelectTrigger id="timezone">
+                            <SelectValue placeholder="Select timezone" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {COMMON_TIMEZONES.map((tz) => (
+                              <SelectItem key={tz} value={tz}>{tz}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                          Date/time variables will be resolved in this timezone
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* URL Preview */}
+                    {urlPreview && (
+                      <div className={`p-4 rounded-lg border ${urlPreview.valid ? 'border-green-500/30 bg-green-500/5' : 'border-red-500/30 bg-red-500/5'}`}>
+                        <div className="flex items-start gap-2">
+                          {urlPreview.valid ? (
+                            <CheckCircle2 className="h-5 w-5 text-green-500 mt-0.5" />
+                          ) : (
+                            <AlertCircle className="h-5 w-5 text-red-500 mt-0.5" />
+                          )}
+                          <div className="space-y-1 flex-1">
+                            <p className="text-sm font-medium">
+                              {urlPreview.valid ? 'URL Preview' : 'Invalid Template'}
+                            </p>
+                            {urlPreview.valid ? (
+                              <>
+                                <p className="text-sm text-muted-foreground break-all">
+                                  {urlPreview.resolved}
+                                </p>
+                                {urlPreview.variables && urlPreview.variables.length > 0 && (
+                                  <p className="text-xs text-muted-foreground mt-2">
+                                    Variables: {urlPreview.variables.map(v =>
+                                      `{{${v.type}${v.offset || ''}${v.format ? ':' + v.format : ''}}}`
+                                    ).join(', ')}
+                                  </p>
+                                )}
+                              </>
+                            ) : (
+                              <p className="text-sm text-red-500">{urlPreview.error}</p>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     )}
+
+                    {/* Variable Syntax Help */}
+                    <div className="p-4 rounded-lg bg-muted/50 border">
+                      <p className="text-sm font-medium mb-2">Supported Variables</p>
+                      <div className="text-xs text-muted-foreground space-y-1">
+                        <p><code className="bg-muted px-1 rounded">{`{{date}}`}</code> - Current date (YYYY-MM-DD)</p>
+                        <p><code className="bg-muted px-1 rounded">{`{{date:Y-m-d}}`}</code> - Custom format (2026-01-22)</p>
+                        <p><code className="bg-muted px-1 rounded">{`{{date:m/d/Y}}`}</code> - US format (01/22/2026)</p>
+                        <p><code className="bg-muted px-1 rounded">{`{{date+1d:Y-m-d}}`}</code> - Tomorrow&apos;s date</p>
+                        <p><code className="bg-muted px-1 rounded">{`{{date-1d:Y-m-d}}`}</code> - Yesterday&apos;s date</p>
+                        <p><code className="bg-muted px-1 rounded">{`{{time:H_i}}`}</code> - Current time (20_00)</p>
+                      </div>
+                    </div>
                   </div>
-                  {sourceError && <p className="text-sm text-destructive">{sourceError}</p>}
-                  {sourceLoading && <p className="text-sm text-muted-foreground">Validating source URL...</p>}
-                </div>
+                )}
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>File Mapping</CardTitle>
-                <CardDescription>Configure how to parse the source file</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="delimiter">Delimiter</Label>
-                    <Select value={formData.file_mapping.delimiter} onValueChange={value => handleFileMappingChange('delimiter', value)}>
-                      <SelectTrigger id="delimiter">
-                        <SelectValue placeholder="Select delimiter" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value=",">,</SelectItem>
-                        <SelectItem value=";">;</SelectItem>
-                        <SelectItem value="|">|</SelectItem>
-                        <SelectItem value="\t">Tab</SelectItem>
-                      </SelectContent>
-                    </Select>
+            {/* File Mapping - Only shown for CSV mode */}
+            {formData.source_type === 'csv' && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>File Mapping</CardTitle>
+                  <CardDescription>Configure how to parse the source file</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="delimiter">Delimiter</Label>
+                      <Select value={formData.file_mapping.delimiter} onValueChange={value => handleFileMappingChange('delimiter', value)}>
+                        <SelectTrigger id="delimiter">
+                          <SelectValue placeholder="Select delimiter" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value=",">,</SelectItem>
+                          <SelectItem value=";">;</SelectItem>
+                          <SelectItem value="|">|</SelectItem>
+                          <SelectItem value="\t">Tab</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="enclosure">Enclosure</Label>
+                      <Select value={formData.file_mapping.enclosure} onValueChange={value => handleFileMappingChange('enclosure', value)}>
+                        <SelectTrigger id="enclosure">
+                          <SelectValue placeholder="Select enclosure" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value='"'>&quot;</SelectItem>
+                          <SelectItem value="'">&apos;</SelectItem>
+                          <SelectItem value="none">None</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="escape">Escape Character</Label>
+                      <Select value={formData.file_mapping.escape} onValueChange={value => handleFileMappingChange('escape', value)}>
+                        <SelectTrigger id="escape">
+                          <SelectValue placeholder="Select escape" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="\\">\\</SelectItem>
+                          <SelectItem value="/">/</SelectItem>
+                          <SelectItem value='"'>&quot;</SelectItem>
+                          <SelectItem value="none">None</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="urlColumn">URL Column</Label>
+                      <Select
+                        value={formData.file_mapping.url_column}
+                        onValueChange={value => {
+                          handleFileMappingChange('url_column', value);
+                          clearFieldError('url_column');
+                        }}
+                      >
+                        <SelectTrigger id="urlColumn" className={fieldErrors.url_column ? 'border-red-500 focus:ring-red-500' : ''}>
+                          <SelectValue placeholder="Select URL column" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="default">Default (Auto-detect)</SelectItem>
+                          {headers.map((header, index) => (
+                            <SelectItem key={index} value={header}>{header}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {fieldErrors.url_column && <p className="text-sm text-destructive">{fieldErrors.url_column}</p>}
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="enclosure">Enclosure</Label>
-                    <Select value={formData.file_mapping.enclosure} onValueChange={value => handleFileMappingChange('enclosure', value)}>
-                      <SelectTrigger id="enclosure">
-                        <SelectValue placeholder="Select enclosure" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value='"'>&quot;</SelectItem>
-                        <SelectItem value="'">&apos;</SelectItem>
-                        <SelectItem value="none">None</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="escape">Escape Character</Label>
-                    <Select value={formData.file_mapping.escape} onValueChange={value => handleFileMappingChange('escape', value)}>
-                      <SelectTrigger id="escape">
-                        <SelectValue placeholder="Select escape" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="\\">\\</SelectItem>
-                        <SelectItem value="/">/</SelectItem>
-                        <SelectItem value='"'>&quot;</SelectItem>
-                        <SelectItem value="none">None</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="urlColumn">URL Column</Label>
-                    <Select value={formData.file_mapping.url_column} onValueChange={value => handleFileMappingChange('url_column', value)}>
-                      <SelectTrigger id="urlColumn">
-                        <SelectValue placeholder="Select URL column" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="default">Default (Auto-detect)</SelectItem>
-                        {headers.map((header, index) => (
-                          <SelectItem key={index} value={header}>{header}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
 
           {/* Queries Tab */}
           <TabsContent value="queries" className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Data Queries</CardTitle>
-                <CardDescription>Define XPath, Regex, or JSONPath queries to extract data</CardDescription>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Data Queries</CardTitle>
+                    <CardDescription>Define queries to extract data from HTML, JSON, or PDF content</CardDescription>
+                  </div>
+                  <QueryTypeHelpButton />
+                </div>
               </CardHeader>
               <CardContent className="space-y-4">
                 {formData.queries.map((query, index) => (
@@ -520,20 +809,47 @@ export default function ManualConfigurationPage() {
                             <SelectValue placeholder="Select type" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="xpath">XPath</SelectItem>
-                            <SelectItem value="regex">Regex</SelectItem>
-                            <SelectItem value="jsonpath">JSONPath</SelectItem>
+                            <SelectItem value="xpath">XPath (HTML)</SelectItem>
+                            <SelectItem value="regex">Regex (Text)</SelectItem>
+                            <SelectItem value="jsonpath">JSONPath (JSON)</SelectItem>
+                            <SelectItem value="pdf_table">PDF Table</SelectItem>
+                            <SelectItem value="pdf_text">PDF Text</SelectItem>
+                            <SelectItem value="pdf_metadata">PDF Metadata</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
                       <div className="md:col-span-2 space-y-2">
-                        <Label htmlFor={`queryExpression-${index}`}>Expression</Label>
+                        <Label htmlFor={`queryExpression-${index}`}>
+                          {query.type.startsWith('pdf_') ? 'Expression (Optional)' : 'Expression'}
+                        </Label>
                         <Input
                           id={`queryExpression-${index}`}
-                          placeholder={query.type === 'xpath' ? '//div[@class="price"]/text()' : query.type === 'regex' ? '\\$([\\d.]+)' : '$.data.price'}
+                          placeholder={
+                            query.type === 'xpath' ? '//div[@class="price"]/text()' :
+                            query.type === 'regex' ? '\\$([\\d.]+)' :
+                            query.type === 'jsonpath' ? '$.data.price' :
+                            query.type === 'pdf_table' ? 'Column name to extract (optional)' :
+                            query.type === 'pdf_text' ? 'Regex pattern to apply (optional)' :
+                            ''
+                          }
                           value={query.query}
                           onChange={e => handleQueryChange(index, 'query', e.target.value)}
                         />
+                        {query.type === 'pdf_table' && (
+                          <p className="text-xs text-muted-foreground">
+                            Leave empty to extract all columns. Enter a column name to extract only that column.
+                          </p>
+                        )}
+                        {query.type === 'pdf_text' && (
+                          <p className="text-xs text-muted-foreground">
+                            Leave empty to extract all text. Enter a regex pattern to extract specific data.
+                          </p>
+                        )}
+                        {query.type === 'pdf_metadata' && (
+                          <p className="text-xs text-muted-foreground">
+                            Extracts PDF metadata (title, author, page count, etc.)
+                          </p>
+                        )}
                         {queryErrors[index] && <p className="text-sm text-destructive">{queryErrors[index]}</p>}
                       </div>
                       <div className="flex items-center space-x-2">

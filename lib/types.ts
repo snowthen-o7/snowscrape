@@ -1,5 +1,7 @@
 // types.ts
 
+export type SourceType = 'csv' | 'direct_url';
+
 export interface FileMapping {
   delimiter: string;
   enclosure: string;
@@ -10,8 +12,11 @@ export interface FileMapping {
 export interface FormData {
   name: string;
   rate_limit: number;
-  source: string;
-  file_mapping: FileMapping;
+  source_type: SourceType;
+  source: string;            // Required for CSV mode
+  url_template: string;      // Required for direct_url mode
+  timezone: string;          // Timezone for direct_url mode (e.g., 'America/New_York')
+  file_mapping: FileMapping; // Required for CSV mode
   scheduling: Scheduling;
   queries: Query[];
   proxy_config?: ProxyConfig;
@@ -22,14 +27,17 @@ export interface FormData {
 
 export interface Job {
   created_at: string;
-  file_mapping: FileMapping;
+  file_mapping?: FileMapping;   // Optional: only for CSV mode
   job_id: string;
   link_count: number;
   name: string;
   queries: Query[];
   rate_limit: number;
   scheduling: Scheduling;
-  source: string;
+  source_type?: SourceType;     // 'csv' or 'direct_url' (defaults to 'csv')
+  source?: string;              // Optional: only for CSV mode
+  url_template?: string;        // Optional: only for direct_url mode
+  timezone?: string;            // Optional: timezone for direct_url mode
   status: string;
   user_id: string;
   results_s3_key?: string;
@@ -46,11 +54,20 @@ export interface JobDetailsModalProps {
   token: string; // Assuming `token` is a string
 }
 
+export type QueryType = 'xpath' | 'regex' | 'jsonpath' | 'pdf_text' | 'pdf_table' | 'pdf_metadata';
+
+export interface PdfConfig {
+  page_range?: [number, number];  // [start, end] page indices (0-based)
+  table_index?: number;           // Specific table index to extract
+  flatten?: boolean;              // Flatten table rows to list
+}
+
 export interface Query {
   join: boolean;
   name: string;
   query: string;
-  type: 'xpath' | 'regex' | 'jsonpath';
+  type: QueryType;
+  pdf_config?: PdfConfig;  // Optional PDF-specific configuration
 }
 
 export interface Scheduling {
@@ -134,3 +151,56 @@ export interface NotificationConfig {
   webhook_on_failure?: boolean;
   webhook_url?: string | null;
 }
+
+export interface URLVariable {
+  type: 'date' | 'time';
+  offset: string | null;
+  format: string | null;
+}
+
+export interface URLPreviewResponse {
+  valid: boolean;
+  error: string | null;
+  template: string;
+  resolved: string | null;
+  variables: URLVariable[];
+  timezone?: string;
+  resolved_at?: string;
+}
+
+// Common timezones for UI dropdown
+export const COMMON_TIMEZONES = [
+  'UTC',
+  // US
+  'America/New_York',      // Eastern
+  'America/Chicago',       // Central
+  'America/Denver',        // Mountain
+  'America/Los_Angeles',   // Pacific
+  'America/Anchorage',     // Alaska
+  'Pacific/Honolulu',      // Hawaii
+  // Europe
+  'Europe/London',
+  'Europe/Paris',
+  'Europe/Berlin',
+  'Europe/Rome',
+  'Europe/Madrid',
+  'Europe/Amsterdam',
+  // Asia
+  'Asia/Tokyo',
+  'Asia/Shanghai',
+  'Asia/Hong_Kong',
+  'Asia/Singapore',
+  'Asia/Seoul',
+  'Asia/Dubai',
+  'Asia/Kolkata',
+  // Australia
+  'Australia/Sydney',
+  'Australia/Melbourne',
+  'Australia/Perth',
+  // Other
+  'Pacific/Auckland',
+  'America/Toronto',
+  'America/Vancouver',
+  'America/Mexico_City',
+  'America/Sao_Paulo',
+] as const;
