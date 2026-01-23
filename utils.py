@@ -27,8 +27,9 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from io import StringIO
 from requests.sessions import Session
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional
 from urllib.parse import urlparse
+from url_variable_resolver import URLVariableResolver
 
 # Use connection pool for AWS services
 s3 = get_s3_client()
@@ -336,7 +337,8 @@ def fetch_url_with_session(url: str, session: Session, job_id: str, proxy_config
 				return {
 					'status': 'success',
 					'content': body['content'].encode('utf-8'),
-					'http_code': 200
+					'http_code': 200,
+					'content_type': body.get('content_type', 'text/html')
 				}
 			else:
 				error_msg = body.get('error', 'Unknown rendering error')
@@ -377,7 +379,7 @@ def fetch_url_with_session(url: str, session: Session, job_id: str, proxy_config
 					except Exception as e:
 						print(f"[Job {job_id}] Failed to track proxy usage: {str(e)}")
 
-				return {"status": "success", "content": response.content, "http_code": response.status_code}
+				return {"status": "success", "content": response.content, "http_code": response.status_code, "content_type": response.headers.get('Content-Type', '')}
 
 			# Proxy errors - rotate and retry
 			if response.status_code in [407, 502, 504] and attempt < max_retries - 1:
@@ -785,6 +787,99 @@ def refresh_job_urls(job_id, links):
 		print(f"Successfully refreshed URLs for job {job_id}")
 	except Exception as e:
 		print(f"Error refreshing URLs for job {job_id}: {e}")
+
+
+def resolve_direct_url(url_template: str, exec_time: Optional[datetime] = None, tz: Optional[str] = None) -> str:
+	"""
+	Resolve a URL template with dynamic variables.
+
+	Supports PHP-style date format variables:
+	- {{date}} -> 2026-01-22 (default Y-m-d format)
+	- {{date:Y-m-d}} -> 2026-01-22
+	- {{date:m/d/Y}} -> 01/22/2026
+	- {{date+1d:Y-m-d}} -> tomorrow's date
+	- {{date-1d:Y-m-d}} -> yesterday's date
+	- {{time:H_i}} -> 20_00
+
+	Args:
+		url_template: URL template containing {{date}} or {{time}} variables
+		exec_time: Optional datetime for resolution (defaults to current UTC time)
+		tz: Optional timezone name (e.g., 'America/New_York'). If None, uses UTC.
+
+	Returns:
+		The resolved URL with all variables replaced
+	"""
+	if exec_time is None:
+		exec_time = datetime.now(timezone.utc)
+
+	return URLVariableResolver.resolve(url_template, exec_time, tz)
+
+
+def get_links_for_job(job_data: dict, exec_time: Optional[datetime] = None) -> List[str]:
+	"""
+	Get links for a job based on its source type.
+
+	Supports two source types:
+	- 'csv': Parse URLs from a CSV file (traditional mode)
+	- 'direct_url': Use a single URL template with optional variables
+
+	Args:
+		job_data: Job configuration dictionary containing source_type and either
+		          source (for CSV) or url_template (for direct URL)
+		exec_time: Optional datetime for variable resolution
+
+	Returns:
+		List of URLs to process
+	"""
+	source_type = job_data.get('source_type', 'csv')
+
+	if source_type == 'direct_url':
+		# Direct URL mode - resolve template and return single URL
+		url_template = job_data.get('url_template', '')
+		if not url_template:
+			raise ValueError("url_template is required for direct_url source type")
+
+		# Get timezone from job data
+		tz = job_data.get('timezone')
+
+		resolved_url = resolve_direct_url(url_template, exec_time, tz)
+		print(f"Resolved URL template: {url_template} -> {resolved_url} (timezone: {tz or 'UTC'})")
+		return [resolved_url]
+
+	else:
+		# CSV mode - parse URLs from source file
+		source = job_data.get('source', '')
+		file_mapping = job_data.get('file_mapping', {})
+
+		if not source:
+			raise ValueError("source is required for csv source type")
+
+		return parse_links_from_file(file_mapping, source)
+
+
+def preview_url_template(url_template: str, exec_time: Optional[datetime] = None, tz: Optional[str] = None) -> dict:
+	"""
+	Preview a URL template resolution without creating a job.
+
+	Args:
+		url_template: URL template to preview
+		exec_time: Optional datetime for resolution
+		tz: Optional timezone name (e.g., 'America/New_York'). If None, uses UTC.
+
+	Returns:
+		Dictionary with preview information including resolved URL and variables
+	"""
+	return URLVariableResolver.preview(url_template, exec_time, tz)
+
+
+def get_common_timezones() -> List[str]:
+	"""
+	Get list of common timezones for UI dropdown.
+
+	Returns:
+		List of timezone strings
+	"""
+	return URLVariableResolver.get_common_timezones()
 
 def update_job_status(job_id: str, status: str) -> None:
 	"""

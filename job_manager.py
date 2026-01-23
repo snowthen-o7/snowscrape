@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from logger import get_logger, log_exception
 from metrics import get_metrics_emitter
 from typing import Any, Dict
-from utils import decimal_to_float, delete_job_links, fetch_url_with_session, fetch_urls_for_job, initialize_session, parse_links_from_file, save_results_to_s3, save_session_data, update_job_status, update_url_status, validate_job_data
+from utils import decimal_to_float, delete_job_links, fetch_url_with_session, fetch_urls_for_job, get_links_for_job, initialize_session, parse_links_from_file, save_results_to_s3, save_session_data, update_job_status, update_url_status, validate_job_data
 from webhook_dispatcher import WebhookDispatcher
 
 # Initialize logger and metrics
@@ -25,9 +25,20 @@ url_table = get_table(os.environ['DYNAMODB_URLS_TABLE'])
 # Create a new job in DynamoDB
 def create_job(job_data):
 	try:
-		# Parse the list of URLs from the external source
-		logger.info("Parsing source file for URLs", source=job_data['source'])
-		links = parse_links_from_file(job_data['file_mapping'], job_data['source'])
+		# Determine source type (csv or direct_url)
+		source_type = job_data.get('source_type', 'csv')
+
+		# Get links based on source type
+		if source_type == 'direct_url':
+			# Direct URL mode - use URL template
+			url_template = job_data.get('url_template', '')
+			logger.info("Using direct URL mode", url_template=url_template)
+			links = get_links_for_job(job_data)
+		else:
+			# CSV mode - parse URLs from source file
+			logger.info("Parsing source file for URLs", source=job_data.get('source'))
+			links = get_links_for_job(job_data)
+
 		logger.info("URLs parsed successfully", url_count=len(links))
 
 		# Assign a job_id if it doesn't exist
@@ -40,7 +51,6 @@ def create_job(job_data):
 		# Ensure all necessary fields are present in job_data and add defaults if needed
 		job_item = {
 			'created_at': job_data.get('created_at', datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')),
-			'file_mapping': job_data['file_mapping'],
 			'job_id': job_data['job_id'],
 			'last_run': None,
 			'link_count': len(links),
@@ -49,7 +59,7 @@ def create_job(job_data):
 			'rate_limit': job_data['rate_limit'],
 			'results_s3_key': None,
 			'scheduling': job_data.get('scheduling', None),
-			'source': job_data['source'],
+			'source_type': source_type,
 			'status': job_data.get('status', 'ready'),  # Default job status
 			'user_id': job_data['user_id'],
 			'proxy_config': job_data.get('proxy_config', {
@@ -70,6 +80,15 @@ def create_job(job_data):
 				'fallback_to_standard': True
 			}),
 		}
+
+		# Add source-type specific fields
+		if source_type == 'direct_url':
+			job_item['url_template'] = job_data.get('url_template', '')
+			job_item['timezone'] = job_data.get('timezone', 'UTC')
+			# file_mapping and source not required for direct_url mode
+		else:
+			job_item['file_mapping'] = job_data['file_mapping']
+			job_item['source'] = job_data['source']
 
 		# Insert job data into DynamoDB
 		logger.info("Creating job in DynamoDB", job_id=job_data['job_id'], job_name=job_data['name'])
@@ -362,7 +381,8 @@ def process_job(job_data: Dict[str, Any]) -> Dict[str, Any]:
 				if response['status'] == 'success':
 					# Process the page content
 					page_content = response['content']
-					url_results = process_queries(page_content, queries)
+					content_type = response.get('content_type', '')
+					url_results = process_queries(page_content, queries, content_type=content_type)
 
 					# Store the results for this URL
 					results[url] = {
@@ -522,6 +542,9 @@ def refresh_job(job_id):
 	"""
 	Logic to manually trigger a re-crawl for a specific job.
 	This function will update the job status and initiate a new crawl process.
+
+	For direct_url source type, URL variables are resolved at execution time,
+	so each refresh will use the current date/time values.
 	"""
 	# Example logic to update job status and re-run the crawl
 	response = job_table.get_item(Key={'job_id': job_id})
@@ -529,13 +552,26 @@ def refresh_job(job_id):
 	if 'Item' in response:
 		job_data = response['Item']
 
-		# Re-parse the list of URLs from the external source
-		new_links = parse_links_from_file(job_data['file_mapping'], job_data['source'])
-  
-		# Compare the new list with the old list to determine changes
-		old_links = set(job_data['links'])
+		# Get links based on source type (resolves URL variables at execution time)
+		source_type = job_data.get('source_type', 'csv')
+		logger.info("Refreshing job", job_id=job_id, source_type=source_type)
+
+		try:
+			new_links = get_links_for_job(job_data)
+			logger.info("URLs resolved for refresh", job_id=job_id, url_count=len(new_links))
+		except Exception as e:
+			logger.error("Failed to get links for job refresh", job_id=job_id, error=str(e))
+			return f"Failed to refresh job {job_id}: {str(e)}"
+
+		# Compare the new list with the old list to determine changes (if links exist)
+		old_links = set(job_data.get('links', []))
 		added_links = set(new_links) - old_links
 		removed_links = old_links - set(new_links)
+
+		if added_links:
+			logger.debug("New links added", job_id=job_id, count=len(added_links))
+		if removed_links:
+			logger.debug("Links removed", job_id=job_id, count=len(removed_links))
 
 		# Update the job data with the new list of links
 		job_data['links'] = new_links

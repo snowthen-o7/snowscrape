@@ -2,6 +2,7 @@ import re
 import json
 from typing import Any, Dict, List, Optional, Union
 from urllib.parse import urlparse, urlunparse
+from url_variable_resolver import URLVariableResolver
 
 
 class ValidationError(Exception):
@@ -282,35 +283,53 @@ class InputValidator:
 
 		# Validate type
 		query_type = query['type']
-		valid_types = ['xpath', 'regex', 'jsonpath']
+		valid_types = ['xpath', 'regex', 'jsonpath', 'pdf_text', 'pdf_table', 'pdf_metadata']
 		if query_type not in valid_types:
 			raise ValidationError(f"Query type must be one of: {', '.join(valid_types)}")
 
+		# PDF query types don't require a selector/expression
+		pdf_types = ['pdf_text', 'pdf_table', 'pdf_metadata']
+
 		# Validate selector/query field
-		selector = query.get('selector') or query.get('query')
-		if not selector:
+		selector = query.get('selector') or query.get('query') or ''
+
+		# Non-PDF queries require a selector
+		if query_type not in pdf_types and not selector:
 			raise ValidationError("Query must have a 'selector' or 'query' field")
 
 		# Validate selector based on type
+		validated_selector = selector  # Default to as-is for PDF types
 		if query_type == 'xpath':
 			validated_selector = InputValidator.validate_xpath_query(selector)
 		elif query_type == 'regex':
 			validated_selector = InputValidator.validate_regex_pattern(selector)
 		elif query_type == 'jsonpath':
 			validated_selector = InputValidator.validate_jsonpath_query(selector)
+		elif query_type in pdf_types:
+			# PDF queries can have an optional regex pattern (for pdf_text) or column name (for pdf_table)
+			# No special validation needed, just pass through
+			validated_selector = selector.strip() if selector else ''
 
 		# Validate join flag
 		join = query.get('join', False)
 		if not isinstance(join, bool):
 			raise ValidationError("Query 'join' flag must be a boolean")
 
-		# Return validated query
-		return {
+		# Build validated query
+		validated_query = {
 			'name': name.strip(),
 			'type': query_type,
 			'selector': validated_selector,
 			'join': join
 		}
+
+		# Include pdf_config for PDF queries if present
+		if query_type in pdf_types and 'pdf_config' in query:
+			pdf_config = query['pdf_config']
+			if isinstance(pdf_config, dict):
+				validated_query['pdf_config'] = pdf_config
+
+		return validated_query
 
 	@staticmethod
 	def validate_queries(queries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -485,12 +504,110 @@ class InputValidator:
 
 		return value
 
+	@staticmethod
+	def validate_url_template(url_template: str) -> str:
+		"""
+		Validate a URL template with optional date/time variables.
+
+		URL templates can contain PHP-style date format variables like:
+		- {{date}} -> default Y-m-d format
+		- {{date:Y-m-d}} -> specific format
+		- {{date+1d:Y-m-d}} -> with offset
+		- {{time:H_i}} -> time variable
+
+		Args:
+			url_template: URL template to validate
+
+		Returns:
+			Validated URL template
+
+		Raises:
+			ValidationError: If template is invalid
+		"""
+		if not url_template or not isinstance(url_template, str):
+			raise ValidationError("URL template must be a non-empty string")
+
+		url_template = url_template.strip()
+
+		if len(url_template) > InputValidator.MAX_URL_LENGTH:
+			raise ValidationError(f"URL template exceeds maximum length of {InputValidator.MAX_URL_LENGTH}")
+
+		# Use URLVariableResolver to validate the template
+		is_valid, error = URLVariableResolver.validate_template(url_template)
+		if not is_valid:
+			raise ValidationError(f"Invalid URL template: {error}")
+
+		# Resolve the template to validate that the base URL is valid
+		resolved_url = URLVariableResolver.resolve(url_template)
+
+		# Parse and validate the resolved URL
+		try:
+			parsed = urlparse(resolved_url)
+		except Exception as e:
+			raise ValidationError(f"Invalid resolved URL format: {str(e)}")
+
+		# Validate scheme
+		allowed_schemes = ['http', 'https']
+		if parsed.scheme not in allowed_schemes:
+			raise ValidationError(f"URL scheme must be one of: {', '.join(allowed_schemes)}")
+
+		# Validate hostname
+		if not parsed.netloc:
+			raise ValidationError("URL must have a valid hostname")
+
+		return url_template
+
+	@staticmethod
+	def validate_source_type(source_type: str) -> str:
+		"""
+		Validate source type for job configuration.
+
+		Args:
+			source_type: Source type to validate ('csv' or 'direct_url')
+
+		Returns:
+			Validated source type
+
+		Raises:
+			ValidationError: If source type is invalid
+		"""
+		valid_types = ['csv', 'direct_url']
+		if source_type not in valid_types:
+			raise ValidationError(f"Source type must be one of: {', '.join(valid_types)}")
+		return source_type
+
+	@staticmethod
+	def validate_timezone(tz: str) -> str:
+		"""
+		Validate a timezone string.
+
+		Args:
+			tz: Timezone name to validate (e.g., 'America/New_York')
+
+		Returns:
+			Validated timezone string
+
+		Raises:
+			ValidationError: If timezone is invalid
+		"""
+		if not tz:
+			return 'UTC'  # Default to UTC
+
+		is_valid, error = URLVariableResolver.validate_timezone(tz)
+		if not is_valid:
+			raise ValidationError(error)
+		return tz
+
 
 # Convenience functions for common validations
 
 def validate_job_data_strict(job_data: Dict[str, Any]) -> Dict[str, Any]:
 	"""
 	Strictly validate and sanitize job data with comprehensive checks.
+
+	Supports two source types:
+	- 'csv': Traditional CSV file source (requires 'source' and 'file_mapping')
+	- 'direct_url': Single URL template with optional date/time variables (requires 'url_template')
 
 	Args:
 		job_data: Job data dictionary to validate
@@ -510,15 +627,30 @@ def validate_job_data_strict(job_data: Dict[str, Any]) -> Dict[str, Any]:
 		raise ValidationError("Job must have a 'name' field")
 	validated['name'] = validator.validate_job_name(job_data['name'])
 
-	# Validate source URL
-	if 'source' not in job_data:
-		raise ValidationError("Job must have a 'source' field")
-	validated['source'] = validator.validate_url(job_data['source'], allow_sftp=True)
+	# Validate source type (default to 'csv' for backwards compatibility)
+	source_type = job_data.get('source_type', 'csv')
+	validated['source_type'] = validator.validate_source_type(source_type)
 
-	# Validate file mapping
-	if 'file_mapping' not in job_data:
-		raise ValidationError("Job must have a 'file_mapping' field")
-	validated['file_mapping'] = validator.validate_file_mapping(job_data['file_mapping'])
+	# Validate based on source type
+	if source_type == 'direct_url':
+		# Direct URL mode - requires url_template
+		if 'url_template' not in job_data:
+			raise ValidationError("Job with source_type 'direct_url' must have a 'url_template' field")
+		validated['url_template'] = validator.validate_url_template(job_data['url_template'])
+
+		# Validate timezone (optional, defaults to UTC)
+		validated['timezone'] = validator.validate_timezone(job_data.get('timezone', 'UTC'))
+
+		# source and file_mapping are not required for direct_url mode
+	else:
+		# CSV mode - requires source and file_mapping
+		if 'source' not in job_data:
+			raise ValidationError("Job with source_type 'csv' must have a 'source' field")
+		validated['source'] = validator.validate_url(job_data['source'], allow_sftp=True)
+
+		if 'file_mapping' not in job_data:
+			raise ValidationError("Job with source_type 'csv' must have a 'file_mapping' field")
+		validated['file_mapping'] = validator.validate_file_mapping(job_data['file_mapping'])
 
 	# Validate queries
 	if 'queries' not in job_data:
@@ -533,6 +665,14 @@ def validate_job_data_strict(job_data: Dict[str, Any]) -> Dict[str, Any]:
 	# Validate scheduling (optional)
 	if 'scheduling' in job_data and job_data['scheduling'] is not None:
 		validated['scheduling'] = job_data['scheduling']  # Already validated by validate_job_data
+
+	# Copy proxy_config if present
+	if 'proxy_config' in job_data:
+		validated['proxy_config'] = job_data['proxy_config']
+
+	# Copy render_config if present
+	if 'render_config' in job_data:
+		validated['render_config'] = job_data['render_config']
 
 	# Copy user_id if present (added by authentication)
 	if 'user_id' in job_data:
