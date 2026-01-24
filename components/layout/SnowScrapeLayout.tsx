@@ -1,11 +1,17 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { UserButton, useUser } from '@clerk/nextjs';
 import {
   AppLayout as BaseAppLayout,
   type AppLayoutProps as BaseAppLayoutProps,
   useSidebar,
+  Button,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
 } from '@snowforge/ui';
 import {
   LayoutDashboard,
@@ -14,6 +20,7 @@ import {
   BarChart2,
   Plus,
   Webhook,
+  Settings,
 } from 'lucide-react';
 import { NotificationCenter } from '@/components/NotificationCenter';
 
@@ -50,10 +57,22 @@ export function SnowScrapeLayout({ children }: { children: React.ReactNode }) {
     },
   };
 
-  // Right side content for top nav (notifications + user)
+  // Right side content for top nav (notifications + settings + user)
   const rightContent = isMounted ? (
     <>
       <NotificationCenter />
+      <TooltipProvider delayDuration={100}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="icon" asChild>
+              <Link href="/dashboard/settings">
+                <Settings className="h-5 w-5" />
+              </Link>
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Settings</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
       <div className="flex items-center gap-3">
         {user && (
           <div className="hidden md:block text-right">
