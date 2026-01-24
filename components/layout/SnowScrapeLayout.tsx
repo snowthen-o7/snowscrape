@@ -1,17 +1,11 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
 import { UserButton, useUser } from '@clerk/nextjs';
 import {
   AppLayout as BaseAppLayout,
   type AppLayoutProps as BaseAppLayoutProps,
   useSidebar,
-  Button,
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
 } from '@snowforge/ui';
 import {
   LayoutDashboard,
@@ -57,22 +51,10 @@ export function SnowScrapeLayout({ children }: { children: React.ReactNode }) {
     },
   };
 
-  // Right side content for top nav (notifications + settings + user)
+  // Right side content for top nav (notifications + user)
   const rightContent = isMounted ? (
     <>
       <NotificationCenter />
-      <TooltipProvider delayDuration={100}>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon" asChild>
-              <Link href="/dashboard/settings">
-                <Settings className="h-5 w-5" />
-              </Link>
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Settings</TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
       <div className="flex items-center gap-3">
         {user && (
           <div className="hidden md:block text-right">
@@ -82,7 +64,15 @@ export function SnowScrapeLayout({ children }: { children: React.ReactNode }) {
             </p>
           </div>
         )}
-        <UserButton afterSignOutUrl="/" />
+        <UserButton afterSignOutUrl="/">
+          <UserButton.MenuItems>
+            <UserButton.Link
+              label="Settings"
+              labelIcon={<Settings className="h-4 w-4" />}
+              href="/dashboard/settings"
+            />
+          </UserButton.MenuItems>
+        </UserButton>
       </div>
     </>
   ) : null;
