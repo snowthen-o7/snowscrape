@@ -7,25 +7,23 @@ import { useUser } from '@clerk/nextjs';
 import { JobModal } from '@/components/JobModal';
 import { JobCard } from '@/components/JobCard';
 import { ResultPreviewModal } from '@/components/ResultPreviewModal';
-import { AppLayout } from '@/components/layout/AppLayout';
+import { AppLayout } from '@/components/layout';
 import { PageHeader } from '@/components/PageHeader';
 import { EmptyState } from '@/components/EmptyState';
 import { DashboardSkeleton } from '@/components/LoadingSkeleton';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
 import {
+  Input,
+  Button,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from '@/components/ui/tooltip';
+} from '@snowforge/ui';
 import {
   useJobs,
   useDeleteJob,

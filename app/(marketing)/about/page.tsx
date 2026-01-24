@@ -3,7 +3,7 @@
  * Company mission, team, and values
  */
 
-import { MarketingLayout } from '@/components/layout/MarketingLayout';
+import { MarketingLayout } from '@/components/layout';
 import { CTASection } from '@/components/marketing/CTASection';
 import {
   Target,

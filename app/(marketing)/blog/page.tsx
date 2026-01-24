@@ -5,9 +5,8 @@
 
 'use client';
 
-import { MarketingLayout } from '@/components/layout/MarketingLayout';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
+import { MarketingLayout } from '@/components/layout';
+import { Input, Badge } from '@snowforge/ui';
 import { Search, Calendar, Clock, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';

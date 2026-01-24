@@ -6,13 +6,13 @@
 'use client';
 
 import { Wifi, WifiOff, RefreshCw } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
 import {
+  Badge,
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from '@/components/ui/tooltip';
+} from '@snowforge/ui';
 
 interface ConnectionStatusProps {
   isConnected: boolean;

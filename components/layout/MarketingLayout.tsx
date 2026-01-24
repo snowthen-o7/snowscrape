@@ -5,8 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { UserButton, useUser } from '@clerk/nextjs';
-import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
+import { Button, cn } from '@snowforge/ui';
 
 interface MarketingLayoutProps {
   children: React.ReactNode;

@@ -8,8 +8,8 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
+  Button,
+} from '@snowforge/ui';
 
 export interface ConfirmDialogProps {
   open: boolean;

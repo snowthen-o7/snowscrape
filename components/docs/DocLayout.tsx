@@ -5,10 +5,10 @@
 
 'use client';
 
-import { MarketingLayout } from '@/components/layout/MarketingLayout';
+import { MarketingLayout } from '@/components/layout';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { cn } from '@/lib/utils';
+import { cn } from '@snowforge/ui';
 import { ChevronRight } from 'lucide-react';
 
 interface DocSection {

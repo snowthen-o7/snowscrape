@@ -3,7 +3,7 @@
  * Detailed pricing plans with comparison table and FAQ
  */
 
-import { MarketingLayout } from '@/components/layout/MarketingLayout';
+import { MarketingLayout } from '@/components/layout';
 import { PricingCard } from '@/components/marketing/PricingCard';
 import { CTASection } from '@/components/marketing/CTASection';
 import { Check, X } from 'lucide-react';
@@ -12,7 +12,7 @@ import {
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
-} from '@/components/ui/accordion';
+} from '@snowforge/ui';
 
 export default function Pricing() {
   return (

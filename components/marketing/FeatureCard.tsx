@@ -3,7 +3,7 @@
  * Card component for displaying features
  */
 
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent } from '@snowforge/ui';
 import { LucideIcon } from 'lucide-react';
 
 interface FeatureCardProps {

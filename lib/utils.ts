@@ -1,7 +1,8 @@
-import { ClassValue, clsx } from "clsx";
 import Papa from 'papaparse';
-import { twMerge } from "tailwind-merge";
 import { Query, Scheduling } from '@/lib/types';
+
+// Re-export cn from shared package for backwards compatibility
+export { cn } from '@snowforge/ui';
 
 export const capitalize = (str: string) => {
   return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
@@ -16,17 +17,13 @@ const calculateTimeUntilNextRun = (nextRunTime: Date) => {
   const diffInDays = Math.floor(diffInHours / 24);
 
   const remainingTime = [];
-  
+
   if (diffInDays > 0) remainingTime.push(`${diffInDays} day(s)`);
   if (diffInHours % 24 > 0) remainingTime.push(`${diffInHours % 24} hour(s)`);
   if (diffInMinutes % 60 > 0) remainingTime.push(`${diffInMinutes % 60} minute(s)`);
 
   return remainingTime.length ? remainingTime.join(', ') : "Now";  // Concatenate and return
 };
-
-export const cn = (...inputs: ClassValue[]) => {
-  return twMerge(clsx(inputs));
-}
 
 /**
  * Detects CSV settings using PapaParse and extracts headers

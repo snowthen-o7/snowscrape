@@ -7,13 +7,13 @@
 
 import { useUser } from '@clerk/nextjs';
 import Link from 'next/link';
-import { AppLayout } from '@/components/layout/AppLayout';
+import { AppLayout } from '@/components/layout';
 import { PageHeader } from '@/components/PageHeader';
 import { StatCard } from '@/components/StatCard';
 import { EmptyState } from '@/components/EmptyState';
 import { DashboardSkeleton } from '@/components/LoadingSkeleton';
 import { ConnectionStatus } from '@/components/ConnectionStatus';
-import { Button } from '@/components/ui/button';
+import { Button } from '@snowforge/ui';
 import { useJobs } from '@/lib/hooks/useJobs';
 import { useRealtimeJobs } from '@/lib/hooks/useRealtimeJobs';
 import {

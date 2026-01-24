@@ -3,7 +3,7 @@
  * Industry-specific scraping examples and solutions
  */
 
-import { MarketingLayout } from '@/components/layout/MarketingLayout';
+import { MarketingLayout } from '@/components/layout';
 import { CTASection } from '@/components/marketing/CTASection';
 import {
   ShoppingCart,

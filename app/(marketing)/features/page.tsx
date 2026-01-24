@@ -3,7 +3,7 @@
  * Detailed feature breakdown with examples and benefits
  */
 
-import { MarketingLayout } from '@/components/layout/MarketingLayout';
+import { MarketingLayout } from '@/components/layout';
 import { FeatureCard } from '@/components/marketing/FeatureCard';
 import { CTASection } from '@/components/marketing/CTASection';
 import {

@@ -5,7 +5,7 @@
 
 'use client';
 
-import { cn } from '@/lib/utils';
+import { cn } from '@snowforge/ui';
 
 interface LoadingSkeletonProps {
   className?: string;

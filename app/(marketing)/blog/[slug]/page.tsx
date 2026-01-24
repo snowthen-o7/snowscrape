@@ -3,8 +3,8 @@
  * Individual blog post with content and related articles
  */
 
-import { MarketingLayout } from '@/components/layout/MarketingLayout';
-import { Badge } from '@/components/ui/badge';
+import { MarketingLayout } from '@/components/layout';
+import { Badge } from '@snowforge/ui';
 import { Calendar, Clock, ArrowLeft, Share2 } from 'lucide-react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';

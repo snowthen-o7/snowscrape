@@ -5,7 +5,7 @@
 
 'use client';
 
-import { Button } from '@/components/ui/button';
+import { Button } from '@snowforge/ui';
 import { ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 

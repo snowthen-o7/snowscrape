@@ -3,7 +3,7 @@
  * Central documentation landing page with quick links
  */
 
-import { MarketingLayout } from '@/components/layout/MarketingLayout';
+import { MarketingLayout } from '@/components/layout';
 import { CTASection } from '@/components/marketing/CTASection';
 import {
   BookOpen,

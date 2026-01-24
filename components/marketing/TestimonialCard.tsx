@@ -3,7 +3,7 @@
  * Card component for displaying customer testimonials
  */
 
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent } from '@snowforge/ui';
 import { Star } from 'lucide-react';
 
 interface TestimonialCardProps {
