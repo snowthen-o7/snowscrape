@@ -6,6 +6,7 @@ import {
   AppLayout as BaseAppLayout,
   type AppLayoutProps as BaseAppLayoutProps,
   useSidebar,
+  ThemeToggle,
 } from '@snowforge/ui';
 import {
   LayoutDashboard,
@@ -55,6 +56,7 @@ export function SnowScrapeLayout({ children }: { children: React.ReactNode }) {
   const rightContent = isMounted ? (
     <>
       <NotificationCenter />
+      <ThemeToggle />
       <div className="flex items-center gap-3">
         {user && (
           <div className="hidden md:block text-right">
