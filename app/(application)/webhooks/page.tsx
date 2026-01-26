@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useUser, useSession } from '@clerk/nextjs';
 import { Webhook } from "@/lib/types";
-import { Input, Button } from '@snowforge/ui';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import { AppLayout } from '@/components/layout';
 import { PageHeader } from '@/components/PageHeader';
 import { Plus, Trash2, TestTube, Copy, CheckCircle, XCircle, RefreshCw } from "lucide-react";

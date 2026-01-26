@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { X, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
-import { Button } from "@snowforge/ui";
+import { Button } from '@/components/ui/button';
 import { toast } from 'react-toastify';
 
 interface ResultPreviewModalProps {

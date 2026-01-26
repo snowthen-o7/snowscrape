@@ -1,5 +1,6 @@
 import React from 'react';
-import { Badge, cn } from '@snowforge/ui';
+import { Badge } from '@/components/ui/badge';
+import { cn } from '@snowforge/ui';
 import {
   PlayIcon,
   CheckCircle2Icon,

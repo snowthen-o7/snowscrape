@@ -1,19 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import {
-  Button,
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from '@snowforge/ui';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {  } from '@snowforge/ui';
 import { HelpCircle, Code, FileText, FileJson, Table, Type, Info } from 'lucide-react';
 
 export function QueryTypeHelpButton() {

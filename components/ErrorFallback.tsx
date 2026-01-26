@@ -6,13 +6,9 @@
 'use client';
 
 import { AlertTriangleIcon, RefreshCwIcon, HomeIcon } from 'lucide-react';
-import {
-  Button,
-  Alert,
-  AlertDescription,
-  AlertTitle,
-  Card,
-} from '@snowforge/ui';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 interface ErrorFallbackProps {
   error: Error | null;

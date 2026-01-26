@@ -1,5 +1,6 @@
 import React from 'react';
-import { Button, cn } from '@snowforge/ui';
+import { Button } from '@/components/ui/button';
+import { cn } from '@snowforge/ui';
 
 export interface EmptyStateProps {
   icon?: React.ReactNode;

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import { ClerkProvider } from '@clerk/nextjs';
+import { ThemeProvider } from '@snowforge/ui';
 import { QueryProvider } from '@/components/providers/QueryProvider';
 import { ToastProvider } from '@/components/providers/ToastProvider';
 import "./globals.css";
@@ -93,7 +94,7 @@ export default function RootLayout({
 	return (
 		<ClerkProvider>
 			<QueryProvider>
-				<html lang="en">
+				<html lang="en" suppressHydrationWarning>
 					<head>
 						{/* Structured Data - Organization */}
 						<script
@@ -124,8 +125,10 @@ export default function RootLayout({
 					<body
 						className={`${geistSans.variable} ${geistMono.variable} antialiased`}
 					>
-						{children}
-						<ToastProvider />
+						<ThemeProvider>
+							{children}
+							<ToastProvider />
+						</ThemeProvider>
 					</body>
 				</html>
 			</QueryProvider>

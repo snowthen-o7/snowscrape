@@ -7,17 +7,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { useSession } from '@clerk/nextjs';
-import {
-  Button,
-  Badge,
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from '@snowforge/ui';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import {
   Bell,
   CheckCircle2,

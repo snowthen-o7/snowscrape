@@ -1,5 +1,6 @@
 import React from 'react';
-import { Card, CardContent, CardHeader, CardTitle, cn } from '@snowforge/ui';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { cn } from '@snowforge/ui';
 import { ArrowUpIcon, ArrowDownIcon, MinusIcon } from 'lucide-react';
 
 export interface StatCardProps {

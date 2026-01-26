@@ -4,7 +4,7 @@
  */
 
 import { MarketingLayout } from '@/components/layout';
-import { Badge } from '@snowforge/ui';
+import { Badge } from '@/components/ui/badge';
 import { Calendar, Clock, ArrowLeft, Share2 } from 'lucide-react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';

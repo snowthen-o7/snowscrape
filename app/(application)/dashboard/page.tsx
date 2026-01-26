@@ -13,7 +13,7 @@ import { StatCard } from '@/components/StatCard';
 import { EmptyState } from '@/components/EmptyState';
 import { DashboardSkeleton } from '@/components/LoadingSkeleton';
 import { ConnectionStatus } from '@/components/ConnectionStatus';
-import { Button } from '@snowforge/ui';
+import { Button } from '@/components/ui/button';
 import { useJobs } from '@/lib/hooks/useJobs';
 import { useRealtimeJobs } from '@/lib/hooks/useRealtimeJobs';
 import {

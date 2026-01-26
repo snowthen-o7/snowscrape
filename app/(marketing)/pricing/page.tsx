@@ -7,12 +7,7 @@ import { MarketingLayout } from '@/components/layout';
 import { PricingCard } from '@/components/marketing/PricingCard';
 import { CTASection } from '@/components/marketing/CTASection';
 import { Check, X } from 'lucide-react';
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from '@snowforge/ui';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 
 export default function Pricing() {
   return (

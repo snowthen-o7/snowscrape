@@ -5,7 +5,7 @@
 
 'use client';
 
-import { Toaster } from '@snowforge/ui';
+import { Toaster } from '@/components/ui/toaster';
 
 export function ToastProvider() {
   return <Toaster />;
