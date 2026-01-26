@@ -15,7 +15,8 @@
 ### Frontend (frontend/snowscrape)
 - **Framework:** Next.js (App Router)
 - **Language:** TypeScript
-- **Styling:** Tailwind CSS 3.x
+- **Styling:** Tailwind CSS v4.x
+- **UI Library:** @snowforge/ui v3.x (HSL colors)
 - **UI Components:** Radix UI (accordion, checkbox, dialog, dropdown-menu, icons, label, popover, progress, select, separator, slot, switch, tabs, toast, tooltip)
 - **State:** TanStack React Query
 - **Forms:** React Hook Form + Zod
@@ -187,3 +188,82 @@ className={`
 - Hardcoded colors (like `bg-white`, `text-gray-900`) don't change with theme
 - Semantic classes use CSS variables that automatically switch with dark mode
 - This ensures a consistent, professional dark mode experience
+
+---
+
+## Tailwind CSS v4 Requirements
+
+**CRITICAL: Tailwind v4 has breaking changes from v3. The following are REQUIRED:**
+
+### 1. @config Directive (REQUIRED)
+In your main CSS file (`app/globals.css`), you MUST explicitly load the config:
+
+```css
+@import "tailwindcss";
+
+@config "../tailwind.config.ts";  // ← REQUIRED in v4
+
+@custom-variant dark (&:is(.dark *));
+```
+
+**Without the `@config` directive, Tailwind v4 will ignore your config file entirely!**
+
+### 2. Dark Mode Variant (REQUIRED)
+Add the custom dark variant for proper dark mode support:
+
+```css
+@custom-variant dark (&:is(.dark *));
+```
+
+### 3. Color Format (REQUIRED)
+All color definitions MUST include `/ <alpha-value>` for opacity support:
+
+```typescript
+// ❌ WRONG - Classes won't be generated
+colors: {
+  background: 'hsl(var(--background))',
+}
+
+// ✅ CORRECT - Classes will work
+colors: {
+  background: 'hsl(var(--background) / <alpha-value>)',
+}
+```
+
+### 4. PostCSS Configuration
+Use `@tailwindcss/postcss` plugin instead of `tailwindcss`:
+
+```javascript
+// postcss.config.mjs
+export default {
+  plugins: {
+    '@tailwindcss/postcss': {},  // ← v4 plugin
+  },
+};
+```
+
+### 5. Import Syntax
+Use `@import` instead of `@tailwind` directives:
+
+```css
+/* ❌ v3 syntax */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ✅ v4 syntax */
+@import "tailwindcss";
+```
+
+### 6. darkMode Config
+Use string value instead of array:
+
+```typescript
+// ❌ v3 syntax
+darkMode: ["class"],
+
+// ✅ v4 syntax
+darkMode: "class",
+```
+
+**If any of these requirements are missing, styling will break completely.**
