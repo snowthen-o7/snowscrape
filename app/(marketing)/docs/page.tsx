@@ -38,9 +38,9 @@ export default function Docs() {
                   <input
                     type="text"
                     placeholder="Search documentation..."
-                    className="flex-1 rounded-lg border border-white/20 bg-white/10 px-4 py-3 text-white placeholder:text-gray-400 focus:border-brand-accent focus:outline-none focus:ring-2 focus:ring-brand-accent/20"
+                    className="flex-1 rounded-lg border border-white/20 bg-white/10 px-4 py-3 text-white placeholder:text-gray-400 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
                   />
-                  <button className="rounded-lg bg-brand-accent px-6 py-3 font-semibold text-brand-primary hover:bg-brand-accent/90">
+                  <button className="rounded-lg bg-accent px-6 py-3 font-semibold text-primary hover:bg-accent/90">
                     Search
                   </button>
                 </div>
@@ -67,10 +67,10 @@ export default function Docs() {
               {/* Step 1 */}
               <Link
                 href="/docs/getting-started"
-                className="group rounded-2xl border border-border bg-card p-8 transition-all hover:border-brand-accent/50 hover:shadow-lg"
+                className="group rounded-2xl border border-border bg-card p-8 transition-all hover:border-accent/50 hover:shadow-lg"
               >
-                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-brand-accent/10 transition-colors group-hover:bg-brand-accent/20">
-                  <BookOpen className="h-6 w-6 text-brand-accent" />
+                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent/10 transition-colors group-hover:bg-accent/20">
+                  <BookOpen className="h-6 w-6 text-accent-foreground" />
                 </div>
                 <h3 className="mt-6 text-xl font-semibold text-foreground">
                   1. Getting Started
@@ -78,7 +78,7 @@ export default function Docs() {
                 <p className="mt-2 text-sm text-muted-foreground">
                   Create your account and set up your first project in less than 5 minutes.
                 </p>
-                <p className="mt-4 text-sm font-medium text-brand-accent group-hover:underline">
+                <p className="mt-4 text-sm font-medium text-accent-foreground group-hover:underline">
                   Read the guide →
                 </p>
               </Link>
@@ -86,10 +86,10 @@ export default function Docs() {
               {/* Step 2 */}
               <Link
                 href="/docs/creating-jobs"
-                className="group rounded-2xl border border-border bg-card p-8 transition-all hover:border-brand-accent/50 hover:shadow-lg"
+                className="group rounded-2xl border border-border bg-card p-8 transition-all hover:border-accent/50 hover:shadow-lg"
               >
-                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-brand-accent/10 transition-colors group-hover:bg-brand-accent/20">
-                  <Zap className="h-6 w-6 text-brand-accent" />
+                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent/10 transition-colors group-hover:bg-accent/20">
+                  <Zap className="h-6 w-6 text-accent-foreground" />
                 </div>
                 <h3 className="mt-6 text-xl font-semibold text-foreground">
                   2. Create Your First Job
@@ -97,7 +97,7 @@ export default function Docs() {
                 <p className="mt-2 text-sm text-muted-foreground">
                   Learn how to configure extraction queries and run your first scraping job.
                 </p>
-                <p className="mt-4 text-sm font-medium text-brand-accent group-hover:underline">
+                <p className="mt-4 text-sm font-medium text-accent-foreground group-hover:underline">
                   View tutorial →
                 </p>
               </Link>
@@ -105,10 +105,10 @@ export default function Docs() {
               {/* Step 3 */}
               <Link
                 href="/docs/exporting-data"
-                className="group rounded-2xl border border-border bg-card p-8 transition-all hover:border-brand-accent/50 hover:shadow-lg"
+                className="group rounded-2xl border border-border bg-card p-8 transition-all hover:border-accent/50 hover:shadow-lg"
               >
-                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-brand-accent/10 transition-colors group-hover:bg-brand-accent/20">
-                  <FileCode className="h-6 w-6 text-brand-accent" />
+                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent/10 transition-colors group-hover:bg-accent/20">
+                  <FileCode className="h-6 w-6 text-accent-foreground" />
                 </div>
                 <h3 className="mt-6 text-xl font-semibold text-foreground">
                   3. Export Your Data
@@ -116,7 +116,7 @@ export default function Docs() {
                 <p className="mt-2 text-sm text-muted-foreground">
                   Export results in JSON, CSV, or other formats and integrate with your tools.
                 </p>
-                <p className="mt-4 text-sm font-medium text-brand-accent group-hover:underline">
+                <p className="mt-4 text-sm font-medium text-accent-foreground group-hover:underline">
                   Learn more →
                 </p>
               </Link>
@@ -140,28 +140,28 @@ export default function Docs() {
           <div className="mx-auto mt-16 grid max-w-6xl grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">
             {/* Core Concepts */}
             <div className="rounded-2xl border border-border bg-card p-8">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-brand-accent/10">
-                <BookOpen className="h-6 w-6 text-brand-accent" />
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent/10">
+                <BookOpen className="h-6 w-6 text-accent-foreground" />
               </div>
               <h3 className="mt-6 text-lg font-semibold text-foreground">Core Concepts</h3>
               <ul className="mt-4 space-y-3 text-sm text-muted-foreground">
                 <li>
-                  <Link href="/docs/jobs" className="hover:text-brand-accent">
+                  <Link href="/docs/jobs" className="hover:text-accent-foreground">
                     → Understanding Jobs
                   </Link>
                 </li>
                 <li>
-                  <Link href="/docs/queries" className="hover:text-brand-accent">
+                  <Link href="/docs/queries" className="hover:text-accent-foreground">
                     → Query Types (XPath, CSS, Regex)
                   </Link>
                 </li>
                 <li>
-                  <Link href="/docs/scheduling" className="hover:text-brand-accent">
+                  <Link href="/docs/scheduling" className="hover:text-accent-foreground">
                     → Scheduling & Automation
                   </Link>
                 </li>
                 <li>
-                  <Link href="/docs/templates" className="hover:text-brand-accent">
+                  <Link href="/docs/templates" className="hover:text-accent-foreground">
                     → Using Templates
                   </Link>
                 </li>
@@ -170,28 +170,28 @@ export default function Docs() {
 
             {/* API Reference */}
             <div className="rounded-2xl border border-border bg-card p-8">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-brand-accent/10">
-                <Code2 className="h-6 w-6 text-brand-accent" />
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent/10">
+                <Code2 className="h-6 w-6 text-accent-foreground" />
               </div>
               <h3 className="mt-6 text-lg font-semibold text-foreground">API Reference</h3>
               <ul className="mt-4 space-y-3 text-sm text-muted-foreground">
                 <li>
-                  <Link href="/docs/api/authentication" className="hover:text-brand-accent">
+                  <Link href="/docs/api/authentication" className="hover:text-accent-foreground">
                     → Authentication
                   </Link>
                 </li>
                 <li>
-                  <Link href="/docs/api/jobs" className="hover:text-brand-accent">
+                  <Link href="/docs/api/jobs" className="hover:text-accent-foreground">
                     → Jobs API
                   </Link>
                 </li>
                 <li>
-                  <Link href="/docs/api/webhooks" className="hover:text-brand-accent">
+                  <Link href="/docs/api/webhooks" className="hover:text-accent-foreground">
                     → Webhooks
                   </Link>
                 </li>
                 <li>
-                  <Link href="/docs/api/rate-limits" className="hover:text-brand-accent">
+                  <Link href="/docs/api/rate-limits" className="hover:text-accent-foreground">
                     → Rate Limits & Quotas
                   </Link>
                 </li>
@@ -200,28 +200,28 @@ export default function Docs() {
 
             {/* Advanced Features */}
             <div className="rounded-2xl border border-border bg-card p-8">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-brand-accent/10">
-                <Terminal className="h-6 w-6 text-brand-accent" />
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent/10">
+                <Terminal className="h-6 w-6 text-accent-foreground" />
               </div>
               <h3 className="mt-6 text-lg font-semibold text-foreground">Advanced Features</h3>
               <ul className="mt-4 space-y-3 text-sm text-muted-foreground">
                 <li>
-                  <Link href="/docs/javascript-rendering" className="hover:text-brand-accent">
+                  <Link href="/docs/javascript-rendering" className="hover:text-accent-foreground">
                     → JavaScript Rendering
                   </Link>
                 </li>
                 <li>
-                  <Link href="/docs/proxy-rotation" className="hover:text-brand-accent">
+                  <Link href="/docs/proxy-rotation" className="hover:text-accent-foreground">
                     → Proxy Rotation
                   </Link>
                 </li>
                 <li>
-                  <Link href="/docs/custom-headers" className="hover:text-brand-accent">
+                  <Link href="/docs/custom-headers" className="hover:text-accent-foreground">
                     → Custom Headers & Cookies
                   </Link>
                 </li>
                 <li>
-                  <Link href="/docs/error-handling" className="hover:text-brand-accent">
+                  <Link href="/docs/error-handling" className="hover:text-accent-foreground">
                     → Error Handling & Retries
                   </Link>
                 </li>
@@ -230,28 +230,28 @@ export default function Docs() {
 
             {/* Integrations */}
             <div className="rounded-2xl border border-border bg-card p-8">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-brand-accent/10">
-                <Zap className="h-6 w-6 text-brand-accent" />
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent/10">
+                <Zap className="h-6 w-6 text-accent-foreground" />
               </div>
               <h3 className="mt-6 text-lg font-semibold text-foreground">Integrations</h3>
               <ul className="mt-4 space-y-3 text-sm text-muted-foreground">
                 <li>
-                  <Link href="/docs/integrations/zapier" className="hover:text-brand-accent">
+                  <Link href="/docs/integrations/zapier" className="hover:text-accent-foreground">
                     → Zapier Integration
                   </Link>
                 </li>
                 <li>
-                  <Link href="/docs/integrations/python" className="hover:text-brand-accent">
+                  <Link href="/docs/integrations/python" className="hover:text-accent-foreground">
                     → Python SDK
                   </Link>
                 </li>
                 <li>
-                  <Link href="/docs/integrations/nodejs" className="hover:text-brand-accent">
+                  <Link href="/docs/integrations/nodejs" className="hover:text-accent-foreground">
                     → Node.js SDK
                   </Link>
                 </li>
                 <li>
-                  <Link href="/docs/integrations/webhooks" className="hover:text-brand-accent">
+                  <Link href="/docs/integrations/webhooks" className="hover:text-accent-foreground">
                     → Webhook Integrations
                   </Link>
                 </li>
@@ -260,28 +260,28 @@ export default function Docs() {
 
             {/* Best Practices */}
             <div className="rounded-2xl border border-border bg-card p-8">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-brand-accent/10">
-                <Lightbulb className="h-6 w-6 text-brand-accent" />
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent/10">
+                <Lightbulb className="h-6 w-6 text-accent-foreground" />
               </div>
               <h3 className="mt-6 text-lg font-semibold text-foreground">Best Practices</h3>
               <ul className="mt-4 space-y-3 text-sm text-muted-foreground">
                 <li>
-                  <Link href="/docs/best-practices/performance" className="hover:text-brand-accent">
+                  <Link href="/docs/best-practices/performance" className="hover:text-accent-foreground">
                     → Performance Optimization
                   </Link>
                 </li>
                 <li>
-                  <Link href="/docs/best-practices/reliability" className="hover:text-brand-accent">
+                  <Link href="/docs/best-practices/reliability" className="hover:text-accent-foreground">
                     → Reliability & Monitoring
                   </Link>
                 </li>
                 <li>
-                  <Link href="/docs/best-practices/legal" className="hover:text-brand-accent">
+                  <Link href="/docs/best-practices/legal" className="hover:text-accent-foreground">
                     → Legal & Ethical Scraping
                   </Link>
                 </li>
                 <li>
-                  <Link href="/docs/best-practices/security" className="hover:text-brand-accent">
+                  <Link href="/docs/best-practices/security" className="hover:text-accent-foreground">
                     → Security Best Practices
                   </Link>
                 </li>
@@ -290,28 +290,28 @@ export default function Docs() {
 
             {/* Troubleshooting */}
             <div className="rounded-2xl border border-border bg-card p-8">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-brand-accent/10">
-                <MessageCircle className="h-6 w-6 text-brand-accent" />
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent/10">
+                <MessageCircle className="h-6 w-6 text-accent-foreground" />
               </div>
               <h3 className="mt-6 text-lg font-semibold text-foreground">Troubleshooting</h3>
               <ul className="mt-4 space-y-3 text-sm text-muted-foreground">
                 <li>
-                  <Link href="/docs/troubleshooting/common-errors" className="hover:text-brand-accent">
+                  <Link href="/docs/troubleshooting/common-errors" className="hover:text-accent-foreground">
                     → Common Errors
                   </Link>
                 </li>
                 <li>
-                  <Link href="/docs/troubleshooting/debugging" className="hover:text-brand-accent">
+                  <Link href="/docs/troubleshooting/debugging" className="hover:text-accent-foreground">
                     → Debugging Failed Jobs
                   </Link>
                 </li>
                 <li>
-                  <Link href="/docs/troubleshooting/performance" className="hover:text-brand-accent">
+                  <Link href="/docs/troubleshooting/performance" className="hover:text-accent-foreground">
                     → Performance Issues
                   </Link>
                 </li>
                 <li>
-                  <Link href="/docs/troubleshooting/contact" className="hover:text-brand-accent">
+                  <Link href="/docs/troubleshooting/contact" className="hover:text-accent-foreground">
                     → Contact Support
                   </Link>
                 </li>
@@ -325,8 +325,8 @@ export default function Docs() {
       <section className="bg-background py-24 sm:py-32">
         <div className="mx-auto max-w-7xl px-6 lg:px-8">
           <div className="mx-auto max-w-2xl text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-brand-accent/10 mx-auto">
-              <Video className="h-6 w-6 text-brand-accent" />
+            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent/10 mx-auto">
+              <Video className="h-6 w-6 text-accent-foreground" />
             </div>
             <h2 className="mt-6 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
               Video Tutorials
@@ -356,18 +356,18 @@ export default function Docs() {
             ].map((video, index) => (
               <div
                 key={index}
-                className="group cursor-pointer rounded-2xl border border-border bg-card p-6 transition-all hover:border-brand-accent/50 hover:shadow-lg"
+                className="group cursor-pointer rounded-2xl border border-border bg-card p-6 transition-all hover:border-accent/50 hover:shadow-lg"
               >
                 <div className="aspect-video w-full rounded-lg bg-muted flex items-center justify-center">
-                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-brand-accent/10 transition-colors group-hover:bg-brand-accent/20">
-                    <Video className="h-8 w-8 text-brand-accent" />
+                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-accent/10 transition-colors group-hover:bg-accent/20">
+                    <Video className="h-8 w-8 text-accent-foreground" />
                   </div>
                 </div>
                 <h3 className="mt-4 font-semibold text-foreground">{video.title}</h3>
                 <p className="mt-2 text-sm text-muted-foreground">{video.description}</p>
                 <div className="mt-3 flex items-center justify-between">
                   <span className="text-xs text-muted-foreground">{video.duration}</span>
-                  <span className="text-sm font-medium text-brand-accent group-hover:underline">
+                  <span className="text-sm font-medium text-accent-foreground group-hover:underline">
                     Watch now →
                   </span>
                 </div>

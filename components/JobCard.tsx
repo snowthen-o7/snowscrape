@@ -71,14 +71,14 @@ export function JobCard({
   return (
     <>
       <Card
-        className="group transition-all hover:shadow-lg hover:border-brand-accent/50 cursor-pointer"
+        className="group transition-all hover:shadow-lg hover:border-accent/50 cursor-pointer"
         onClick={onClick}
       >
         <CardContent className="p-6">
           {/* Header */}
           <div className="mb-4 flex items-start justify-between">
             <div className="flex-1">
-              <h3 className="text-lg font-semibold text-foreground group-hover:text-brand-accent transition-colors">
+              <h3 className="text-lg font-semibold text-foreground group-hover:text-accent-foreground transition-colors">
                 {job.name}
               </h3>
               <p className="mt-1 text-sm text-muted-foreground">

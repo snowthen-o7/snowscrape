@@ -24,25 +24,25 @@ export default function JobsConceptPage() {
 
         <div className="grid gap-4 md:grid-cols-2 mt-6">
           <div className="rounded-lg border border-border p-4 bg-card">
-            <h4 className="font-semibold text-brand-accent">Source</h4>
+            <h4 className="font-semibold text-accent-foreground">Source</h4>
             <p className="text-sm text-muted-foreground mt-2">
               The URL(s) to scrape. Can be a single page, a list of URLs, or a pattern with pagination.
             </p>
           </div>
           <div className="rounded-lg border border-border p-4 bg-card">
-            <h4 className="font-semibold text-brand-accent">Queries</h4>
+            <h4 className="font-semibold text-accent-foreground">Queries</h4>
             <p className="text-sm text-muted-foreground mt-2">
               XPath, CSS, or Regex patterns that define what data to extract from each page.
             </p>
           </div>
           <div className="rounded-lg border border-border p-4 bg-card">
-            <h4 className="font-semibold text-brand-accent">Schedule</h4>
+            <h4 className="font-semibold text-accent-foreground">Schedule</h4>
             <p className="text-sm text-muted-foreground mt-2">
               Optional configuration for when the job should run automatically.
             </p>
           </div>
           <div className="rounded-lg border border-border p-4 bg-card">
-            <h4 className="font-semibold text-brand-accent">Configuration</h4>
+            <h4 className="font-semibold text-accent-foreground">Configuration</h4>
             <p className="text-sm text-muted-foreground mt-2">
               Advanced options like rate limiting, proxy settings, and JavaScript rendering.
             </p>
@@ -170,8 +170,8 @@ export default function JobsConceptPage() {
           with proven configurations.
         </p>
 
-        <div className="rounded-lg border border-brand-accent/30 bg-brand-accent/5 p-6 mt-6">
-          <h3 className="text-lg font-semibold text-brand-accent mb-2">Best Practice</h3>
+        <div className="rounded-lg border border-accent/30 bg-accent/5 p-6 mt-6">
+          <h3 className="text-lg font-semibold text-accent-foreground mb-2">Best Practice</h3>
           <p className="text-muted-foreground">
             Start with a small test run (one or two URLs) to verify your queries work correctly
             before running a full scrape on hundreds of pages.
@@ -182,16 +182,16 @@ export default function JobsConceptPage() {
         <div className="grid gap-4 md:grid-cols-2 mt-4">
           <Link
             href="/docs/creating-jobs"
-            className="rounded-lg border border-border p-4 hover:border-brand-accent/50 transition-colors group"
+            className="rounded-lg border border-border p-4 hover:border-accent/50 transition-colors group"
           >
-            <h4 className="font-semibold group-hover:text-brand-accent">Creating Jobs</h4>
+            <h4 className="font-semibold group-hover:text-accent-foreground">Creating Jobs</h4>
             <p className="text-sm text-muted-foreground mt-1">Step-by-step job creation guide</p>
           </Link>
           <Link
             href="/docs/scheduling"
-            className="rounded-lg border border-border p-4 hover:border-brand-accent/50 transition-colors group"
+            className="rounded-lg border border-border p-4 hover:border-accent/50 transition-colors group"
           >
-            <h4 className="font-semibold group-hover:text-brand-accent">Scheduling</h4>
+            <h4 className="font-semibold group-hover:text-accent-foreground">Scheduling</h4>
             <p className="text-sm text-muted-foreground mt-1">Set up recurring scrapes</p>
           </Link>
         </div>

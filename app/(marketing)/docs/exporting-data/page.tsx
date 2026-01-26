@@ -21,7 +21,7 @@ export default function ExportingDataPage() {
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 mt-6">
           <div className="rounded-lg border border-border p-4 bg-card">
-            <h4 className="font-semibold text-brand-accent">JSON</h4>
+            <h4 className="font-semibold text-accent-foreground">JSON</h4>
             <p className="text-sm text-muted-foreground mt-2">
               Best for APIs and web applications. Preserves data types and nested structures.
             </p>
@@ -29,7 +29,7 @@ export default function ExportingDataPage() {
           </div>
 
           <div className="rounded-lg border border-border p-4 bg-card">
-            <h4 className="font-semibold text-brand-accent">CSV</h4>
+            <h4 className="font-semibold text-accent-foreground">CSV</h4>
             <p className="text-sm text-muted-foreground mt-2">
               Universal format for spreadsheets. Compatible with Excel, Google Sheets, databases.
             </p>
@@ -37,7 +37,7 @@ export default function ExportingDataPage() {
           </div>
 
           <div className="rounded-lg border border-border p-4 bg-card">
-            <h4 className="font-semibold text-brand-accent">Excel</h4>
+            <h4 className="font-semibold text-accent-foreground">Excel</h4>
             <p className="text-sm text-muted-foreground mt-2">
               Native Excel format with formatting. Supports multiple sheets and formulas.
             </p>
@@ -45,7 +45,7 @@ export default function ExportingDataPage() {
           </div>
 
           <div className="rounded-lg border border-border p-4 bg-card">
-            <h4 className="font-semibold text-brand-accent">Parquet</h4>
+            <h4 className="font-semibold text-accent-foreground">Parquet</h4>
             <p className="text-sm text-muted-foreground mt-2">
               Columnar format for big data. Efficient for analytics and data warehouses.
             </p>
@@ -53,7 +53,7 @@ export default function ExportingDataPage() {
           </div>
 
           <div className="rounded-lg border border-border p-4 bg-card">
-            <h4 className="font-semibold text-brand-accent">SQL</h4>
+            <h4 className="font-semibold text-accent-foreground">SQL</h4>
             <p className="text-sm text-muted-foreground mt-2">
               SQL INSERT statements for direct database import. Supports MySQL, PostgreSQL, SQLite.
             </p>
@@ -86,7 +86,7 @@ export default function ExportingDataPage() {
           </pre>
         </div>
         <p className="text-sm text-muted-foreground mt-2">
-          <Link href="/docs/api/jobs" className="text-brand-accent hover:underline">
+          <Link href="/docs/api/jobs" className="text-accent-foreground hover:underline">
             See full API documentation →
           </Link>
         </p>
@@ -158,7 +158,7 @@ export default function ExportingDataPage() {
           </pre>
         </div>
         <p className="text-sm text-muted-foreground mt-2">
-          <Link href="/docs/api/webhooks" className="text-brand-accent hover:underline">
+          <Link href="/docs/api/webhooks" className="text-accent-foreground hover:underline">
             Learn how to set up webhooks →
           </Link>
         </p>
@@ -195,8 +195,8 @@ export default function ExportingDataPage() {
           </div>
         </div>
 
-        <div className="rounded-lg border border-brand-accent/30 bg-brand-accent/5 p-6 mt-6">
-          <h3 className="text-lg font-semibold text-brand-accent mb-2">Need a Different Format?</h3>
+        <div className="rounded-lg border border-accent/30 bg-accent/5 p-6 mt-6">
+          <h3 className="text-lg font-semibold text-accent-foreground mb-2">Need a Different Format?</h3>
           <p className="text-muted-foreground">
             Contact our support team if you need a format we don&apos;t currently support. We&apos;re always looking
             to expand our export capabilities based on user feedback.
@@ -207,16 +207,16 @@ export default function ExportingDataPage() {
         <div className="grid gap-4 md:grid-cols-2 mt-4">
           <Link
             href="/docs/api/webhooks"
-            className="rounded-lg border border-border p-4 hover:border-brand-accent/50 transition-colors group"
+            className="rounded-lg border border-border p-4 hover:border-accent/50 transition-colors group"
           >
-            <h4 className="font-semibold group-hover:text-brand-accent">Webhooks</h4>
+            <h4 className="font-semibold group-hover:text-accent-foreground">Webhooks</h4>
             <p className="text-sm text-muted-foreground mt-1">Automate data delivery with webhooks</p>
           </Link>
           <Link
             href="/docs/api/jobs"
-            className="rounded-lg border border-border p-4 hover:border-brand-accent/50 transition-colors group"
+            className="rounded-lg border border-border p-4 hover:border-accent/50 transition-colors group"
           >
-            <h4 className="font-semibold group-hover:text-brand-accent">Jobs API</h4>
+            <h4 className="font-semibold group-hover:text-accent-foreground">Jobs API</h4>
             <p className="text-sm text-muted-foreground mt-1">Programmatic access to your data</p>
           </Link>
         </div>

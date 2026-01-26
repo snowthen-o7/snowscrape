@@ -19,7 +19,7 @@ export default function JobsAPIPage() {
 
         <div className="rounded-lg border border-border p-4 bg-card">
           <h4 className="font-semibold mb-2">Base URL</h4>
-          <code className="text-brand-accent font-mono">https://api.snowscrape.com</code>
+          <code className="text-accent-foreground font-mono">https://api.snowscrape.com</code>
         </div>
 
         <h2 className="text-2xl font-bold mt-8">Endpoints Overview</h2>
@@ -333,16 +333,16 @@ requests.post(
         <div className="grid gap-4 md:grid-cols-2 mt-4">
           <Link
             href="/docs/api/webhooks"
-            className="rounded-lg border border-border p-4 hover:border-brand-accent/50 transition-colors group"
+            className="rounded-lg border border-border p-4 hover:border-accent/50 transition-colors group"
           >
-            <h4 className="font-semibold group-hover:text-brand-accent">Webhooks</h4>
+            <h4 className="font-semibold group-hover:text-accent-foreground">Webhooks</h4>
             <p className="text-sm text-muted-foreground mt-1">Get notified when jobs complete</p>
           </Link>
           <Link
             href="/docs/api/rate-limits"
-            className="rounded-lg border border-border p-4 hover:border-brand-accent/50 transition-colors group"
+            className="rounded-lg border border-border p-4 hover:border-accent/50 transition-colors group"
           >
-            <h4 className="font-semibold group-hover:text-brand-accent">Rate Limits</h4>
+            <h4 className="font-semibold group-hover:text-accent-foreground">Rate Limits</h4>
             <p className="text-sm text-muted-foreground mt-1">Understand API usage quotas</p>
           </Link>
         </div>

@@ -569,7 +569,7 @@ export default function ManualConfigurationPage() {
                       />
                       {sourceLoading && (
                         <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
-                          <Loader2 className="h-4 w-4 text-brand-accent animate-spin" />
+                          <Loader2 className="h-4 w-4 text-accent-foreground animate-spin" />
                         </div>
                       )}
                     </div>
@@ -599,7 +599,7 @@ export default function ManualConfigurationPage() {
                           />
                           {urlPreviewLoading && (
                             <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
-                              <Loader2 className="h-4 w-4 text-brand-accent animate-spin" />
+                              <Loader2 className="h-4 w-4 text-accent-foreground animate-spin" />
                             </div>
                           )}
                         </div>

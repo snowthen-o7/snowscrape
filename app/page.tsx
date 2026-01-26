@@ -110,7 +110,7 @@ export default function Home() {
             <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
               {/* Step 1 */}
               <div className="relative">
-                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-brand-accent text-xl font-bold text-brand-primary">
+                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent text-xl font-bold text-primary">
                   1
                 </div>
                 <h3 className="mt-6 text-xl font-semibold text-foreground">
@@ -124,7 +124,7 @@ export default function Home() {
 
               {/* Step 2 */}
               <div className="relative">
-                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-brand-accent text-xl font-bold text-brand-primary">
+                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent text-xl font-bold text-primary">
                   2
                 </div>
                 <h3 className="mt-6 text-xl font-semibold text-foreground">
@@ -138,7 +138,7 @@ export default function Home() {
 
               {/* Step 3 */}
               <div className="relative">
-                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-brand-accent text-xl font-bold text-brand-primary">
+                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent text-xl font-bold text-primary">
                   3
                 </div>
                 <h3 className="mt-6 text-xl font-semibold text-foreground">
@@ -177,15 +177,15 @@ export default function Home() {
               </p>
               <ul className="mt-8 space-y-3 text-sm leading-6 text-muted-foreground">
                 <li className="flex gap-x-3">
-                  <Clock className="h-5 w-5 flex-none text-brand-accent" />
+                  <Clock className="h-5 w-5 flex-none text-accent-foreground" />
                   1,000 API calls/month
                 </li>
                 <li className="flex gap-x-3">
-                  <Database className="h-5 w-5 flex-none text-brand-accent" />
+                  <Database className="h-5 w-5 flex-none text-accent-foreground" />
                   100 MB storage
                 </li>
                 <li className="flex gap-x-3">
-                  <Sparkles className="h-5 w-5 flex-none text-brand-accent" />
+                  <Sparkles className="h-5 w-5 flex-none text-accent-foreground" />
                   Access to all templates
                 </li>
               </ul>
@@ -195,8 +195,8 @@ export default function Home() {
             </div>
 
             {/* Pro Plan */}
-            <div className="relative rounded-2xl border-2 border-brand-accent bg-card p-8 ring-2 ring-brand-accent/20">
-              <div className="absolute -top-4 left-1/2 -translate-x-1/2 rounded-full bg-brand-accent px-4 py-1 text-sm font-semibold text-brand-primary">
+            <div className="relative rounded-2xl border-2 border-accent bg-card p-8 ring-2 ring-brand-accent/20">
+              <div className="absolute -top-4 left-1/2 -translate-x-1/2 rounded-full bg-accent px-4 py-1 text-sm font-semibold text-primary">
                 Most Popular
               </div>
               <h3 className="text-2xl font-bold text-foreground">Pro</h3>
@@ -207,23 +207,23 @@ export default function Home() {
               </p>
               <ul className="mt-8 space-y-3 text-sm leading-6 text-muted-foreground">
                 <li className="flex gap-x-3">
-                  <Clock className="h-5 w-5 flex-none text-brand-accent" />
+                  <Clock className="h-5 w-5 flex-none text-accent-foreground" />
                   100,000 API calls/month
                 </li>
                 <li className="flex gap-x-3">
-                  <Database className="h-5 w-5 flex-none text-brand-accent" />
+                  <Database className="h-5 w-5 flex-none text-accent-foreground" />
                   10 GB storage
                 </li>
                 <li className="flex gap-x-3">
-                  <Sparkles className="h-5 w-5 flex-none text-brand-accent" />
+                  <Sparkles className="h-5 w-5 flex-none text-accent-foreground" />
                   JavaScript rendering
                 </li>
                 <li className="flex gap-x-3">
-                  <Sparkles className="h-5 w-5 flex-none text-brand-accent" />
+                  <Sparkles className="h-5 w-5 flex-none text-accent-foreground" />
                   Proxy rotation
                 </li>
               </ul>
-              <Button className="mt-8 w-full bg-brand-accent text-brand-primary hover:bg-brand-accent/90" asChild>
+              <Button className="mt-8 w-full bg-accent text-primary hover:bg-accent/90" asChild>
                 <Link href="/sign-up">Start Free Trial</Link>
               </Button>
             </div>
@@ -237,19 +237,19 @@ export default function Home() {
               </p>
               <ul className="mt-8 space-y-3 text-sm leading-6 text-muted-foreground">
                 <li className="flex gap-x-3">
-                  <Clock className="h-5 w-5 flex-none text-brand-accent" />
+                  <Clock className="h-5 w-5 flex-none text-accent-foreground" />
                   Unlimited API calls
                 </li>
                 <li className="flex gap-x-3">
-                  <Database className="h-5 w-5 flex-none text-brand-accent" />
+                  <Database className="h-5 w-5 flex-none text-accent-foreground" />
                   Unlimited storage
                 </li>
                 <li className="flex gap-x-3">
-                  <Sparkles className="h-5 w-5 flex-none text-brand-accent" />
+                  <Sparkles className="h-5 w-5 flex-none text-accent-foreground" />
                   Dedicated support
                 </li>
                 <li className="flex gap-x-3">
-                  <Sparkles className="h-5 w-5 flex-none text-brand-accent" />
+                  <Sparkles className="h-5 w-5 flex-none text-accent-foreground" />
                   Custom SLAs
                 </li>
               </ul>
@@ -262,7 +262,7 @@ export default function Home() {
           <div className="mt-8 text-center">
             <Link
               href="/pricing"
-              className="text-sm font-semibold text-brand-accent hover:text-brand-accent/80"
+              className="text-sm font-semibold text-accent-foreground hover:text-accent-foreground/80"
             >
               View full pricing details →
             </Link>

@@ -274,7 +274,7 @@ export default function NotificationsPage() {
               <Card
                 key={notification.id}
                 className={`${
-                  !notification.read ? 'border-brand-accent bg-brand-accent/5' : ''
+                  !notification.read ? 'border-accent bg-accent/5' : ''
                 }`}
               >
                 <CardContent className="p-6">
@@ -286,7 +286,7 @@ export default function NotificationsPage() {
                         <div className="flex items-center gap-2">
                           <h3 className="font-semibold">{notification.title}</h3>
                           {!notification.read && (
-                            <div className="h-2 w-2 rounded-full bg-brand-accent" />
+                            <div className="h-2 w-2 rounded-full bg-accent" />
                           )}
                         </div>
                         <Badge variant="outline" className="capitalize">

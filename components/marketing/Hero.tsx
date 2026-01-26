@@ -21,10 +21,10 @@ export function Hero() {
       <div className="relative mx-auto max-w-7xl px-6 py-24 sm:py-32 lg:px-8">
         <div className="mx-auto max-w-3xl text-center">
           {/* Badge */}
-          <div className="mb-8 inline-flex items-center gap-2 rounded-full bg-brand-accent/10 px-4 py-2 text-sm font-medium text-brand-accent ring-1 ring-inset ring-brand-accent/20">
+          <div className="mb-8 inline-flex items-center gap-2 rounded-full bg-accent/10 px-4 py-2 text-sm font-medium text-accent-foreground ring-1 ring-inset ring-brand-accent/20">
             <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand-accent opacity-75"></span>
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-brand-accent"></span>
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-75"></span>
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-accent"></span>
             </span>
             Now in Beta - Limited Time Free Access
           </div>
@@ -46,7 +46,7 @@ export function Hero() {
 
           {/* CTAs */}
           <div className="mt-10 flex items-center justify-center gap-4">
-            <Button size="lg" asChild className="bg-brand-accent text-brand-primary hover:bg-brand-accent/90">
+            <Button size="lg" asChild className="bg-accent text-primary hover:bg-accent/90">
               <Link href="/sign-up">
                 Get Started Free
                 <ArrowRight className="ml-2 h-5 w-5" />
@@ -62,19 +62,19 @@ export function Hero() {
           {/* Trust indicators */}
           <div className="mt-12 flex items-center justify-center gap-8 text-sm text-gray-400">
             <div className="flex items-center gap-2">
-              <svg className="h-5 w-5 text-brand-accent" fill="currentColor" viewBox="0 0 20 20">
+              <svg className="h-5 w-5 text-accent-foreground" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
               </svg>
               No credit card required
             </div>
             <div className="flex items-center gap-2">
-              <svg className="h-5 w-5 text-brand-accent" fill="currentColor" viewBox="0 0 20 20">
+              <svg className="h-5 w-5 text-accent-foreground" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
               </svg>
               Free forever plan
             </div>
             <div className="flex items-center gap-2">
-              <svg className="h-5 w-5 text-brand-accent" fill="currentColor" viewBox="0 0 20 20">
+              <svg className="h-5 w-5 text-accent-foreground" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
               </svg>
               Cancel anytime
@@ -86,19 +86,19 @@ export function Hero() {
         <div className="mx-auto mt-20 max-w-5xl">
           <div className="grid grid-cols-2 gap-8 md:grid-cols-4">
             <div className="text-center">
-              <div className="text-4xl font-bold text-brand-accent">1M+</div>
+              <div className="text-4xl font-bold text-accent-foreground">1M+</div>
               <div className="mt-2 text-sm text-gray-400">Pages Scraped Daily</div>
             </div>
             <div className="text-center">
-              <div className="text-4xl font-bold text-brand-accent">99.9%</div>
+              <div className="text-4xl font-bold text-accent-foreground">99.9%</div>
               <div className="mt-2 text-sm text-gray-400">Uptime SLA</div>
             </div>
             <div className="text-center">
-              <div className="text-4xl font-bold text-brand-accent">10K+</div>
+              <div className="text-4xl font-bold text-accent-foreground">10K+</div>
               <div className="mt-2 text-sm text-gray-400">Active Users</div>
             </div>
             <div className="text-center">
-              <div className="text-4xl font-bold text-brand-accent">500+</div>
+              <div className="text-4xl font-bold text-accent-foreground">500+</div>
               <div className="mt-2 text-sm text-gray-400">Templates</div>
             </div>
           </div>

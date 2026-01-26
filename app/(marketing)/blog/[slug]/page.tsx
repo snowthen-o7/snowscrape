@@ -177,7 +177,7 @@ export default async function BlogPost({ params }: BlogPostPageProps) {
         <div className="mx-auto max-w-4xl px-6 lg:px-8">
           <Link
             href="/blog"
-            className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-brand-accent"
+            className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-accent-foreground"
           >
             <ArrowLeft className="h-4 w-4" />
             Back to Blog
@@ -196,7 +196,7 @@ export default async function BlogPost({ params }: BlogPostPageProps) {
 
           <div className="mt-6 flex items-center gap-6 text-sm text-muted-foreground">
             <div className="flex items-center gap-2">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-accent/10 text-sm font-semibold text-brand-accent">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/10 text-sm font-semibold text-accent-foreground">
                 {post.author.split(' ').map((n) => n[0]).join('')}
               </div>
               <div>
@@ -214,7 +214,7 @@ export default async function BlogPost({ params }: BlogPostPageProps) {
               </div>
             </div>
 
-            <button className="ml-auto rounded-lg border border-border px-4 py-2 hover:border-brand-accent/50 hover:bg-card">
+            <button className="ml-auto rounded-lg border border-border px-4 py-2 hover:border-accent/50 hover:bg-card">
               <Share2 className="h-4 w-4" />
             </button>
           </div>
@@ -246,13 +246,13 @@ export default async function BlogPost({ params }: BlogPostPageProps) {
                 <Link
                   key={relatedPost.slug}
                   href={`/blog/${relatedPost.slug}`}
-                  className="group rounded-2xl border border-border bg-card p-6 transition-all hover:border-brand-accent/50 hover:shadow-lg"
+                  className="group rounded-2xl border border-border bg-card p-6 transition-all hover:border-accent/50 hover:shadow-lg"
                 >
                   <Badge variant="outline" className="text-xs">
                     {relatedPost.category}
                   </Badge>
 
-                  <h3 className="mt-4 text-lg font-semibold text-foreground group-hover:text-brand-accent">
+                  <h3 className="mt-4 text-lg font-semibold text-foreground group-hover:text-accent-foreground">
                     {relatedPost.title}
                   </h3>
 
@@ -285,12 +285,12 @@ export default async function BlogPost({ params }: BlogPostPageProps) {
               <input
                 type="email"
                 placeholder="Enter your email"
-                className="flex-1 rounded-lg border border-input bg-background px-4 py-2 text-sm focus:border-brand-accent focus:outline-none focus:ring-2 focus:ring-brand-accent/20"
+                className="flex-1 rounded-lg border border-input bg-background px-4 py-2 text-sm focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
                 required
               />
               <button
                 type="submit"
-                className="rounded-lg bg-brand-accent px-6 py-2 font-semibold text-brand-primary hover:bg-brand-accent/90"
+                className="rounded-lg bg-accent px-6 py-2 font-semibold text-primary hover:bg-accent/90"
               >
                 Subscribe
               </button>

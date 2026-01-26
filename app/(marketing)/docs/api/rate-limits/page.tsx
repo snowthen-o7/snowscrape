@@ -212,11 +212,11 @@ Retry-After: 60
           </li>
         </ul>
 
-        <div className="rounded-lg border border-brand-accent/30 bg-brand-accent/5 p-6 mt-6">
-          <h3 className="text-lg font-semibold text-brand-accent mb-2">Need Higher Limits?</h3>
+        <div className="rounded-lg border border-accent/30 bg-accent/5 p-6 mt-6">
+          <h3 className="text-lg font-semibold text-accent-foreground mb-2">Need Higher Limits?</h3>
           <p className="text-muted-foreground">
             Contact our sales team for Enterprise plans with custom rate limits and dedicated resources.
-            <Link href="/contact" className="text-brand-accent hover:underline ml-1">Get in touch →</Link>
+            <Link href="/contact" className="text-accent-foreground hover:underline ml-1">Get in touch →</Link>
           </p>
         </div>
 
@@ -224,16 +224,16 @@ Retry-After: 60
         <div className="grid gap-4 md:grid-cols-2 mt-4">
           <Link
             href="/docs/api/authentication"
-            className="rounded-lg border border-border p-4 hover:border-brand-accent/50 transition-colors group"
+            className="rounded-lg border border-border p-4 hover:border-accent/50 transition-colors group"
           >
-            <h4 className="font-semibold group-hover:text-brand-accent">Authentication</h4>
+            <h4 className="font-semibold group-hover:text-accent-foreground">Authentication</h4>
             <p className="text-sm text-muted-foreground mt-1">Set up API authentication</p>
           </Link>
           <Link
             href="/pricing"
-            className="rounded-lg border border-border p-4 hover:border-brand-accent/50 transition-colors group"
+            className="rounded-lg border border-border p-4 hover:border-accent/50 transition-colors group"
           >
-            <h4 className="font-semibold group-hover:text-brand-accent">Pricing</h4>
+            <h4 className="font-semibold group-hover:text-accent-foreground">Pricing</h4>
             <p className="text-sm text-muted-foreground mt-1">Compare plan limits and features</p>
           </Link>
         </div>

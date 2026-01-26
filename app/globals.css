@@ -57,92 +57,59 @@
 
 @layer base {
   :root {
-    /* SnowScrape Brand Colors - RGB values for Tailwind opacity modifier support */
-    --brand-primary: 10 37 64;           /* #0A2540 - Deep blue */
-    --brand-accent: 0 217 255;           /* #00D9FF - Bright cyan */
-
-    /* Status Colors */
-    --status-running: 59 130 246;        /* #3B82F6 - Blue */
-    --status-success: 34 197 94;         /* #22C55E - Green */
-    --status-failed: 239 68 68;          /* #EF4444 - Red */
-    --status-paused: 245 158 11;         /* #F59E0B - Amber */
-    --status-scheduled: 107 114 128;     /* #6B7280 - Gray */
-
-    /* Base UI Colors */
-    --background: 255 255 255;           /* #ffffff */
-    --foreground: 10 37 64;              /* Brand primary */
-
-    --card: 255 255 255;                 /* #ffffff */
-    --card-foreground: 10 37 64;
-
-    --popover: 255 255 255;
-    --popover-foreground: 10 37 64;
-
-    --primary: 10 37 64;                 /* Brand primary */
-    --primary-foreground: 255 255 255;   /* White text on brand primary */
-
-    --secondary: 237 242 247;            /* #EDF2F7 - Light blue-gray */
-    --secondary-foreground: 10 37 64;
-
-    --muted: 237 242 247;
-    --muted-foreground: 107 114 128;
-
-    --accent: 0 217 255;                 /* Brand accent */
-    --accent-foreground: 10 37 64;       /* Dark text on cyan */
-
-    --destructive: 239 68 68;            /* Error red */
-    --destructive-foreground: 255 255 255;
-
-    --border: 226 232 240;               /* #E2E8F0 */
-    --input: 226 232 240;
-    --ring: 10 37 64;
-
-    /* Chart Colors (using brand palette) */
-    --chart-1: 59 130 246;               /* Blue */
-    --chart-2: 34 197 94;                /* Green */
-    --chart-3: 0 217 255;                /* Cyan */
-    --chart-4: 245 158 11;               /* Amber */
-    --chart-5: 239 68 68;                /* Red */
-
+    /* shadcn-ui Default Theme - Neutral Gray */
+    --background: 0 0% 100%;
+    --foreground: 0 0% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 3.9%;
+    --primary: 0 0% 9%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 0 0% 96.1%;
+    --secondary-foreground: 0 0% 9%;
+    --muted: 0 0% 96.1%;
+    --muted-foreground: 0 0% 45.1%;
+    --accent: 0 0% 96.1%;
+    --accent-foreground: 0 0% 9%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 89.8%;
+    --input: 0 0% 89.8%;
+    --ring: 0 0% 3.9%;
+    --chart-1: 12 76% 61%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
     --radius: 0.5rem;
   }
 
   .dark {
-    /* Dark Mode */
-    --background: 10 37 64;              /* Brand primary as background */
-    --foreground: 255 255 255;
-
-    --card: 13 46 77;                    /* #0D2E4D - Slightly lighter than background */
-    --card-foreground: 255 255 255;
-
-    --popover: 13 46 77;
-    --popover-foreground: 255 255 255;
-
-    --primary: 0 217 255;                /* Brand accent in dark mode */
-    --primary-foreground: 10 37 64;
-
-    --secondary: 13 46 77;
-    --secondary-foreground: 255 255 255;
-
-    --muted: 13 46 77;
-    --muted-foreground: 156 163 175;     /* #9CA3AF */
-
-    --accent: 0 217 255;
-    --accent-foreground: 10 37 64;
-
-    --destructive: 239 68 68;
-    --destructive-foreground: 255 255 255;
-
-    --border: 13 46 77;
-    --input: 13 46 77;
-    --ring: 0 217 255;
-
-    /* Chart Colors (same in dark mode) */
-    --chart-1: 59 130 246;
-    --chart-2: 34 197 94;
-    --chart-3: 0 217 255;
-    --chart-4: 245 158 11;
-    --chart-5: 239 68 68;
+    --background: 0 0% 3.9%;
+    --foreground: 0 0% 98%;
+    --card: 0 0% 3.9%;
+    --card-foreground: 0 0% 98%;
+    --popover: 0 0% 3.9%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 0 0% 98%;
+    --primary-foreground: 0 0% 9%;
+    --secondary: 0 0% 14.9%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 0 0% 14.9%;
+    --muted-foreground: 0 0% 63.9%;
+    --accent: 0 0% 14.9%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 14.9%;
+    --input: 0 0% 14.9%;
+    --ring: 0 0% 83.1%;
+    --chart-1: 220 70% 50%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
   }
 }
 

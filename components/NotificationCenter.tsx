@@ -280,7 +280,7 @@ function NotificationItem({
   return (
     <div
       className={`p-4 hover:bg-muted/50 transition-colors ${
-        !notification.read ? 'bg-brand-accent/5' : ''
+        !notification.read ? 'bg-accent/5' : ''
       }`}
     >
       <div className="flex items-start gap-3">
@@ -290,7 +290,7 @@ function NotificationItem({
           <div className="flex items-start justify-between gap-2 mb-1">
             <h4 className="text-sm font-medium line-clamp-1">{notification.title}</h4>
             {!notification.read && (
-              <div className="h-2 w-2 rounded-full bg-brand-accent flex-shrink-0 mt-1" />
+              <div className="h-2 w-2 rounded-full bg-accent flex-shrink-0 mt-1" />
             )}
           </div>
 

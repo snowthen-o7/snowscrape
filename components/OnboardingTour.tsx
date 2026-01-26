@@ -41,14 +41,14 @@ const ONBOARDING_STEPS: OnboardingStep[] = [
     title: 'Welcome to SnowScrape',
     description:
       'Your all-in-one web scraping platform. Extract data from any website without writing code.',
-    icon: <Rocket className="h-12 w-12 text-brand-accent" />,
+    icon: <Rocket className="h-12 w-12 text-accent-foreground" />,
   },
   {
     id: 'templates',
     title: 'Start with Templates',
     description:
       'Browse our library of pre-configured templates for popular websites like Amazon, LinkedIn, and more.',
-    icon: <Package className="h-12 w-12 text-brand-accent" />,
+    icon: <Package className="h-12 w-12 text-accent-foreground" />,
     action: {
       label: 'Browse Templates',
       href: '/dashboard/templates',
@@ -59,7 +59,7 @@ const ONBOARDING_STEPS: OnboardingStep[] = [
     title: 'Visual Scraper Builder',
     description:
       'Point and click to build custom scrapers. No coding required - just select the data you want.',
-    icon: <Wand2 className="h-12 w-12 text-brand-accent" />,
+    icon: <Wand2 className="h-12 w-12 text-accent-foreground" />,
     action: {
       label: 'Try Visual Builder',
       href: '/dashboard/jobs/new/visual',
@@ -70,7 +70,7 @@ const ONBOARDING_STEPS: OnboardingStep[] = [
     title: 'Monitor Performance',
     description:
       'Track your jobs, analyze costs, and optimize performance with our comprehensive analytics dashboard.',
-    icon: <FileText className="h-12 w-12 text-brand-accent" />,
+    icon: <FileText className="h-12 w-12 text-accent-foreground" />,
     action: {
       label: 'View Analytics',
       href: '/dashboard/analytics',
@@ -216,11 +216,11 @@ export function QuickStartGuide() {
   if (dismissed) return null;
 
   return (
-    <Card className="border-brand-accent bg-gradient-to-r from-brand-accent/10 to-transparent">
+    <Card className="border-accent bg-gradient-to-r from-brand-accent/10 to-transparent">
       <CardHeader>
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-3">
-            <Sparkles className="h-8 w-8 text-brand-accent" />
+            <Sparkles className="h-8 w-8 text-accent-foreground" />
             <div>
               <CardTitle>Quick Start Guide</CardTitle>
               <CardDescription>
@@ -240,7 +240,7 @@ export function QuickStartGuide() {
             className="h-auto flex-col items-start p-4 text-left"
             onClick={() => router.push('/dashboard/templates')}
           >
-            <Package className="h-6 w-6 mb-2 text-brand-accent" />
+            <Package className="h-6 w-6 mb-2 text-accent-foreground" />
             <h4 className="font-semibold mb-1">Use a Template</h4>
             <p className="text-xs text-muted-foreground">
               Start with pre-built scrapers for popular sites
@@ -252,7 +252,7 @@ export function QuickStartGuide() {
             className="h-auto flex-col items-start p-4 text-left"
             onClick={() => router.push('/dashboard/jobs/new/visual')}
           >
-            <Wand2 className="h-6 w-6 mb-2 text-brand-accent" />
+            <Wand2 className="h-6 w-6 mb-2 text-accent-foreground" />
             <h4 className="font-semibold mb-1">Visual Builder</h4>
             <p className="text-xs text-muted-foreground">
               Point and click to build custom scrapers
@@ -264,7 +264,7 @@ export function QuickStartGuide() {
             className="h-auto flex-col items-start p-4 text-left"
             onClick={() => router.push('/dashboard')}
           >
-            <FileText className="h-6 w-6 mb-2 text-brand-accent" />
+            <FileText className="h-6 w-6 mb-2 text-accent-foreground" />
             <h4 className="font-semibold mb-1">Manual Setup</h4>
             <p className="text-xs text-muted-foreground">
               Configure your own scraping job from scratch

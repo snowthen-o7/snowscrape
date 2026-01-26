@@ -139,8 +139,8 @@ export default function TemplatesPage() {
           <li>Choose to keep it private or share with your team</li>
         </ol>
 
-        <div className="rounded-lg border border-brand-accent/30 bg-brand-accent/5 p-6 mt-6">
-          <h3 className="text-lg font-semibold text-brand-accent mb-2">Pro Tip</h3>
+        <div className="rounded-lg border border-accent/30 bg-accent/5 p-6 mt-6">
+          <h3 className="text-lg font-semibold text-accent-foreground mb-2">Pro Tip</h3>
           <p className="text-muted-foreground">
             Templates with placeholder patterns like <code className="bg-muted px-1 rounded">&#123;ASIN&#125;</code> or
             <code className="bg-muted px-1 rounded">&#123;SKU&#125;</code> make it easy to scrape multiple items -
@@ -162,16 +162,16 @@ export default function TemplatesPage() {
         <div className="grid gap-4 md:grid-cols-2 mt-4">
           <Link
             href="/dashboard/templates"
-            className="rounded-lg border border-border p-4 hover:border-brand-accent/50 transition-colors group"
+            className="rounded-lg border border-border p-4 hover:border-accent/50 transition-colors group"
           >
-            <h4 className="font-semibold group-hover:text-brand-accent">Browse Templates</h4>
+            <h4 className="font-semibold group-hover:text-accent-foreground">Browse Templates</h4>
             <p className="text-sm text-muted-foreground mt-1">Explore available templates</p>
           </Link>
           <Link
             href="/docs/queries"
-            className="rounded-lg border border-border p-4 hover:border-brand-accent/50 transition-colors group"
+            className="rounded-lg border border-border p-4 hover:border-accent/50 transition-colors group"
           >
-            <h4 className="font-semibold group-hover:text-brand-accent">Query Types</h4>
+            <h4 className="font-semibold group-hover:text-accent-foreground">Query Types</h4>
             <p className="text-sm text-muted-foreground mt-1">Learn to write your own queries</p>
           </Link>
         </div>

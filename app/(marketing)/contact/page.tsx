@@ -84,9 +84,9 @@ export default function Contact() {
 
               <div className="mt-12 space-y-6">
                 {/* Email */}
-                <div className="flex gap-4 rounded-lg border border-border bg-card p-6 transition-all hover:border-brand-accent/50">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-brand-accent/10">
-                    <Mail className="h-6 w-6 text-brand-accent" />
+                <div className="flex gap-4 rounded-lg border border-border bg-card p-6 transition-all hover:border-accent/50">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent/10">
+                    <Mail className="h-6 w-6 text-accent-foreground" />
                   </div>
                   <div>
                     <h3 className="text-lg font-semibold text-foreground">Email</h3>
@@ -95,7 +95,7 @@ export default function Contact() {
                     </p>
                     <a
                       href="mailto:support@snowscrape.com"
-                      className="mt-2 inline-block text-sm font-medium text-brand-accent hover:text-brand-accent/80"
+                      className="mt-2 inline-block text-sm font-medium text-accent-foreground hover:text-accent-foreground/80"
                     >
                       support@snowscrape.com
                     </a>
@@ -103,25 +103,25 @@ export default function Contact() {
                 </div>
 
                 {/* Live Chat */}
-                <div className="flex gap-4 rounded-lg border border-border bg-card p-6 transition-all hover:border-brand-accent/50">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-brand-accent/10">
-                    <MessageCircle className="h-6 w-6 text-brand-accent" />
+                <div className="flex gap-4 rounded-lg border border-border bg-card p-6 transition-all hover:border-accent/50">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent/10">
+                    <MessageCircle className="h-6 w-6 text-accent-foreground" />
                   </div>
                   <div>
                     <h3 className="text-lg font-semibold text-foreground">Live Chat</h3>
                     <p className="mt-1 text-sm text-muted-foreground">
                       Chat with our support team in real-time
                     </p>
-                    <button className="mt-2 text-sm font-medium text-brand-accent hover:text-brand-accent/80">
+                    <button className="mt-2 text-sm font-medium text-accent-foreground hover:text-accent-foreground/80">
                       Start a chat →
                     </button>
                   </div>
                 </div>
 
                 {/* Phone */}
-                <div className="flex gap-4 rounded-lg border border-border bg-card p-6 transition-all hover:border-brand-accent/50">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-brand-accent/10">
-                    <Phone className="h-6 w-6 text-brand-accent" />
+                <div className="flex gap-4 rounded-lg border border-border bg-card p-6 transition-all hover:border-accent/50">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent/10">
+                    <Phone className="h-6 w-6 text-accent-foreground" />
                   </div>
                   <div>
                     <h3 className="text-lg font-semibold text-foreground">
@@ -132,7 +132,7 @@ export default function Contact() {
                     </p>
                     <a
                       href="tel:+1-555-123-4567"
-                      className="mt-2 inline-block text-sm font-medium text-brand-accent hover:text-brand-accent/80"
+                      className="mt-2 inline-block text-sm font-medium text-accent-foreground hover:text-accent-foreground/80"
                     >
                       +1 (555) 123-4567
                     </a>
@@ -140,9 +140,9 @@ export default function Contact() {
                 </div>
 
                 {/* Office */}
-                <div className="flex gap-4 rounded-lg border border-border bg-card p-6 transition-all hover:border-brand-accent/50">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-brand-accent/10">
-                    <MapPin className="h-6 w-6 text-brand-accent" />
+                <div className="flex gap-4 rounded-lg border border-border bg-card p-6 transition-all hover:border-accent/50">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent/10">
+                    <MapPin className="h-6 w-6 text-accent-foreground" />
                   </div>
                   <div>
                     <h3 className="text-lg font-semibold text-foreground">Office</h3>
@@ -271,7 +271,7 @@ export default function Contact() {
                   <Button
                     type="submit"
                     disabled={isSubmitting}
-                    className="w-full bg-brand-accent text-brand-primary hover:bg-brand-accent/90"
+                    className="w-full bg-accent text-primary hover:bg-accent/90"
                     size="lg"
                   >
                     {isSubmitting ? (

@@ -91,7 +91,7 @@ data = response.json()`}
 
         <h2 className="text-2xl font-bold mt-8">API Base URL</h2>
         <div className="rounded-lg border border-border p-4 bg-card mt-4">
-          <code className="text-brand-accent font-mono">https://api.snowscrape.com</code>
+          <code className="text-accent-foreground font-mono">https://api.snowscrape.com</code>
           <p className="text-sm text-muted-foreground mt-2">
             All API endpoints are relative to this base URL.
           </p>
@@ -171,8 +171,8 @@ data = response.json()`}
           <li>Use separate tokens for different applications or environments</li>
         </ul>
 
-        <div className="rounded-lg border border-brand-accent/30 bg-brand-accent/5 p-6 mt-6">
-          <h3 className="text-lg font-semibold text-brand-accent mb-2">Using Environment Variables</h3>
+        <div className="rounded-lg border border-accent/30 bg-accent/5 p-6 mt-6">
+          <h3 className="text-lg font-semibold text-accent-foreground mb-2">Using Environment Variables</h3>
           <p className="text-muted-foreground mb-4">
             Store your token securely using environment variables:
           </p>
@@ -190,16 +190,16 @@ os.environ['SNOWSCRAPE_API_KEY']  # Python`}
         <div className="grid gap-4 md:grid-cols-2 mt-4">
           <Link
             href="/docs/api/jobs"
-            className="rounded-lg border border-border p-4 hover:border-brand-accent/50 transition-colors group"
+            className="rounded-lg border border-border p-4 hover:border-accent/50 transition-colors group"
           >
-            <h4 className="font-semibold group-hover:text-brand-accent">Jobs API</h4>
+            <h4 className="font-semibold group-hover:text-accent-foreground">Jobs API</h4>
             <p className="text-sm text-muted-foreground mt-1">Create and manage jobs via API</p>
           </Link>
           <Link
             href="/docs/api/rate-limits"
-            className="rounded-lg border border-border p-4 hover:border-brand-accent/50 transition-colors group"
+            className="rounded-lg border border-border p-4 hover:border-accent/50 transition-colors group"
           >
-            <h4 className="font-semibold group-hover:text-brand-accent">Rate Limits</h4>
+            <h4 className="font-semibold group-hover:text-accent-foreground">Rate Limits</h4>
             <p className="text-sm text-muted-foreground mt-1">Understand API usage limits</p>
           </Link>
         </div>

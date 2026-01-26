@@ -19,15 +19,15 @@ export default function QueriesPage() {
 
         <div className="grid gap-4 md:grid-cols-3 mt-6">
           <div className="rounded-lg border border-border p-4 bg-card">
-            <h4 className="font-semibold text-brand-accent">XPath</h4>
+            <h4 className="font-semibold text-accent-foreground">XPath</h4>
             <p className="text-sm text-muted-foreground mt-1">Best for complex DOM traversal</p>
           </div>
           <div className="rounded-lg border border-border p-4 bg-card">
-            <h4 className="font-semibold text-brand-accent">CSS</h4>
+            <h4 className="font-semibold text-accent-foreground">CSS</h4>
             <p className="text-sm text-muted-foreground mt-1">Simple and widely known</p>
           </div>
           <div className="rounded-lg border border-border p-4 bg-card">
-            <h4 className="font-semibold text-brand-accent">Regex</h4>
+            <h4 className="font-semibold text-accent-foreground">Regex</h4>
             <p className="text-sm text-muted-foreground mt-1">Pattern matching in text</p>
           </div>
         </div>
@@ -233,8 +233,8 @@ export default function QueriesPage() {
           </table>
         </div>
 
-        <div className="rounded-lg border border-brand-accent/30 bg-brand-accent/5 p-6 mt-6">
-          <h3 className="text-lg font-semibold text-brand-accent mb-2">Pro Tip: Use Capture Groups</h3>
+        <div className="rounded-lg border border-accent/30 bg-accent/5 p-6 mt-6">
+          <h3 className="text-lg font-semibold text-accent-foreground mb-2">Pro Tip: Use Capture Groups</h3>
           <p className="text-muted-foreground">
             Use parentheses to capture specific parts of a match. For example, <code className="bg-muted px-1 rounded">Price: \$(\d+\.\d+)</code>
             captures just the number, not &quot;Price: $&quot;.
@@ -254,27 +254,27 @@ export default function QueriesPage() {
             <tbody>
               <tr className="border-b border-border">
                 <td className="p-3">Simple class/ID selection</td>
-                <td className="p-3 font-semibold text-brand-accent">CSS</td>
+                <td className="p-3 font-semibold text-accent-foreground">CSS</td>
                 <td className="p-3 text-muted-foreground">Concise and readable</td>
               </tr>
               <tr className="border-b border-border">
                 <td className="p-3">Text content extraction</td>
-                <td className="p-3 font-semibold text-brand-accent">XPath</td>
+                <td className="p-3 font-semibold text-accent-foreground">XPath</td>
                 <td className="p-3 text-muted-foreground">text() function is explicit</td>
               </tr>
               <tr className="border-b border-border">
                 <td className="p-3">Parent/sibling navigation</td>
-                <td className="p-3 font-semibold text-brand-accent">XPath</td>
+                <td className="p-3 font-semibold text-accent-foreground">XPath</td>
                 <td className="p-3 text-muted-foreground">CSS can&apos;t go upward</td>
               </tr>
               <tr className="border-b border-border">
                 <td className="p-3">Pattern in text</td>
-                <td className="p-3 font-semibold text-brand-accent">Regex</td>
+                <td className="p-3 font-semibold text-accent-foreground">Regex</td>
                 <td className="p-3 text-muted-foreground">Best for pattern matching</td>
               </tr>
               <tr className="border-b border-border">
                 <td className="p-3">Attribute contains value</td>
-                <td className="p-3 font-semibold text-brand-accent">XPath</td>
+                <td className="p-3 font-semibold text-accent-foreground">XPath</td>
                 <td className="p-3 text-muted-foreground">contains() function</td>
               </tr>
             </tbody>
@@ -297,16 +297,16 @@ export default function QueriesPage() {
         <div className="grid gap-4 md:grid-cols-2 mt-4">
           <Link
             href="/docs/creating-jobs"
-            className="rounded-lg border border-border p-4 hover:border-brand-accent/50 transition-colors group"
+            className="rounded-lg border border-border p-4 hover:border-accent/50 transition-colors group"
           >
-            <h4 className="font-semibold group-hover:text-brand-accent">Creating Jobs</h4>
+            <h4 className="font-semibold group-hover:text-accent-foreground">Creating Jobs</h4>
             <p className="text-sm text-muted-foreground mt-1">Apply queries in a job configuration</p>
           </Link>
           <Link
             href="/docs/javascript-rendering"
-            className="rounded-lg border border-border p-4 hover:border-brand-accent/50 transition-colors group"
+            className="rounded-lg border border-border p-4 hover:border-accent/50 transition-colors group"
           >
-            <h4 className="font-semibold group-hover:text-brand-accent">JavaScript Rendering</h4>
+            <h4 className="font-semibold group-hover:text-accent-foreground">JavaScript Rendering</h4>
             <p className="text-sm text-muted-foreground mt-1">Handle dynamic content with JS</p>
           </Link>
         </div>

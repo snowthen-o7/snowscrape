@@ -203,16 +203,16 @@ def verify_webhook(payload: bytes, signature: str, secret: str) -> bool:
         <div className="grid gap-4 md:grid-cols-2 mt-4">
           <Link
             href="/docs/api/jobs"
-            className="rounded-lg border border-border p-4 hover:border-brand-accent/50 transition-colors group"
+            className="rounded-lg border border-border p-4 hover:border-accent/50 transition-colors group"
           >
-            <h4 className="font-semibold group-hover:text-brand-accent">Jobs API</h4>
+            <h4 className="font-semibold group-hover:text-accent-foreground">Jobs API</h4>
             <p className="text-sm text-muted-foreground mt-1">Manage jobs programmatically</p>
           </Link>
           <Link
             href="/docs/exporting-data"
-            className="rounded-lg border border-border p-4 hover:border-brand-accent/50 transition-colors group"
+            className="rounded-lg border border-border p-4 hover:border-accent/50 transition-colors group"
           >
-            <h4 className="font-semibold group-hover:text-brand-accent">Exporting Data</h4>
+            <h4 className="font-semibold group-hover:text-accent-foreground">Exporting Data</h4>
             <p className="text-sm text-muted-foreground mt-1">Download results in various formats</p>
           </Link>
         </div>

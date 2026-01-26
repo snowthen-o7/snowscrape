@@ -23,7 +23,7 @@ export default function GettingStartedPage() {
 
         <h2 className="text-2xl font-bold mt-8">Step 1: Create Your Account</h2>
         <p className="text-muted-foreground">
-          Visit <Link href="/sign-up" className="text-brand-accent hover:underline">snowscrape.com/sign-up</Link> to
+          Visit <Link href="/sign-up" className="text-accent-foreground hover:underline">snowscrape.com/sign-up</Link> to
           create your free account. You can sign up with your email or use Google/GitHub authentication for quick access.
         </p>
 
@@ -53,8 +53,8 @@ export default function GettingStartedPage() {
           <li><strong>Schedule (optional)</strong> - Set up recurring scrapes</li>
         </ol>
 
-        <div className="rounded-lg border border-brand-accent/30 bg-brand-accent/5 p-6 mt-6">
-          <h3 className="text-lg font-semibold text-brand-accent mb-2">Pro Tip</h3>
+        <div className="rounded-lg border border-accent/30 bg-accent/5 p-6 mt-6">
+          <h3 className="text-lg font-semibold text-accent-foreground mb-2">Pro Tip</h3>
           <p className="text-muted-foreground">
             Start with a simple job that extracts just one or two data points. Once you understand how queries work,
             you can add more complex extraction rules.
@@ -88,30 +88,30 @@ export default function GettingStartedPage() {
         <div className="grid gap-4 md:grid-cols-2 mt-4">
           <Link
             href="/docs/creating-jobs"
-            className="rounded-lg border border-border p-4 hover:border-brand-accent/50 transition-colors group"
+            className="rounded-lg border border-border p-4 hover:border-accent/50 transition-colors group"
           >
-            <h4 className="font-semibold group-hover:text-brand-accent">Creating Jobs</h4>
+            <h4 className="font-semibold group-hover:text-accent-foreground">Creating Jobs</h4>
             <p className="text-sm text-muted-foreground mt-1">Learn job configuration in detail</p>
           </Link>
           <Link
             href="/docs/queries"
-            className="rounded-lg border border-border p-4 hover:border-brand-accent/50 transition-colors group"
+            className="rounded-lg border border-border p-4 hover:border-accent/50 transition-colors group"
           >
-            <h4 className="font-semibold group-hover:text-brand-accent">Query Types</h4>
+            <h4 className="font-semibold group-hover:text-accent-foreground">Query Types</h4>
             <p className="text-sm text-muted-foreground mt-1">Master XPath, CSS, and Regex selectors</p>
           </Link>
           <Link
             href="/docs/templates"
-            className="rounded-lg border border-border p-4 hover:border-brand-accent/50 transition-colors group"
+            className="rounded-lg border border-border p-4 hover:border-accent/50 transition-colors group"
           >
-            <h4 className="font-semibold group-hover:text-brand-accent">Using Templates</h4>
+            <h4 className="font-semibold group-hover:text-accent-foreground">Using Templates</h4>
             <p className="text-sm text-muted-foreground mt-1">Start faster with pre-built templates</p>
           </Link>
           <Link
             href="/docs/api/authentication"
-            className="rounded-lg border border-border p-4 hover:border-brand-accent/50 transition-colors group"
+            className="rounded-lg border border-border p-4 hover:border-accent/50 transition-colors group"
           >
-            <h4 className="font-semibold group-hover:text-brand-accent">API Access</h4>
+            <h4 className="font-semibold group-hover:text-accent-foreground">API Access</h4>
             <p className="text-sm text-muted-foreground mt-1">Integrate SnowScrape with your apps</p>
           </Link>
         </div>

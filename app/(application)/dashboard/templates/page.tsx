@@ -327,23 +327,23 @@ export default function TemplatesPage() {
                   return (
                     <Card
                       key={template.id}
-                      className="group hover:border-brand-accent transition-colors cursor-pointer"
+                      className="group hover:border-accent transition-colors cursor-pointer"
                       onClick={() => handleUseTemplate(template.id)}
                     >
                       <CardHeader>
                         <div className="flex items-start justify-between mb-2">
-                          <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-brand-accent/10">
-                            <Icon className="h-6 w-6 text-brand-accent" />
+                          <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent/10">
+                            <Icon className="h-6 w-6 text-accent-foreground" />
                           </div>
                           <div className="flex items-center gap-2">
                             {template.official && (
-                              <Badge variant="outline" className="text-brand-accent border-brand-accent">
+                              <Badge variant="outline" className="text-accent-foreground border-accent">
                                 Official
                               </Badge>
                             )}
                           </div>
                         </div>
-                        <CardTitle className="text-lg group-hover:text-brand-accent transition-colors">
+                        <CardTitle className="text-lg group-hover:text-accent-foreground transition-colors">
                           {template.name}
                         </CardTitle>
                         <CardDescription className="line-clamp-2">
@@ -429,16 +429,16 @@ export default function TemplatesPage() {
                 {userTemplates.map((template) => (
                   <Card
                     key={template.template_id}
-                    className="group hover:border-brand-accent transition-colors cursor-pointer"
+                    className="group hover:border-accent transition-colors cursor-pointer"
                     onClick={() => handleUseTemplate(template.template_id)}
                   >
                     <CardHeader>
                       <div className="flex items-start justify-between mb-2">
-                        <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-brand-accent/10">
-                          <Package className="h-6 w-6 text-brand-accent" />
+                        <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent/10">
+                          <Package className="h-6 w-6 text-accent-foreground" />
                         </div>
                       </div>
-                      <CardTitle className="text-lg group-hover:text-brand-accent transition-colors">
+                      <CardTitle className="text-lg group-hover:text-accent-foreground transition-colors">
                         {template.name}
                       </CardTitle>
                       {template.description && (

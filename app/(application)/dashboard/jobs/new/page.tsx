@@ -72,7 +72,7 @@ export default function NewJobPage() {
         {/* Quick Tips */}
         <div className="bg-muted/50 rounded-lg p-4 border">
           <div className="flex items-start gap-3">
-            <Sparkles className="h-5 w-5 text-brand-accent mt-0.5" />
+            <Sparkles className="h-5 w-5 text-accent-foreground mt-0.5" />
             <div>
               <p className="font-medium text-sm">Not sure where to start?</p>
               <p className="text-sm text-muted-foreground">
@@ -91,13 +91,13 @@ export default function NewJobPage() {
               <Card
                 key={method.id}
                 className={`relative cursor-pointer transition-all hover:border-primary hover:shadow-md ${
-                  method.recommended ? 'border-brand-accent' : ''
+                  method.recommended ? 'border-accent' : ''
                 }`}
                 onClick={() => handleMethodSelect(method)}
               >
                 {method.recommended && (
                   <div className="absolute -top-3 left-4">
-                    <span className="bg-brand-accent text-brand-primary text-xs font-medium px-2 py-1 rounded-full">
+                    <span className="bg-accent text-primary text-xs font-medium px-2 py-1 rounded-full">
                       Recommended
                     </span>
                   </div>

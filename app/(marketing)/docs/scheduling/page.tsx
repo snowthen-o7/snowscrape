@@ -24,19 +24,19 @@ export default function SchedulingPage() {
 
         <div className="grid gap-4 md:grid-cols-3 mt-6">
           <div className="rounded-lg border border-border p-4 bg-card">
-            <h4 className="font-semibold text-brand-accent">Days</h4>
+            <h4 className="font-semibold text-accent-foreground">Days</h4>
             <p className="text-sm text-muted-foreground mt-2">
               Which days of the week to run (0 = Sunday, 6 = Saturday)
             </p>
           </div>
           <div className="rounded-lg border border-border p-4 bg-card">
-            <h4 className="font-semibold text-brand-accent">Hours</h4>
+            <h4 className="font-semibold text-accent-foreground">Hours</h4>
             <p className="text-sm text-muted-foreground mt-2">
               Which hours to run (0-23 in 24-hour format)
             </p>
           </div>
           <div className="rounded-lg border border-border p-4 bg-card">
-            <h4 className="font-semibold text-brand-accent">Minutes</h4>
+            <h4 className="font-semibold text-accent-foreground">Minutes</h4>
             <p className="text-sm text-muted-foreground mt-2">
               Which minutes to run (0-59)
             </p>
@@ -102,8 +102,8 @@ export default function SchedulingPage() {
           <li>12 PM GMT = 12:00 UTC (hours: [12])</li>
         </ul>
 
-        <div className="rounded-lg border border-brand-accent/30 bg-brand-accent/5 p-6 mt-6">
-          <h3 className="text-lg font-semibold text-brand-accent mb-2">Pro Tip</h3>
+        <div className="rounded-lg border border-accent/30 bg-accent/5 p-6 mt-6">
+          <h3 className="text-lg font-semibold text-accent-foreground mb-2">Pro Tip</h3>
           <p className="text-muted-foreground">
             Avoid scheduling jobs at exactly midnight (00:00) or common times like the top of the hour.
             Using minutes like :15 or :30 helps distribute load and avoid rate limits from target sites.
@@ -154,16 +154,16 @@ export default function SchedulingPage() {
         <div className="grid gap-4 md:grid-cols-2 mt-4">
           <Link
             href="/docs/api/webhooks"
-            className="rounded-lg border border-border p-4 hover:border-brand-accent/50 transition-colors group"
+            className="rounded-lg border border-border p-4 hover:border-accent/50 transition-colors group"
           >
-            <h4 className="font-semibold group-hover:text-brand-accent">Webhooks</h4>
+            <h4 className="font-semibold group-hover:text-accent-foreground">Webhooks</h4>
             <p className="text-sm text-muted-foreground mt-1">Get notified when jobs complete</p>
           </Link>
           <Link
             href="/docs/creating-jobs"
-            className="rounded-lg border border-border p-4 hover:border-brand-accent/50 transition-colors group"
+            className="rounded-lg border border-border p-4 hover:border-accent/50 transition-colors group"
           >
-            <h4 className="font-semibold group-hover:text-brand-accent">Creating Jobs</h4>
+            <h4 className="font-semibold group-hover:text-accent-foreground">Creating Jobs</h4>
             <p className="text-sm text-muted-foreground mt-1">Full job configuration guide</p>
           </Link>
         </div>

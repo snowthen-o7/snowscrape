@@ -277,7 +277,7 @@ export default function AnalyticsPage() {
                       className="flex items-center justify-between rounded-lg border border-border p-4"
                     >
                       <div className="flex items-center gap-4">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-accent/10 text-brand-accent font-bold">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/10 text-accent-foreground font-bold">
                           {index + 1}
                         </div>
                         <div>
@@ -375,7 +375,7 @@ export default function AnalyticsPage() {
 
                   <div className="flex items-center justify-between pt-3">
                     <p className="text-lg font-bold">Total</p>
-                    <p className="text-2xl font-bold text-brand-accent">$26.20</p>
+                    <p className="text-2xl font-bold text-accent-foreground">$26.20</p>
                   </div>
                 </CardContent>
               </Card>

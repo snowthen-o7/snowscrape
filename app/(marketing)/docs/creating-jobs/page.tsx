@@ -164,7 +164,7 @@ export default function CreatingJobsPage() {
           browser to render the page before extracting data.
         </p>
         <p className="text-sm text-muted-foreground mt-2">
-          <Link href="/docs/javascript-rendering" className="text-brand-accent hover:underline">
+          <Link href="/docs/javascript-rendering" className="text-accent-foreground hover:underline">
             Learn more about JavaScript rendering →
           </Link>
         </p>
@@ -179,7 +179,7 @@ export default function CreatingJobsPage() {
           <li><strong>Automatic Retries</strong> - Retry failed requests with different proxies</li>
         </ul>
         <p className="text-sm text-muted-foreground mt-2">
-          <Link href="/docs/proxy-rotation" className="text-brand-accent hover:underline">
+          <Link href="/docs/proxy-rotation" className="text-accent-foreground hover:underline">
             Learn more about proxy rotation →
           </Link>
         </p>
@@ -188,16 +188,16 @@ export default function CreatingJobsPage() {
         <div className="grid gap-4 md:grid-cols-2 mt-4">
           <Link
             href="/docs/queries"
-            className="rounded-lg border border-border p-4 hover:border-brand-accent/50 transition-colors group"
+            className="rounded-lg border border-border p-4 hover:border-accent/50 transition-colors group"
           >
-            <h4 className="font-semibold group-hover:text-brand-accent">Query Types</h4>
+            <h4 className="font-semibold group-hover:text-accent-foreground">Query Types</h4>
             <p className="text-sm text-muted-foreground mt-1">Deep dive into XPath, CSS, and Regex</p>
           </Link>
           <Link
             href="/docs/exporting-data"
-            className="rounded-lg border border-border p-4 hover:border-brand-accent/50 transition-colors group"
+            className="rounded-lg border border-border p-4 hover:border-accent/50 transition-colors group"
           >
-            <h4 className="font-semibold group-hover:text-brand-accent">Exporting Data</h4>
+            <h4 className="font-semibold group-hover:text-accent-foreground">Exporting Data</h4>
             <p className="text-sm text-muted-foreground mt-1">Download and integrate your scraped data</p>
           </Link>
         </div>

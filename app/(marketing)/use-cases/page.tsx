@@ -39,8 +39,8 @@ export default function UseCases() {
           <div className="mb-24">
             <div className="grid grid-cols-1 gap-16 lg:grid-cols-2 lg:items-center">
               <div>
-                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-brand-accent/10">
-                  <ShoppingCart className="h-6 w-6 text-brand-accent" />
+                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent/10">
+                  <ShoppingCart className="h-6 w-6 text-accent-foreground" />
                 </div>
                 <h2 className="mt-6 text-3xl font-bold tracking-tight text-foreground">
                   E-commerce Price Monitoring
@@ -55,19 +55,19 @@ export default function UseCases() {
                     <h4 className="font-semibold text-foreground">Common Use Cases</h4>
                     <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
                       <li className="flex items-start gap-2">
-                        <span className="text-brand-accent">•</span>
+                        <span className="text-accent-foreground">•</span>
                         <span>Monitor competitor pricing strategies</span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-brand-accent">•</span>
+                        <span className="text-accent-foreground">•</span>
                         <span>Track product availability and stock levels</span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-brand-accent">•</span>
+                        <span className="text-accent-foreground">•</span>
                         <span>Aggregate customer reviews and ratings</span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-brand-accent">•</span>
+                        <span className="text-accent-foreground">•</span>
                         <span>Identify pricing trends and opportunities</span>
                       </li>
                     </ul>
@@ -94,7 +94,7 @@ export default function UseCases() {
                     </ul>
                   </div>
 
-                  <div className="rounded-lg bg-brand-accent/10 p-4">
+                  <div className="rounded-lg bg-accent/10 p-4">
                     <p className="text-xs font-medium text-foreground">Results:</p>
                     <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
                       <li>• 15% increase in competitive pricing accuracy</li>
@@ -129,7 +129,7 @@ export default function UseCases() {
                       </ul>
                     </div>
 
-                    <div className="rounded-lg bg-brand-accent/10 p-4">
+                    <div className="rounded-lg bg-accent/10 p-4">
                       <p className="text-xs font-medium text-foreground">Impact:</p>
                       <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
                         <li>• Real-time brand reputation monitoring</li>
@@ -142,8 +142,8 @@ export default function UseCases() {
               </div>
 
               <div className="order-1 lg:order-2">
-                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-brand-accent/10">
-                  <TrendingUp className="h-6 w-6 text-brand-accent" />
+                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent/10">
+                  <TrendingUp className="h-6 w-6 text-accent-foreground" />
                 </div>
                 <h2 className="mt-6 text-3xl font-bold tracking-tight text-foreground">
                   Market Research & Analysis
@@ -158,19 +158,19 @@ export default function UseCases() {
                     <h4 className="font-semibold text-foreground">Popular Applications</h4>
                     <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
                       <li className="flex items-start gap-2">
-                        <span className="text-brand-accent">•</span>
+                        <span className="text-accent-foreground">•</span>
                         <span>Brand reputation monitoring</span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-brand-accent">•</span>
+                        <span className="text-accent-foreground">•</span>
                         <span>Consumer sentiment analysis</span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-brand-accent">•</span>
+                        <span className="text-accent-foreground">•</span>
                         <span>Trend identification and forecasting</span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-brand-accent">•</span>
+                        <span className="text-accent-foreground">•</span>
                         <span>Competitor product launches</span>
                       </li>
                     </ul>
@@ -184,8 +184,8 @@ export default function UseCases() {
           <div className="mb-24">
             <div className="grid grid-cols-1 gap-16 lg:grid-cols-2 lg:items-center">
               <div>
-                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-brand-accent/10">
-                  <Building2 className="h-6 w-6 text-brand-accent" />
+                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent/10">
+                  <Building2 className="h-6 w-6 text-accent-foreground" />
                 </div>
                 <h2 className="mt-6 text-3xl font-bold tracking-tight text-foreground">
                   Real Estate Data Aggregation
@@ -200,19 +200,19 @@ export default function UseCases() {
                     <h4 className="font-semibold text-foreground">Key Use Cases</h4>
                     <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
                       <li className="flex items-start gap-2">
-                        <span className="text-brand-accent">•</span>
+                        <span className="text-accent-foreground">•</span>
                         <span>Property listing aggregation</span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-brand-accent">•</span>
+                        <span className="text-accent-foreground">•</span>
                         <span>Market trend analysis by location</span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-brand-accent">•</span>
+                        <span className="text-accent-foreground">•</span>
                         <span>Investment opportunity identification</span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-brand-accent">•</span>
+                        <span className="text-accent-foreground">•</span>
                         <span>Rental yield calculations</span>
                       </li>
                     </ul>
@@ -239,7 +239,7 @@ export default function UseCases() {
                     </ul>
                   </div>
 
-                  <div className="rounded-lg bg-brand-accent/10 p-4">
+                  <div className="rounded-lg bg-accent/10 p-4">
                     <p className="text-xs font-medium text-foreground">Outcome:</p>
                     <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
                       <li>• 40% faster deal identification</li>
@@ -275,7 +275,7 @@ export default function UseCases() {
                       </ul>
                     </div>
 
-                    <div className="rounded-lg bg-brand-accent/10 p-4">
+                    <div className="rounded-lg bg-accent/10 p-4">
                       <p className="text-xs font-medium text-foreground">Benefits:</p>
                       <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
                         <li>• Salary benchmarking for candidates</li>
@@ -288,8 +288,8 @@ export default function UseCases() {
               </div>
 
               <div className="order-1 lg:order-2">
-                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-brand-accent/10">
-                  <Briefcase className="h-6 w-6 text-brand-accent" />
+                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent/10">
+                  <Briefcase className="h-6 w-6 text-accent-foreground" />
                 </div>
                 <h2 className="mt-6 text-3xl font-bold tracking-tight text-foreground">
                   Job Market Intelligence
@@ -304,19 +304,19 @@ export default function UseCases() {
                     <h4 className="font-semibold text-foreground">Applications</h4>
                     <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
                       <li className="flex items-start gap-2">
-                        <span className="text-brand-accent">•</span>
+                        <span className="text-accent-foreground">•</span>
                         <span>Salary benchmarking and trends</span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-brand-accent">•</span>
+                        <span className="text-accent-foreground">•</span>
                         <span>Skills demand analysis</span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-brand-accent">•</span>
+                        <span className="text-accent-foreground">•</span>
                         <span>Company hiring patterns</span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-brand-accent">•</span>
+                        <span className="text-accent-foreground">•</span>
                         <span>Remote work trends</span>
                       </li>
                     </ul>
@@ -330,8 +330,8 @@ export default function UseCases() {
           <div className="mb-24">
             <div className="grid grid-cols-1 gap-16 lg:grid-cols-2 lg:items-center">
               <div>
-                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-brand-accent/10">
-                  <Search className="h-6 w-6 text-brand-accent" />
+                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent/10">
+                  <Search className="h-6 w-6 text-accent-foreground" />
                 </div>
                 <h2 className="mt-6 text-3xl font-bold tracking-tight text-foreground">
                   SEO & Content Research
@@ -346,19 +346,19 @@ export default function UseCases() {
                     <h4 className="font-semibold text-foreground">Use Cases</h4>
                     <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
                       <li className="flex items-start gap-2">
-                        <span className="text-brand-accent">•</span>
+                        <span className="text-accent-foreground">•</span>
                         <span>SERP position tracking</span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-brand-accent">•</span>
+                        <span className="text-accent-foreground">•</span>
                         <span>Competitor content analysis</span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-brand-accent">•</span>
+                        <span className="text-accent-foreground">•</span>
                         <span>Backlink monitoring</span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-brand-accent">•</span>
+                        <span className="text-accent-foreground">•</span>
                         <span>Keyword research at scale</span>
                       </li>
                     </ul>
@@ -385,7 +385,7 @@ export default function UseCases() {
                     </ul>
                   </div>
 
-                  <div className="rounded-lg bg-brand-accent/10 p-4">
+                  <div className="rounded-lg bg-accent/10 p-4">
                     <p className="text-xs font-medium text-foreground">Results:</p>
                     <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
                       <li>• 200+ content opportunities identified</li>
@@ -421,7 +421,7 @@ export default function UseCases() {
                       </ul>
                     </div>
 
-                    <div className="rounded-lg bg-brand-accent/10 p-4">
+                    <div className="rounded-lg bg-accent/10 p-4">
                       <p className="text-xs font-medium text-foreground">Impact:</p>
                       <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
                         <li>• 50,000+ qualified leads generated</li>
@@ -434,8 +434,8 @@ export default function UseCases() {
               </div>
 
               <div className="order-1 lg:order-2">
-                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-brand-accent/10">
-                  <Users className="h-6 w-6 text-brand-accent" />
+                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent/10">
+                  <Users className="h-6 w-6 text-accent-foreground" />
                 </div>
                 <h2 className="mt-6 text-3xl font-bold tracking-tight text-foreground">
                   Lead Generation & Enrichment
@@ -450,19 +450,19 @@ export default function UseCases() {
                     <h4 className="font-semibold text-foreground">Common Applications</h4>
                     <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
                       <li className="flex items-start gap-2">
-                        <span className="text-brand-accent">•</span>
+                        <span className="text-accent-foreground">•</span>
                         <span>B2B prospect identification</span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-brand-accent">•</span>
+                        <span className="text-accent-foreground">•</span>
                         <span>Contact information verification</span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-brand-accent">•</span>
+                        <span className="text-accent-foreground">•</span>
                         <span>Company firmographic data</span>
                       </li>
                       <li className="flex items-start gap-2">
-                        <span className="text-brand-accent">•</span>
+                        <span className="text-accent-foreground">•</span>
                         <span>Technology stack detection</span>
                       </li>
                     </ul>
@@ -499,7 +499,7 @@ export default function UseCases() {
             ].map((industry) => (
               <div
                 key={industry}
-                className="rounded-lg border border-border bg-card p-6 text-center transition-all hover:border-brand-accent/50"
+                className="rounded-lg border border-border bg-card p-6 text-center transition-all hover:border-accent/50"
               >
                 <p className="font-semibold text-foreground">{industry}</p>
               </div>

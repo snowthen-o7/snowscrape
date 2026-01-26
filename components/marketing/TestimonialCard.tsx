@@ -38,7 +38,7 @@ export function TestimonialCard({
 
         {/* Author */}
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-accent/10 text-sm font-semibold text-brand-accent">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/10 text-sm font-semibold text-accent-foreground">
             {author.split(' ').map((n) => n[0]).join('')}
           </div>
           <div>

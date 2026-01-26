@@ -30,7 +30,7 @@ export function LoadingSpinner({
     <div className="flex flex-col items-center justify-center gap-3">
       <Loader2Icon
         className={cn(
-          'animate-spin text-brand-primary dark:text-brand-accent',
+          'animate-spin text-primary dark:text-accent-foreground',
           sizeClasses[size],
           className
         )}

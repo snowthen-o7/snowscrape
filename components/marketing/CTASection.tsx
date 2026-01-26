@@ -42,7 +42,7 @@ export function CTASection({
             {description}
           </p>
           <div className="mt-10 flex items-center justify-center gap-4">
-            <Button size="lg" asChild className="bg-brand-accent text-brand-primary hover:bg-brand-accent/90">
+            <Button size="lg" asChild className="bg-accent text-primary hover:bg-accent/90">
               <Link href={primaryCTA.href}>
                 {primaryCTA.text}
                 <ArrowRight className="ml-2 h-5 w-5" />

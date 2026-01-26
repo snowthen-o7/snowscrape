@@ -172,8 +172,8 @@ export default function Blog() {
                   variant={selectedCategory === category ? 'default' : 'outline'}
                   className={`cursor-pointer ${
                     selectedCategory === category
-                      ? 'bg-brand-accent text-brand-primary hover:bg-brand-accent/90'
-                      : 'hover:border-brand-accent/50'
+                      ? 'bg-accent text-primary hover:bg-accent/90'
+                      : 'hover:border-accent/50'
                   }`}
                   onClick={() => setSelectedCategory(category)}
                 >
@@ -194,7 +194,7 @@ export default function Blog() {
                 <Link
                   key={post.slug}
                   href={`/blog/${post.slug}`}
-                  className="group rounded-2xl border border-border bg-card transition-all hover:border-brand-accent/50 hover:shadow-lg"
+                  className="group rounded-2xl border border-border bg-card transition-all hover:border-accent/50 hover:shadow-lg"
                 >
                   {/* Image Placeholder */}
                   <div className="aspect-video w-full rounded-t-2xl bg-muted flex items-center justify-center">
@@ -212,7 +212,7 @@ export default function Blog() {
                       </div>
                     </div>
 
-                    <h3 className="mt-4 text-xl font-semibold text-foreground group-hover:text-brand-accent">
+                    <h3 className="mt-4 text-xl font-semibold text-foreground group-hover:text-accent-foreground">
                       {post.title}
                     </h3>
 
@@ -229,7 +229,7 @@ export default function Blog() {
                         </div>
                       </div>
 
-                      <ArrowRight className="h-5 w-5 text-brand-accent opacity-0 transition-opacity group-hover:opacity-100" />
+                      <ArrowRight className="h-5 w-5 text-accent-foreground opacity-0 transition-opacity group-hover:opacity-100" />
                     </div>
                   </div>
                 </Link>
@@ -245,7 +245,7 @@ export default function Blog() {
                   setSearchQuery('');
                   setSelectedCategory('All');
                 }}
-                className="mt-4 text-sm font-medium text-brand-accent hover:underline"
+                className="mt-4 text-sm font-medium text-accent-foreground hover:underline"
               >
                 Clear filters
               </button>
@@ -275,7 +275,7 @@ export default function Blog() {
               />
               <button
                 type="submit"
-                className="rounded-lg bg-brand-accent px-6 py-2 font-semibold text-brand-primary hover:bg-brand-accent/90"
+                className="rounded-lg bg-accent px-6 py-2 font-semibold text-primary hover:bg-accent/90"
               >
                 Subscribe
               </button>

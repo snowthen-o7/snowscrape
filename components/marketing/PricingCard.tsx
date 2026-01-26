@@ -33,12 +33,12 @@ export function PricingCard({
     <Card
       className={`relative h-full ${
         popular
-          ? 'border-2 border-brand-accent ring-2 ring-brand-accent/20'
+          ? 'border-2 border-accent ring-2 ring-brand-accent/20'
           : 'border-border'
       }`}
     >
       {popular && (
-        <div className="absolute -top-4 left-1/2 -translate-x-1/2 rounded-full bg-brand-accent px-4 py-1 text-sm font-semibold text-brand-primary">
+        <div className="absolute -top-4 left-1/2 -translate-x-1/2 rounded-full bg-accent px-4 py-1 text-sm font-semibold text-primary">
           Most Popular
         </div>
       )}
@@ -65,7 +65,7 @@ export function PricingCard({
         <ul className="mt-8 space-y-3">
           {features.map((feature, index) => (
             <li key={index} className="flex gap-x-3 text-sm text-muted-foreground">
-              <Check className="h-5 w-5 flex-none text-brand-accent" />
+              <Check className="h-5 w-5 flex-none text-accent-foreground" />
               <span>{feature}</span>
             </li>
           ))}
@@ -74,7 +74,7 @@ export function PricingCard({
         <Button
           className={`mt-8 w-full ${
             variant === 'accent'
-              ? 'bg-brand-accent text-brand-primary hover:bg-brand-accent/90'
+              ? 'bg-accent text-primary hover:bg-accent/90'
               : ''
           }`}
           variant={variant === 'accent' ? 'default' : 'outline'}

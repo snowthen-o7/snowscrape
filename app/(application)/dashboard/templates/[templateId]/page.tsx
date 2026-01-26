@@ -460,7 +460,7 @@ export default function TemplateDetailPage() {
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <h1 className="text-3xl font-bold tracking-tight">{template.name}</h1>
-              <Badge variant="outline" className="text-brand-accent border-brand-accent">
+              <Badge variant="outline" className="text-accent-foreground border-accent">
                 Official
               </Badge>
             </div>
@@ -493,7 +493,7 @@ export default function TemplateDetailPage() {
             </CardHeader>
             <CardContent>
               <div className="flex items-center gap-2">
-                <Download className="h-5 w-5 text-brand-accent" />
+                <Download className="h-5 w-5 text-accent-foreground" />
                 <span className="text-2xl font-bold">
                   {template.usageCount.toLocaleString()}
                 </span>
@@ -668,7 +668,7 @@ export default function TemplateDetailPage() {
         </Tabs>
 
         {/* Bottom CTA */}
-        <Card className="border-brand-accent">
+        <Card className="border-accent">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>

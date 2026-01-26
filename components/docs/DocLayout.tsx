@@ -83,7 +83,7 @@ export function DocLayout({ children, title, description }: DocLayoutProps) {
                           className={cn(
                             'block text-sm py-1.5 px-3 rounded-md transition-colors',
                             pathname === item.href
-                              ? 'bg-brand-accent/10 text-brand-accent font-medium'
+                              ? 'bg-accent/10 text-accent-foreground font-medium'
                               : 'text-muted-foreground hover:text-foreground hover:bg-muted'
                           )}
                         >

@@ -53,8 +53,8 @@ export default function Features() {
 
           <div className="mx-auto mt-16 grid max-w-5xl grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">
             <div className="rounded-2xl border border-border bg-card p-8">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-brand-accent/10">
-                <Code2 className="h-6 w-6 text-brand-accent" />
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent/10">
+                <Code2 className="h-6 w-6 text-accent-foreground" />
               </div>
               <h3 className="mt-6 text-xl font-semibold text-foreground">XPath & CSS Selectors</h3>
               <p className="mt-2 text-sm text-muted-foreground">
@@ -69,8 +69,8 @@ export default function Features() {
             </div>
 
             <div className="rounded-2xl border border-border bg-card p-8">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-brand-accent/10">
-                <FileCode className="h-6 w-6 text-brand-accent" />
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent/10">
+                <FileCode className="h-6 w-6 text-accent-foreground" />
               </div>
               <h3 className="mt-6 text-xl font-semibold text-foreground">Regular Expressions</h3>
               <p className="mt-2 text-sm text-muted-foreground">
@@ -85,8 +85,8 @@ export default function Features() {
             </div>
 
             <div className="rounded-2xl border border-border bg-card p-8">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-brand-accent/10">
-                <Settings className="h-6 w-6 text-brand-accent" />
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent/10">
+                <Settings className="h-6 w-6 text-accent-foreground" />
               </div>
               <h3 className="mt-6 text-xl font-semibold text-foreground">JSONPath</h3>
               <p className="mt-2 text-sm text-muted-foreground">
@@ -118,8 +118,8 @@ export default function Features() {
 
               <div className="mt-8 space-y-4">
                 <div className="flex gap-4">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-accent/10">
-                    <Zap className="h-4 w-4 text-brand-accent" />
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/10">
+                    <Zap className="h-4 w-4 text-accent-foreground" />
                   </div>
                   <div>
                     <h4 className="font-semibold text-foreground">Full Browser Automation</h4>
@@ -130,8 +130,8 @@ export default function Features() {
                 </div>
 
                 <div className="flex gap-4">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-accent/10">
-                    <Zap className="h-4 w-4 text-brand-accent" />
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/10">
+                    <Zap className="h-4 w-4 text-accent-foreground" />
                   </div>
                   <div>
                     <h4 className="font-semibold text-foreground">Wait for Elements</h4>
@@ -142,8 +142,8 @@ export default function Features() {
                 </div>
 
                 <div className="flex gap-4">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-accent/10">
-                    <Zap className="h-4 w-4 text-brand-accent" />
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/10">
+                    <Zap className="h-4 w-4 text-accent-foreground" />
                   </div>
                   <div>
                     <h4 className="font-semibold text-foreground">Screenshot Capture</h4>
@@ -154,8 +154,8 @@ export default function Features() {
                 </div>
 
                 <div className="flex gap-4">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-accent/10">
-                    <Zap className="h-4 w-4 text-brand-accent" />
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/10">
+                    <Zap className="h-4 w-4 text-accent-foreground" />
                   </div>
                   <div>
                     <h4 className="font-semibold text-foreground">Custom JavaScript</h4>
@@ -171,27 +171,27 @@ export default function Features() {
               <h3 className="text-lg font-semibold text-foreground">Supported Scenarios</h3>
               <ul className="mt-6 space-y-3 text-sm text-muted-foreground">
                 <li className="flex items-start gap-3">
-                  <span className="text-brand-accent">✓</span>
+                  <span className="text-accent-foreground">✓</span>
                   <span>React, Vue, Angular, and other SPA frameworks</span>
                 </li>
                 <li className="flex items-start gap-3">
-                  <span className="text-brand-accent">✓</span>
+                  <span className="text-accent-foreground">✓</span>
                   <span>Infinite scroll and lazy-loaded content</span>
                 </li>
                 <li className="flex items-start gap-3">
-                  <span className="text-brand-accent">✓</span>
+                  <span className="text-accent-foreground">✓</span>
                   <span>AJAX requests and dynamic data loading</span>
                 </li>
                 <li className="flex items-start gap-3">
-                  <span className="text-brand-accent">✓</span>
+                  <span className="text-accent-foreground">✓</span>
                   <span>Modal dialogs and popup content</span>
                 </li>
                 <li className="flex items-start gap-3">
-                  <span className="text-brand-accent">✓</span>
+                  <span className="text-accent-foreground">✓</span>
                   <span>Interactive charts and data visualizations</span>
                 </li>
                 <li className="flex items-start gap-3">
-                  <span className="text-brand-accent">✓</span>
+                  <span className="text-accent-foreground">✓</span>
                   <span>Client-side rendered tables and grids</span>
                 </li>
               </ul>
@@ -226,8 +226,8 @@ export default function Features() {
 
           <div className="mx-auto mt-16 grid max-w-5xl grid-cols-1 gap-8 md:grid-cols-2">
             <div className="rounded-2xl border border-border bg-card p-8">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-brand-accent/10">
-                <Globe className="h-6 w-6 text-brand-accent" />
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent/10">
+                <Globe className="h-6 w-6 text-accent-foreground" />
               </div>
               <h3 className="mt-6 text-xl font-semibold text-foreground">Proxy Rotation</h3>
               <p className="mt-2 text-muted-foreground">
@@ -236,27 +236,27 @@ export default function Features() {
               </p>
               <ul className="mt-6 space-y-2 text-sm text-muted-foreground">
                 <li className="flex items-start gap-2">
-                  <span className="text-brand-accent">•</span>
+                  <span className="text-accent-foreground">•</span>
                   <span>Residential and datacenter proxies</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-brand-accent">•</span>
+                  <span className="text-accent-foreground">•</span>
                   <span>Country and city-level targeting</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-brand-accent">•</span>
+                  <span className="text-accent-foreground">•</span>
                   <span>Automatic rotation and retry logic</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-brand-accent">•</span>
+                  <span className="text-accent-foreground">•</span>
                   <span>Custom proxy support (BYO)</span>
                 </li>
               </ul>
             </div>
 
             <div className="rounded-2xl border border-border bg-card p-8">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-brand-accent/10">
-                <Cpu className="h-6 w-6 text-brand-accent" />
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent/10">
+                <Cpu className="h-6 w-6 text-accent-foreground" />
               </div>
               <h3 className="mt-6 text-xl font-semibold text-foreground">Smart Retry Logic</h3>
               <p className="mt-2 text-muted-foreground">
@@ -265,19 +265,19 @@ export default function Features() {
               </p>
               <ul className="mt-6 space-y-2 text-sm text-muted-foreground">
                 <li className="flex items-start gap-2">
-                  <span className="text-brand-accent">•</span>
+                  <span className="text-accent-foreground">•</span>
                   <span>Configurable retry attempts and delays</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-brand-accent">•</span>
+                  <span className="text-accent-foreground">•</span>
                   <span>Exponential backoff strategy</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-brand-accent">•</span>
+                  <span className="text-accent-foreground">•</span>
                   <span>Proxy rotation on failures</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-brand-accent">•</span>
+                  <span className="text-accent-foreground">•</span>
                   <span>Custom error handling</span>
                 </li>
               </ul>
@@ -323,8 +323,8 @@ export default function Features() {
             </div>
 
             <div className="order-1 lg:order-2">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-brand-accent/10">
-                <Calendar className="h-6 w-6 text-brand-accent" />
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent/10">
+                <Calendar className="h-6 w-6 text-accent-foreground" />
               </div>
               <h2 className="mt-6 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
                 Powerful Scheduling
@@ -335,19 +335,19 @@ export default function Features() {
               </p>
               <ul className="mt-8 space-y-3 text-muted-foreground">
                 <li className="flex items-start gap-3">
-                  <span className="text-brand-accent">✓</span>
+                  <span className="text-accent-foreground">✓</span>
                   <span>Flexible scheduling with cron support</span>
                 </li>
                 <li className="flex items-start gap-3">
-                  <span className="text-brand-accent">✓</span>
+                  <span className="text-accent-foreground">✓</span>
                   <span>Timezone-aware scheduling</span>
                 </li>
                 <li className="flex items-start gap-3">
-                  <span className="text-brand-accent">✓</span>
+                  <span className="text-accent-foreground">✓</span>
                   <span>Pause and resume jobs anytime</span>
                 </li>
                 <li className="flex items-start gap-3">
-                  <span className="text-brand-accent">✓</span>
+                  <span className="text-accent-foreground">✓</span>
                   <span>History and audit logs</span>
                 </li>
               </ul>
@@ -402,8 +402,8 @@ export default function Features() {
 
           <div className="mx-auto mt-16 grid max-w-5xl grid-cols-1 gap-8 md:grid-cols-3">
             <div className="rounded-2xl border border-border bg-card p-8 text-center">
-              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-lg bg-brand-accent/10">
-                <Shield className="h-6 w-6 text-brand-accent" />
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-lg bg-accent/10">
+                <Shield className="h-6 w-6 text-accent-foreground" />
               </div>
               <h3 className="mt-6 text-lg font-semibold text-foreground">SOC 2 Compliant</h3>
               <p className="mt-2 text-sm text-muted-foreground">
@@ -412,8 +412,8 @@ export default function Features() {
             </div>
 
             <div className="rounded-2xl border border-border bg-card p-8 text-center">
-              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-lg bg-brand-accent/10">
-                <Lock className="h-6 w-6 text-brand-accent" />
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-lg bg-accent/10">
+                <Lock className="h-6 w-6 text-accent-foreground" />
               </div>
               <h3 className="mt-6 text-lg font-semibold text-foreground">Encryption</h3>
               <p className="mt-2 text-sm text-muted-foreground">
@@ -422,8 +422,8 @@ export default function Features() {
             </div>
 
             <div className="rounded-2xl border border-border bg-card p-8 text-center">
-              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-lg bg-brand-accent/10">
-                <Settings className="h-6 w-6 text-brand-accent" />
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-lg bg-accent/10">
+                <Settings className="h-6 w-6 text-accent-foreground" />
               </div>
               <h3 className="mt-6 text-lg font-semibold text-foreground">Access Control</h3>
               <p className="mt-2 text-sm text-muted-foreground">

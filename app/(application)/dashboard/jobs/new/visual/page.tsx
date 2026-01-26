@@ -299,8 +299,8 @@ export default function VisualBuilderPage() {
                       onClick={() => handleSelectElement(element)}
                       className={`rounded-lg border p-3 cursor-pointer transition-colors ${
                         selectedElement === element.id
-                          ? 'border-brand-accent bg-brand-accent/10'
-                          : 'border-border hover:border-brand-accent/50 hover:bg-brand-accent/5'
+                          ? 'border-accent bg-accent/10'
+                          : 'border-border hover:border-accent/50 hover:bg-accent/5'
                       }`}
                     >
                       <div className="flex items-start justify-between mb-2">
@@ -448,7 +448,7 @@ export default function VisualBuilderPage() {
 
         {/* Save Actions */}
         {pageLoaded && extractedFields.length > 0 && (
-          <Card className="border-brand-accent">
+          <Card className="border-accent">
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>

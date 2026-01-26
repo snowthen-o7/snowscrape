@@ -60,19 +60,19 @@ export default function About() {
               <h3 className="text-xl font-semibold text-foreground">By the Numbers</h3>
               <div className="mt-8 grid grid-cols-2 gap-8">
                 <div>
-                  <p className="text-4xl font-bold text-brand-accent">1M+</p>
+                  <p className="text-4xl font-bold text-accent-foreground">1M+</p>
                   <p className="mt-2 text-sm text-muted-foreground">Pages scraped daily</p>
                 </div>
                 <div>
-                  <p className="text-4xl font-bold text-brand-accent">10K+</p>
+                  <p className="text-4xl font-bold text-accent-foreground">10K+</p>
                   <p className="mt-2 text-sm text-muted-foreground">Active users</p>
                 </div>
                 <div>
-                  <p className="text-4xl font-bold text-brand-accent">99.9%</p>
+                  <p className="text-4xl font-bold text-accent-foreground">99.9%</p>
                   <p className="mt-2 text-sm text-muted-foreground">Uptime guarantee</p>
                 </div>
                 <div>
-                  <p className="text-4xl font-bold text-brand-accent">500+</p>
+                  <p className="text-4xl font-bold text-accent-foreground">500+</p>
                   <p className="mt-2 text-sm text-muted-foreground">Ready-made templates</p>
                 </div>
               </div>
@@ -103,8 +103,8 @@ export default function About() {
           <div className="mx-auto mt-16 grid max-w-5xl grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
             {/* Value 1 */}
             <div className="rounded-2xl border border-border bg-card p-8">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-brand-accent/10">
-                <Target className="h-6 w-6 text-brand-accent" />
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent/10">
+                <Target className="h-6 w-6 text-accent-foreground" />
               </div>
               <h3 className="mt-6 text-xl font-semibold text-foreground">
                 Customer-First
@@ -117,8 +117,8 @@ export default function About() {
 
             {/* Value 2 */}
             <div className="rounded-2xl border border-border bg-card p-8">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-brand-accent/10">
-                <Zap className="h-6 w-6 text-brand-accent" />
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent/10">
+                <Zap className="h-6 w-6 text-accent-foreground" />
               </div>
               <h3 className="mt-6 text-xl font-semibold text-foreground">
                 Simplicity
@@ -131,8 +131,8 @@ export default function About() {
 
             {/* Value 3 */}
             <div className="rounded-2xl border border-border bg-card p-8">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-brand-accent/10">
-                <Heart className="h-6 w-6 text-brand-accent" />
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent/10">
+                <Heart className="h-6 w-6 text-accent-foreground" />
               </div>
               <h3 className="mt-6 text-xl font-semibold text-foreground">
                 Reliability
@@ -145,8 +145,8 @@ export default function About() {
 
             {/* Value 4 */}
             <div className="rounded-2xl border border-border bg-card p-8">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-brand-accent/10">
-                <Users className="h-6 w-6 text-brand-accent" />
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent/10">
+                <Users className="h-6 w-6 text-accent-foreground" />
               </div>
               <h3 className="mt-6 text-xl font-semibold text-foreground">
                 Transparency
@@ -159,8 +159,8 @@ export default function About() {
 
             {/* Value 5 */}
             <div className="rounded-2xl border border-border bg-card p-8">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-brand-accent/10">
-                <TrendingUp className="h-6 w-6 text-brand-accent" />
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent/10">
+                <TrendingUp className="h-6 w-6 text-accent-foreground" />
               </div>
               <h3 className="mt-6 text-xl font-semibold text-foreground">
                 Innovation
@@ -173,8 +173,8 @@ export default function About() {
 
             {/* Value 6 */}
             <div className="rounded-2xl border border-border bg-card p-8">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-brand-accent/10">
-                <Globe className="h-6 w-6 text-brand-accent" />
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent/10">
+                <Globe className="h-6 w-6 text-accent-foreground" />
               </div>
               <h3 className="mt-6 text-xl font-semibold text-foreground">
                 Ethical Practices
@@ -227,7 +227,7 @@ export default function About() {
                 key={member.name}
                 className="rounded-2xl border border-border bg-card p-8 text-center"
               >
-                <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-brand-accent/10 text-2xl font-bold text-brand-accent">
+                <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-accent/10 text-2xl font-bold text-accent-foreground">
                   {member.initials}
                 </div>
                 <h3 className="mt-6 text-lg font-semibold text-foreground">{member.name}</h3>
@@ -284,13 +284,13 @@ export default function About() {
               <div className="mt-6 flex gap-4">
                 <a
                   href="/careers"
-                  className="inline-flex items-center rounded-lg bg-brand-accent px-6 py-3 font-semibold text-brand-primary hover:bg-brand-accent/90"
+                  className="inline-flex items-center rounded-lg bg-accent px-6 py-3 font-semibold text-primary hover:bg-accent/90"
                 >
                   View Open Positions
                 </a>
                 <a
                   href="/contact"
-                  className="inline-flex items-center rounded-lg border border-border bg-card px-6 py-3 font-semibold text-foreground hover:border-brand-accent/50"
+                  className="inline-flex items-center rounded-lg border border-border bg-card px-6 py-3 font-semibold text-foreground hover:border-accent/50"
                 >
                   Get in Touch
                 </a>

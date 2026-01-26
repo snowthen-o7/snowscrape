@@ -202,13 +202,13 @@ export default function Pricing() {
                     <X className="inline h-5 w-5 text-muted-foreground" />
                   </td>
                   <td className="py-4 px-6 text-center">
-                    <Check className="inline h-5 w-5 text-brand-accent" />
+                    <Check className="inline h-5 w-5 text-accent-foreground" />
                   </td>
                   <td className="py-4 px-6 text-center">
-                    <Check className="inline h-5 w-5 text-brand-accent" />
+                    <Check className="inline h-5 w-5 text-accent-foreground" />
                   </td>
                   <td className="py-4 pl-6 text-center">
-                    <Check className="inline h-5 w-5 text-brand-accent" />
+                    <Check className="inline h-5 w-5 text-accent-foreground" />
                   </td>
                 </tr>
 
@@ -221,13 +221,13 @@ export default function Pricing() {
                     <X className="inline h-5 w-5 text-muted-foreground" />
                   </td>
                   <td className="py-4 px-6 text-center">
-                    <Check className="inline h-5 w-5 text-brand-accent" />
+                    <Check className="inline h-5 w-5 text-accent-foreground" />
                   </td>
                   <td className="py-4 px-6 text-center">
-                    <Check className="inline h-5 w-5 text-brand-accent" />
+                    <Check className="inline h-5 w-5 text-accent-foreground" />
                   </td>
                   <td className="py-4 pl-6 text-center">
-                    <Check className="inline h-5 w-5 text-brand-accent" />
+                    <Check className="inline h-5 w-5 text-accent-foreground" />
                   </td>
                 </tr>
 
@@ -240,13 +240,13 @@ export default function Pricing() {
                     <X className="inline h-5 w-5 text-muted-foreground" />
                   </td>
                   <td className="py-4 px-6 text-center">
-                    <Check className="inline h-5 w-5 text-brand-accent" />
+                    <Check className="inline h-5 w-5 text-accent-foreground" />
                   </td>
                   <td className="py-4 px-6 text-center">
-                    <Check className="inline h-5 w-5 text-brand-accent" />
+                    <Check className="inline h-5 w-5 text-accent-foreground" />
                   </td>
                   <td className="py-4 pl-6 text-center">
-                    <Check className="inline h-5 w-5 text-brand-accent" />
+                    <Check className="inline h-5 w-5 text-accent-foreground" />
                   </td>
                 </tr>
 
@@ -300,10 +300,10 @@ export default function Pricing() {
                     <X className="inline h-5 w-5 text-muted-foreground" />
                   </td>
                   <td className="py-4 px-6 text-center">
-                    <Check className="inline h-5 w-5 text-brand-accent" />
+                    <Check className="inline h-5 w-5 text-accent-foreground" />
                   </td>
                   <td className="py-4 pl-6 text-center">
-                    <Check className="inline h-5 w-5 text-brand-accent" />
+                    <Check className="inline h-5 w-5 text-accent-foreground" />
                   </td>
                 </tr>
               </tbody>
