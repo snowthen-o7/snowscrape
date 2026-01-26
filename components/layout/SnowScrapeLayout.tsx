@@ -2,7 +2,12 @@
 
 import React, { useState, useEffect } from 'react';
 import { UserButton, useUser } from '@clerk/nextjs';
-import { AppLayout as BaseAppLayout, type AppLayoutProps as BaseAppLayoutProps, useSidebar, ThemeToggle,  } from '@snowforge/ui';
+import {
+  AppLayout as BaseAppLayout,
+  type AppLayoutProps as BaseAppLayoutProps,
+  useSidebar,
+  ThemeToggle
+} from '@snowforge/ui';
 import {
   LayoutDashboard,
   Briefcase,
