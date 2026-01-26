@@ -64,7 +64,7 @@ importers:
         version: 10.35.0(@opentelemetry/context-async-hooks@2.4.0(@opentelemetry/api@1.9.0))(@opentelemetry/core@2.4.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.4.0(@opentelemetry/api@1.9.0))(next@16.1.1(@babel/core@7.28.5)(@opentelemetry/api@1.9.0)(@playwright/test@1.57.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react@19.2.3)(webpack@5.104.1)
       '@snowforge/ui':
         specifier: git+https://github.com/snowthen-o7/snowforge-ui.git
-        version: git+https://github.com/snowthen-o7/snowforge-ui.git#2c9e55bac28d9eb0ed3dfc915d6fd324ec8f71ab(@types/react-dom@19.2.3(@types/react@19.2.7))(@types/react@19.2.7)(next@16.1.1(@babel/core@7.28.5)(@opentelemetry/api@1.9.0)(@playwright/test@1.57.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(tailwindcss@4.1.18)
+        version: git+https://github.com/snowthen-o7/snowforge-ui.git#40d0f558ff1fdf6d29958a4de15f78a6e5ed63f4(@types/react-dom@19.2.3(@types/react@19.2.7))(@types/react@19.2.7)(next@16.1.1(@babel/core@7.28.5)(@opentelemetry/api@1.9.0)(@playwright/test@1.57.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(tailwindcss@4.1.18)
       '@tanstack/react-query':
         specifier: ^5.90.19
         version: 5.90.19(react@19.2.3)
@@ -2128,9 +2128,9 @@ packages:
     peerDependencies:
       webpack: '>=4.40.0'
 
-  '@snowforge/ui@git+https://github.com/snowthen-o7/snowforge-ui.git#2c9e55bac28d9eb0ed3dfc915d6fd324ec8f71ab':
-    resolution: {commit: 2c9e55bac28d9eb0ed3dfc915d6fd324ec8f71ab, repo: https://github.com/snowthen-o7/snowforge-ui.git, type: git}
-    version: 3.0.1
+  '@snowforge/ui@git+https://github.com/snowthen-o7/snowforge-ui.git#40d0f558ff1fdf6d29958a4de15f78a6e5ed63f4':
+    resolution: {commit: 40d0f558ff1fdf6d29958a4de15f78a6e5ed63f4, repo: https://github.com/snowthen-o7/snowforge-ui.git, type: git}
+    version: 3.0.2
     peerDependencies:
       next: '>=14.0.0'
       react: '>=18.0.0'
@@ -7810,7 +7810,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@snowforge/ui@git+https://github.com/snowthen-o7/snowforge-ui.git#2c9e55bac28d9eb0ed3dfc915d6fd324ec8f71ab(@types/react-dom@19.2.3(@types/react@19.2.7))(@types/react@19.2.7)(next@16.1.1(@babel/core@7.28.5)(@opentelemetry/api@1.9.0)(@playwright/test@1.57.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(tailwindcss@4.1.18)':
+  '@snowforge/ui@git+https://github.com/snowthen-o7/snowforge-ui.git#40d0f558ff1fdf6d29958a4de15f78a6e5ed63f4(@types/react-dom@19.2.3(@types/react@19.2.7))(@types/react@19.2.7)(next@16.1.1(@babel/core@7.28.5)(@opentelemetry/api@1.9.0)(@playwright/test@1.57.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(tailwindcss@4.1.18)':
     dependencies:
       '@radix-ui/react-dropdown-menu': 2.1.16(@types/react-dom@19.2.3(@types/react@19.2.7))(@types/react@19.2.7)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
       class-variance-authority: 0.7.1
