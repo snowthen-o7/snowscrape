@@ -691,7 +691,7 @@ export default function TemplateDetailPage() {
         <JobModal
           closeModal={() => setShowJobModal(false)}
           jobDetails={getTemplateAsJobData() as Job | null}
-          session={session}
+          session={session ?? null}
         />
       )}
     </AppLayout>

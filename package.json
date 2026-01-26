@@ -35,7 +35,7 @@
 		"@radix-ui/react-toast": "^1.2.15",
 		"@radix-ui/react-tooltip": "^1.2.8",
 		"@sentry/nextjs": "^10.35.0",
-		"@snowforge/ui": "git+https://github.com/snowthen-o7/snowforge-ui.git#v2.0.0",
+		"@snowforge/ui": "git+https://github.com/snowthen-o7/snowforge-ui.git",
 		"@tanstack/react-query": "^5.90.19",
 		"@tanstack/react-query-devtools": "^5.91.2",
 		"@types/papaparse": "latest",
@@ -62,6 +62,7 @@
 		"@clerk/types": "latest",
 		"@lhci/cli": "^0.15.1",
 		"@playwright/test": "^1.57.0",
+		"@tailwindcss/postcss": "^4.1.18",
 		"@testing-library/jest-dom": "^6.9.1",
 		"@testing-library/react": "^16.3.2",
 		"@testing-library/user-event": "^14.6.1",
@@ -75,7 +76,7 @@
 		"jsdom": "^27.4.0",
 		"lighthouse": "^13.0.1",
 		"postcss": "latest",
-		"tailwindcss": "^3.4.17",
+		"tailwindcss": "^4.1.18",
 		"typescript": "latest",
 		"vitest": "^4.0.17"
 	}
