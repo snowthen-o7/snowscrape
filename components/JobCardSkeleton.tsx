@@ -1,4 +1,4 @@
-import { Skeleton } from "@/components/ui/skeleton"
+import { Skeleton } from "@snowforge/ui"
 
 export function JobCardSkeleton() {
   return (
