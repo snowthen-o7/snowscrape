@@ -1,168 +1,295 @@
+/**
+ * Dashboard Page
+ * Main application dashboard with analytics overview
+ */
+
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useUser, useSession } from '@clerk/nextjs';
-import { JobModal } from "@/components/JobModal";
-import { JobCard } from "@/components/JobCard";
-import { Job } from "@/lib/types";
+import { useUser } from '@clerk/nextjs';
+import Link from 'next/link';
+import { AppLayout } from '@/components/layout';
+import { PageHeader } from '@snowforge/ui';
+import { StatCard } from '@snowforge/ui';
+import { EmptyState } from '@snowforge/ui';
+import { DashboardSkeleton } from '@/components/LoadingSkeleton';
+import { ConnectionStatus } from '@/components/ConnectionStatus';
+import { Button } from '@snowforge/ui';
+import { useJobs } from '@/lib/hooks/useJobs';
+import { useRealtimeJobs } from '@/lib/hooks/useRealtimeJobs';
+import {
+  RefreshCw,
+  BriefcaseIcon,
+  PlayCircleIcon,
+  CheckCircle2Icon,
+  XCircleIcon,
+  ArrowRightIcon,
+  TrendingUpIcon,
+} from 'lucide-react';
+import { toast } from '@/lib/toast';
+import { LineChart, BarChart } from '@/components/charts';
+import { OnboardingTour, QuickStartGuide } from '@/components/OnboardingTour';
 
 export default function Dashboard() {
-	const { isLoaded: isUserLoaded } = useUser();
-	const { session, isLoaded: isSessionLoaded } = useSession();
-	const [jobs, setJobs] = useState<Job[]>([]);
-	const [loading, setLoading] = useState(true);
-	const [jobModalOpen, setJobModalOpen] = useState<{ isOpen: boolean, jobDetails?: Job | null }>({ isOpen: false, jobDetails: null }); // Unified modal state
-	const [sortOrder, setSortOrder] = useState("asc"); // For sorting
-	const [token, setToken] = useState<string | null>(null);
+  const { isLoaded: isUserLoaded } = useUser();
 
-	// Fetch jobs from the backend
-	useEffect(() => {
-    const fetchJobs = async () => {
-      if (!isSessionLoaded || !session) {
-        return; // Wait until the session is loaded
-      }
-      
-      try {
-        const tkn = await session.getToken(); // Get the session token
-				setToken(tkn);
+  // Use both hooks: useJobs for initial load, useRealtimeJobs for updates
+  const {
+    data: initialJobs = [],
+    isLoading,
+    isError,
+    refetch,
+  } = useJobs();
 
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/jobs/status`, {
-          method: "GET",
-          headers: {
-            "Authorization": `Bearer ${token}`, // Use token in the Authorization header
-            ...(process.env.NEXT_PUBLIC_API_KEY && { "x-api-key": process.env.NEXT_PUBLIC_API_KEY }),
-          },
-        });
-        const data: Job[] = await response.json();
-        setJobs(data);
-      } catch (error) {
-        console.error("Error fetching jobs", error);
-      } finally {
-        setLoading(false);
-      }
-    };
+  // Real-time updates (will fall back to polling if WebSocket unavailable)
+  const {
+    jobs: realtimeJobs,
+    status: connectionStatus,
+    refresh: refreshRealtime,
+  } = useRealtimeJobs({ enabled: isUserLoaded });
 
-    fetchJobs();
-  }, [isSessionLoaded, session]); // Fetch jobs once session is loaded
+  // Use realtime jobs if available, otherwise use initial jobs
+  const jobs = realtimeJobs.length > 0 ? realtimeJobs : initialJobs;
 
-	// Sort jobs
-	const sortJobs = (key: keyof Job) => {
-		const sortedJobs = [...jobs].sort((a, b) => {
-			if (sortOrder === "asc") {
-				return a[key] > b[key] ? 1 : -1;
-			} else {
-				return a[key] < b[key] ? 1 : -1;
-			}
-		});
-		setJobs(sortedJobs);
-		setSortOrder(sortOrder === "asc" ? "desc" : "asc");
-	};
+  // Calculate metrics
+  const totalJobs = jobs.length;
+  const runningJobs = jobs.filter((job) => job.status === 'running').length;
+  const successJobs = jobs.filter((job) => job.status === 'success').length;
+  const failedJobs = jobs.filter((job) => job.status === 'failed').length;
 
-	// Handle pausing a job
-	const handlePauseJob = async (jobId: string) => {
-    console.log(`Pausing job: ${jobId}`);
+  // Sample data for charts (in production, this would come from analytics API)
+  const apiCallsData = [
+    { date: 'Jan 14', calls: 1200 },
+    { date: 'Jan 15', calls: 1890 },
+    { date: 'Jan 16', calls: 2100 },
+    { date: 'Jan 17', calls: 1750 },
+    { date: 'Jan 18', calls: 2300 },
+    { date: 'Jan 19', calls: 2800 },
+    { date: 'Jan 20', calls: 3200 },
+  ];
 
-    if (!isSessionLoaded || !session) {
-      return;
-    }
+  const dataVolumeData = [
+    { date: 'Jan 14', volume: 45 },
+    { date: 'Jan 15', volume: 62 },
+    { date: 'Jan 16', volume: 78 },
+    { date: 'Jan 17', volume: 58 },
+    { date: 'Jan 18', volume: 85 },
+    { date: 'Jan 19', volume: 92 },
+    { date: 'Jan 20', volume: 110 },
+  ];
 
-    try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/jobs/${jobId}/pause`, {
-        method: "PATCH",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          ...(process.env.NEXT_PUBLIC_API_KEY && { "x-api-key": process.env.NEXT_PUBLIC_API_KEY }),
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to pause job");
-      }
-
-      const updatedJobs = jobs.map(job => 
-        job.job_id === jobId ? { ...job, status: 'paused' } : job
-      );
-      setJobs(updatedJobs);
-    } catch (error) {
-      console.error("Error pausing job", error);
-    }
+  const handleRefresh = () => {
+    refetch();
+    refreshRealtime();
+    toast.success('Data refreshed');
   };
 
-	// Handle deleting a job
-	const handleDeleteJob = async (jobId: string) => {
-    console.log(`Deleting job: ${jobId}`);
+  // Show skeleton during initial load
+  if (isLoading || !isUserLoaded) {
+    return (
+      <AppLayout>
+        <DashboardSkeleton />
+      </AppLayout>
+    );
+  }
 
-    if (!isSessionLoaded || !session) {
-      return;
-    }
+  // Show error state with helpful options
+  if (isError) {
+    return (
+      <AppLayout>
+        <div className="flex min-h-[60vh] items-center justify-center">
+          <div className="text-center space-y-4 max-w-md">
+            <EmptyState
+              icon={<XCircleIcon className="h-12 w-12" />}
+              title="Unable to load dashboard data"
+              description="We couldn't connect to the server. This might be a temporary issue."
+              action={{
+                label: 'Try Again',
+                onClick: handleRefresh,
+              }}
+            />
+          </div>
+        </div>
+      </AppLayout>
+    );
+  }
 
-    try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/jobs/${jobId}`, {
-        method: "DELETE",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          ...(process.env.NEXT_PUBLIC_API_KEY && { "x-api-key": process.env.NEXT_PUBLIC_API_KEY }),
-        },
-      });
+  return (
+    <AppLayout>
+      <div className="space-y-6 p-6">
+        {/* Page Header */}
+        <PageHeader
+          title="Dashboard"
+          description="Overview of your scraping activity and analytics"
+          actions={
+            <div className="flex items-center gap-2">
+              <ConnectionStatus
+                isConnected={connectionStatus.isConnected}
+                isPolling={connectionStatus.isPolling}
+                connectionType={connectionStatus.connectionType}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRefresh}
+                disabled={isLoading}
+              >
+                <RefreshCw
+                  className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`}
+                />
+                Refresh
+              </Button>
+            </div>
+          }
+        />
 
-      if (!response.ok) {
-        throw new Error("Failed to delete job");
-      }
+        {/* Quick Start Guide */}
+        <QuickStartGuide />
 
-      setJobs(jobs.filter(job => job.job_id !== jobId)); // Remove deleted job from state
-    } catch (error) {
-      console.error("Error deleting job", error);
-    }
-  };
+        {/* Stats Cards */}
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <Link href="/dashboard/jobs" className="block">
+            <StatCard
+              title="Total Jobs"
+              value={totalJobs}
+              icon={<BriefcaseIcon className="h-5 w-5" />}
+            />
+          </Link>
+          <Link href="/dashboard/jobs?status=running" className="block">
+            <StatCard
+              title="Running"
+              value={runningJobs}
+              icon={<PlayCircleIcon className="h-5 w-5" />}
+              trend={runningJobs > 0 ? 'up' : 'neutral'}
+            />
+          </Link>
+          <Link href="/dashboard/jobs?status=success" className="block">
+            <StatCard
+              title="Successful"
+              value={successJobs}
+              icon={<CheckCircle2Icon className="h-5 w-5" />}
+            />
+          </Link>
+          <Link href="/dashboard/jobs?status=failed" className="block">
+            <StatCard
+              title="Failed"
+              value={failedJobs}
+              icon={<XCircleIcon className="h-5 w-5" />}
+              trend={failedJobs > 0 ? 'down' : 'neutral'}
+            />
+          </Link>
+        </div>
 
-	if (!isUserLoaded || !isSessionLoaded) {
-		return <p>Loading...</p>; // Show loading state until Clerk is fully loaded
-	}
+        {/* Performance Charts */}
+        <div className="grid gap-6 lg:grid-cols-2">
+          <div className="rounded-2xl border border-border bg-card p-6">
+            <LineChart
+              data={apiCallsData}
+              xDataKey="date"
+              yDataKey="calls"
+              lineColor="#00D9FF"
+              height={250}
+              title="API Calls (Last 7 Days)"
+            />
+          </div>
+          <div className="rounded-2xl border border-border bg-card p-6">
+            <BarChart
+              data={dataVolumeData}
+              xDataKey="date"
+              yDataKey="volume"
+              barColor="#00D9FF"
+              height={250}
+              title="Data Volume (MB)"
+            />
+          </div>
+        </div>
 
-	return (
-		<div className="p-8 text-white">
-			<h1 className="text-4xl mb-6">Dashboard</h1>
+        {/* Quick Actions / Recent Activity */}
+        <div className="grid gap-6 lg:grid-cols-2">
+          {/* Quick Actions */}
+          <div className="rounded-2xl border border-border bg-card p-6">
+            <h3 className="text-lg font-semibold mb-4">Quick Actions</h3>
+            <div className="space-y-3">
+              <Link
+                href="/dashboard/jobs"
+                className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <BriefcaseIcon className="h-5 w-5 text-muted-foreground" />
+                  <span className="font-medium">View All Jobs</span>
+                </div>
+                <ArrowRightIcon className="h-4 w-4 text-muted-foreground" />
+              </Link>
+              <Link
+                href="/dashboard/templates"
+                className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <TrendingUpIcon className="h-5 w-5 text-muted-foreground" />
+                  <span className="font-medium">Browse Templates</span>
+                </div>
+                <ArrowRightIcon className="h-4 w-4 text-muted-foreground" />
+              </Link>
+              <Link
+                href="/dashboard/analytics"
+                className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <TrendingUpIcon className="h-5 w-5 text-muted-foreground" />
+                  <span className="font-medium">View Analytics</span>
+                </div>
+                <ArrowRightIcon className="h-4 w-4 text-muted-foreground" />
+              </Link>
+            </div>
+          </div>
 
-			{/* Button to open new job modal */}
-			<button onClick={() => setJobModalOpen({ isOpen: true, jobDetails: null })} className="bg-blue-600 px-4 py-2 rounded">
-				Submit New Job
-			</button>
+          {/* Recent Activity Summary */}
+          <div className="rounded-2xl border border-border bg-card p-6">
+            <h3 className="text-lg font-semibold mb-4">Activity Summary</h3>
+            {totalJobs === 0 ? (
+              <div className="text-center py-8">
+                <BriefcaseIcon className="h-12 w-12 mx-auto text-muted-foreground/50 mb-3" />
+                <p className="text-muted-foreground">No jobs yet</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Create your first job using the sidebar
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Success Rate</span>
+                  <span className="font-semibold">
+                    {totalJobs > 0
+                      ? Math.round((successJobs / totalJobs) * 100)
+                      : 0}
+                    %
+                  </span>
+                </div>
+                <div className="w-full bg-muted rounded-full h-2">
+                  <div
+                    className="bg-green-500 h-2 rounded-full transition-all"
+                    style={{
+                      width: `${totalJobs > 0 ? (successJobs / totalJobs) * 100 : 0}%`,
+                    }}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4 pt-2">
+                  <div className="text-center p-3 rounded-lg bg-muted/50">
+                    <p className="text-2xl font-bold text-green-600">{successJobs}</p>
+                    <p className="text-xs text-muted-foreground">Completed</p>
+                  </div>
+                  <div className="text-center p-3 rounded-lg bg-muted/50">
+                    <p className="text-2xl font-bold text-blue-600">{runningJobs}</p>
+                    <p className="text-xs text-muted-foreground">In Progress</p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
 
-			{/* Sorting options */}
-			<div className="mt-4 mb-6">
-				<button onClick={() => sortJobs("name")} className="px-4 py-2 mr-2 bg-gray-800 rounded">
-					Sort by Name
-				</button>
-				<button onClick={() => sortJobs("status")} className="px-4 py-2 bg-gray-800 rounded">
-					Sort by Status
-				</button>
-			</div>
-
-			{/* Show loading spinner if jobs are loading */}
-			{loading ? (
-				<p>Loading jobs...</p>
-			) : (
-				<div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-					{jobs.map(job => (
-						<JobCard
-							key={job.job_id}
-							job={job}
-							onClick={() => setJobModalOpen({ isOpen: true, jobDetails: job })} // Open job details modal
-							onPause={() => handlePauseJob(job.job_id)} // Pause job
-							onDelete={() => handleDeleteJob(job.job_id)} // Delete job
-						/>
-					))}
-				</div>
-			)}
-
-			{/* Unified Job Modal for both creating new jobs and updating existing ones */}
-			{jobModalOpen.isOpen && session && (
-				<JobModal
-					closeModal={() => setJobModalOpen({ isOpen: false, jobDetails: null })}
-					jobDetails={jobModalOpen.jobDetails} // Pass job details if editing, or null if creating a new job
-					session={session}
-				/>
-			)}
-		</div>
-	);
+      {/* Onboarding Tour */}
+      <OnboardingTour />
+    </AppLayout>
+  );
 }
