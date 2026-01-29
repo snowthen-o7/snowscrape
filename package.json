@@ -3,6 +3,7 @@
 	"version": "0.1.0",
 	"private": true,
 	"scripts": {
+		"preinstall": "node -e \"if(process.env.GITHUB_TOKEN){require('child_process').execSync('git config --global url.\\\"https://'+process.env.GITHUB_TOKEN+'@github.com/\\\".insteadOf \\\"https://github.com/\\\"')}\"",
 		"dev": "next dev -p 3001",
 		"build": "next build",
 		"start": "next start",
