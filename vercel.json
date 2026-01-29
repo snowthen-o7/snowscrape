@@ -1,7 +1,7 @@
 {
   "buildCommand": "pnpm build",
   "devCommand": "pnpm dev",
-  "installCommand": "git config --global url.\"https://$GITHUB_TOKEN@github.com/\".insteadOf \"https://github.com/\" && pnpm install",
+  "installCommand": "node scripts/setup-git-auth.js && pnpm install --no-frozen-lockfile",
   "framework": "nextjs",
   "regions": ["iad1"],
   "git": {
