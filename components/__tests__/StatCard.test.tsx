@@ -5,7 +5,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { StatCard } from '@/components/StatCard';
+import { StatCard } from '@snowforge/ui';
 import { BriefcaseIcon } from 'lucide-react';
 
 describe('StatCard', () => {

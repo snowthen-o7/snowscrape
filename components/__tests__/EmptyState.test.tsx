@@ -6,7 +6,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@/lib/test-utils';
 import userEvent from '@testing-library/user-event';
-import { EmptyState } from '@/components/EmptyState';
+import { EmptyState } from '@snowforge/ui';
 import { BriefcaseIcon } from 'lucide-react';
 
 describe('EmptyState', () => {

@@ -7,7 +7,7 @@
 
 import { AlertTriangleIcon, RefreshCwIcon, HomeIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { Card } from '@snowforge/ui';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 interface ErrorFallbackProps {

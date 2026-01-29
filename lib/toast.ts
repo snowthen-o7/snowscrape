@@ -3,7 +3,7 @@
  * Wraps shadcn/ui toast for consistent usage across the app
  */
 
-import { toast as baseToast } from '@/hooks/use-toast';
+import { toast as baseToast } from '@snowforge/ui';
 
 type ToastOptions = {
   description?: string;

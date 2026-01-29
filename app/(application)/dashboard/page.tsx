@@ -8,9 +8,9 @@
 import { useUser } from '@clerk/nextjs';
 import Link from 'next/link';
 import { AppLayout } from '@/components/layout';
-import { PageHeader } from '@/components/PageHeader';
-import { StatCard } from '@/components/StatCard';
-import { EmptyState } from '@/components/EmptyState';
+import { PageHeader } from '@snowforge/ui';
+import { StatCard } from '@snowforge/ui';
+import { EmptyState } from '@snowforge/ui';
 import { DashboardSkeleton } from '@/components/LoadingSkeleton';
 import { ConnectionStatus } from '@/components/ConnectionStatus';
 import { Button } from '@/components/ui/button';

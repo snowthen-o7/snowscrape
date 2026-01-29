@@ -6,7 +6,7 @@ import { Webhook } from "@/lib/types";
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { AppLayout } from '@/components/layout';
-import { PageHeader } from '@/components/PageHeader';
+import { PageHeader } from '@snowforge/ui';
 import { Plus, Trash2, TestTube, Copy, CheckCircle, XCircle, RefreshCw } from "lucide-react";
 import { toast } from 'react-toastify';
 

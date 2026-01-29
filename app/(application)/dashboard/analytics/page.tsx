@@ -7,14 +7,13 @@
 
 import { useState } from 'react';
 import { AppLayout } from '@/components/layout';
-import { PageHeader } from '@/components/PageHeader';
-import { StatCard } from '@/components/StatCard';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { PageHeader } from '@snowforge/ui';
+import { StatCard } from '@snowforge/ui';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@snowforge/ui';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@snowforge/ui';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import {  } from '@snowforge/ui';
 import { LineChart, BarChart, PieChart } from '@/components/charts';
 import {
   TrendingUp,

@@ -7,14 +7,13 @@
 
 import { useParams, useRouter } from 'next/navigation';
 import { AppLayout } from '@/components/layout';
-import { PageHeader } from '@/components/PageHeader';
-import { EmptyState } from '@/components/EmptyState';
+import { PageHeader } from '@snowforge/ui';
+import { EmptyState } from '@snowforge/ui';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@snowforge/ui';
+import { Card, CardContent, CardHeader, CardTitle } from '@snowforge/ui';
 import { Badge } from '@/components/ui/badge';
-import {  } from '@snowforge/ui';
 import {
   ArrowLeft,
   Play,
@@ -31,11 +30,11 @@ import {
 } from 'lucide-react';
 import { useJobs, usePauseJob, useResumeJob, useDeleteJob } from '@/lib/hooks/useJobs';
 import { useRealtimeJob } from '@/lib/hooks/useRealtimeJobs';
-import { StatCard } from '@/components/StatCard';
+import { StatCard } from '@snowforge/ui';
 import { LineChart } from '@/components/charts';
 import { toast } from '@/lib/toast';
 import { useState } from 'react';
-import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { ConfirmDialog } from '@snowforge/ui';
 
 export default function JobDetailsPage() {
   const params = useParams();

@@ -4,7 +4,7 @@
  */
 
 import { MarketingLayout } from '@/components/layout';
-import { FeatureCard } from '@/components/marketing/FeatureCard';
+import { FeatureCard } from '@snowforge/ui';
 import { CTASection } from '@/components/marketing/CTASection';
 import {
   Code2,

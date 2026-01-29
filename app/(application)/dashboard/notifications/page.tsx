@@ -8,13 +8,12 @@
 import { useState, useEffect } from 'react';
 import { useSession } from '@clerk/nextjs';
 import { AppLayout } from '@/components/layout';
-import { PageHeader } from '@/components/PageHeader';
+import { PageHeader } from '@snowforge/ui';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent } from '@snowforge/ui';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@snowforge/ui';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import {  } from '@snowforge/ui';
 import {
   CheckCircle2,
   XCircle,
@@ -30,7 +29,7 @@ import { Notification } from '@/lib/types/notifications';
 import { formatDistanceToNow } from 'date-fns';
 import Link from 'next/link';
 import { toast } from '@/lib/toast';
-import { EmptyState } from '@/components/EmptyState';
+import { EmptyState } from '@snowforge/ui';
 
 export default function NotificationsPage() {
   const { session } = useSession();

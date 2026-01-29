@@ -30,8 +30,8 @@ export function Hero() {
           </div>
 
           {/* Main heading */}
-          <h1 className="text-5xl font-bold tracking-tight text-white sm:text-7xl">
-            Web Scraping
+          <h1 className="text-5xl font-bold tracking-tight sm:text-7xl">
+            <span className="block text-gray-900 dark:text-white">Web Scraping</span>
             <span className="block bg-gradient-to-r from-brand-accent to-cyan-300 bg-clip-text text-transparent">
               Made Simple
             </span>

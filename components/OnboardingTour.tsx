@@ -8,10 +8,9 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@snowforge/ui';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import {  } from '@snowforge/ui';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@snowforge/ui';
 import {
   Rocket,
   Sparkles,
@@ -22,7 +21,7 @@ import {
   X,
   Package,
 } from 'lucide-react';
-import { Progress } from '@/components/ui/progress';
+import { Progress } from '@snowforge/ui';
 
 interface OnboardingStep {
   id: string;

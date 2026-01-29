@@ -4,8 +4,7 @@
  */
 
 import { Hero } from '@/components/marketing/Hero';
-import { FeatureCard } from '@/components/marketing/FeatureCard';
-import { TestimonialCard } from '@/components/marketing/TestimonialCard';
+import { FeatureCard, TestimonialCard } from '@snowforge/ui';
 import { CTASection } from '@/components/marketing/CTASection';
 import { Button } from '@/components/ui/button';
 import { MarketingLayout } from '@/components/layout';

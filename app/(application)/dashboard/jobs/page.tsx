@@ -8,13 +8,13 @@ import { JobModal } from '@/components/JobModal';
 import { JobCard } from '@/components/JobCard';
 import { ResultPreviewModal } from '@/components/ResultPreviewModal';
 import { AppLayout } from '@/components/layout';
-import { PageHeader } from '@/components/PageHeader';
-import { EmptyState } from '@/components/EmptyState';
+import { PageHeader } from '@snowforge/ui';
+import { EmptyState } from '@snowforge/ui';
 import { DashboardSkeleton } from '@/components/LoadingSkeleton';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@snowforge/ui';
 import {
   useJobs,
   useDeleteJob,
