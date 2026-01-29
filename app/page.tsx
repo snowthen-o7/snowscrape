@@ -6,7 +6,7 @@
 import { Hero } from '@/components/marketing/Hero';
 import { FeatureCard, TestimonialCard } from '@snowforge/ui';
 import { CTASection } from '@/components/marketing/CTASection';
-import { Button } from '@/components/ui/button';
+import { Button } from '@snowforge/ui';
 import { MarketingLayout } from '@/components/layout';
 import {
   Code2,

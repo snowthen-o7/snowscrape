@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AppLayout } from '@/components/layout';
 import { PageHeader } from '@snowforge/ui';
-import { Button } from '@/components/ui/button';
+import { Button } from '@snowforge/ui';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@snowforge/ui';
 import {
   FileText,

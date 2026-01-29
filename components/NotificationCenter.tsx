@@ -7,8 +7,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { useSession } from '@clerk/nextjs';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { Button } from '@snowforge/ui';
+import { Badge } from '@snowforge/ui';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@snowforge/ui';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@snowforge/ui';
 import {

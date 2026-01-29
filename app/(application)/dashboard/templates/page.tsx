@@ -10,11 +10,11 @@ import { useRouter } from 'next/navigation';
 import { useSession } from '@clerk/nextjs';
 import { AppLayout } from '@/components/layout';
 import { PageHeader } from '@snowforge/ui';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Button } from '@snowforge/ui';
+import { Input } from '@snowforge/ui';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@snowforge/ui';
-import { Badge } from '@/components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@snowforge/ui';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@snowforge/ui';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@snowforge/ui';
 import { Template } from '@/lib/types';
 import {

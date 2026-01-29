@@ -9,11 +9,11 @@ import { useState, useEffect } from 'react';
 import { useSession } from '@clerk/nextjs';
 import { AppLayout } from '@/components/layout';
 import { PageHeader } from '@snowforge/ui';
-import { Button } from '@/components/ui/button';
+import { Button } from '@snowforge/ui';
 import { Card, CardContent } from '@snowforge/ui';
-import { Badge } from '@/components/ui/badge';
+import { Badge } from '@snowforge/ui';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@snowforge/ui';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@snowforge/ui';
 import {
   CheckCircle2,
   XCircle,

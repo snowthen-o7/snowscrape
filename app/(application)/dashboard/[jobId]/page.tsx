@@ -10,10 +10,10 @@ import { AppLayout } from '@/components/layout';
 import { PageHeader } from '@snowforge/ui';
 import { EmptyState } from '@snowforge/ui';
 import { StatusBadge } from '@/components/StatusBadge';
-import { Button } from '@/components/ui/button';
+import { Button } from '@snowforge/ui';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@snowforge/ui';
 import { Card, CardContent, CardHeader, CardTitle } from '@snowforge/ui';
-import { Badge } from '@/components/ui/badge';
+import { Badge } from '@snowforge/ui';
 import {
   ArrowLeft,
   Play,

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { X, Loader2, Trash2, Calendar, Clock } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Button } from '@snowforge/ui';
 import { Template } from "@/lib/types";
 import { toast } from 'react-toastify';
 

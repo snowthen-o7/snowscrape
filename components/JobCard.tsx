@@ -18,7 +18,7 @@ import {
   MoreVertical,
 } from 'lucide-react';
 import { Card, CardContent } from '@snowforge/ui';
-import { Button } from '@/components/ui/button';
+import { Button } from '@snowforge/ui';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel } from '@snowforge/ui';
 import { StatusBadge } from '@/components/StatusBadge';
 import { ConfirmDialog } from '@snowforge/ui';

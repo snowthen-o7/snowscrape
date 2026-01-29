@@ -7,9 +7,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Button } from '@/components/ui/button';
+import { Button } from '@snowforge/ui';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@snowforge/ui';
-import { Badge } from '@/components/ui/badge';
+import { Badge } from '@snowforge/ui';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@snowforge/ui';
 import {
   Rocket,
