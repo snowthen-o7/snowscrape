@@ -56,26 +56,9 @@ export default function Dashboard() {
   const successJobs = jobs.filter((job) => job.status === 'success').length;
   const failedJobs = jobs.filter((job) => job.status === 'failed').length;
 
-  // Sample data for charts (in production, this would come from analytics API)
-  const apiCallsData = [
-    { date: 'Jan 14', calls: 1200 },
-    { date: 'Jan 15', calls: 1890 },
-    { date: 'Jan 16', calls: 2100 },
-    { date: 'Jan 17', calls: 1750 },
-    { date: 'Jan 18', calls: 2300 },
-    { date: 'Jan 19', calls: 2800 },
-    { date: 'Jan 20', calls: 3200 },
-  ];
-
-  const dataVolumeData = [
-    { date: 'Jan 14', volume: 45 },
-    { date: 'Jan 15', volume: 62 },
-    { date: 'Jan 16', volume: 78 },
-    { date: 'Jan 17', volume: 58 },
-    { date: 'Jan 18', volume: 85 },
-    { date: 'Jan 19', volume: 92 },
-    { date: 'Jan 20', volume: 110 },
-  ];
+  // Chart data (will be populated from analytics API)
+  const apiCallsData: { date: string; calls: number }[] = [];
+  const dataVolumeData: { date: string; volume: number }[] = [];
 
   const handleRefresh = () => {
     refetch();
