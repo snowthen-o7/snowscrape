@@ -161,6 +161,43 @@ export class JobsAPI {
       token
     );
   }
+
+  /**
+   * Preview a URL and extract DOM structure for visual builder
+   */
+  async preview(url: string, token: string): Promise<PagePreviewResponse> {
+    return this.client.request<PagePreviewResponse>('/scraper/preview', token, {
+      method: 'POST',
+      body: JSON.stringify({ url }),
+    });
+  }
+
+  /**
+   * Test extraction with given selectors on a URL
+   */
+  async testExtraction(
+    url: string,
+    selectors: Array<{ name: string; type: string; selector: string }>,
+    token: string
+  ): Promise<any[]> {
+    return this.client.request<any[]>('/scraper/test', token, {
+      method: 'POST',
+      body: JSON.stringify({ url, selectors }),
+    });
+  }
+}
+
+export interface PagePreviewResponse {
+  url: string;
+  title: string;
+  elements: Array<{
+    id: string;
+    type: string;
+    text: string;
+    xpath: string;
+    css: string;
+    path: string;
+  }>;
 }
 
 // Export singleton instance
