@@ -12,7 +12,7 @@ from logger import get_logger
 
 logger = get_logger(__name__)
 
-def fetch_and_parse_page(url: str, timeout: int = 10) -> Dict[str, Any]:
+def fetch_and_parse_page(url: str, timeout: int = 25) -> Dict[str, Any]:
     """
     Fetches a URL and returns a simplified DOM structure for visual selection.
 
@@ -29,15 +29,19 @@ def fetch_and_parse_page(url: str, timeout: int = 10) -> Dict[str, Any]:
     """
     logger.info("Fetching URL for preview", url=url)
 
-    # Fetch the page with realistic browser headers
+    # Fetch the page with browser-like headers
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
+        'Accept-Language': 'en-US,en;q=0.9',
         'Accept-Encoding': 'gzip, deflate, br',
         'DNT': '1',
         'Connection': 'keep-alive',
-        'Upgrade-Insecure-Requests': '1'
+        'Upgrade-Insecure-Requests': '1',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none',
+        'Cache-Control': 'max-age=0'
     }
     response = requests.get(url, headers=headers, timeout=timeout, allow_redirects=True)
     response.raise_for_status()
@@ -196,7 +200,7 @@ def generate_dom_path(tag: Any) -> str:
     return ' > '.join(path_parts)
 
 
-def test_extraction(url: str, selectors: List[Dict[str, str]], timeout: int = 10) -> List[Dict[str, Any]]:
+def test_extraction(url: str, selectors: List[Dict[str, str]], timeout: int = 25) -> List[Dict[str, Any]]:
     """
     Tests extraction with given selectors on a URL.
 
@@ -214,15 +218,19 @@ def test_extraction(url: str, selectors: List[Dict[str, str]], timeout: int = 10
     """
     logger.info("Testing extraction", url=url, selector_count=len(selectors))
 
-    # Fetch the page with realistic browser headers
+    # Fetch the page with browser-like headers
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
+        'Accept-Language': 'en-US,en;q=0.9',
         'Accept-Encoding': 'gzip, deflate, br',
         'DNT': '1',
         'Connection': 'keep-alive',
-        'Upgrade-Insecure-Requests': '1'
+        'Upgrade-Insecure-Requests': '1',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none',
+        'Cache-Control': 'max-age=0'
     }
     response = requests.get(url, headers=headers, timeout=timeout, allow_redirects=True)
     response.raise_for_status()

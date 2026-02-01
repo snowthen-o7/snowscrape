@@ -487,7 +487,7 @@ functions:
   scraperPreview:
     name: snowscrape-scraper-preview
     handler: handler.scraper_preview_handler
-    timeout: 45
+    timeout: 30
     memorySize: 512
     events:
       - http:
@@ -503,7 +503,7 @@ functions:
   scraperTest:
     name: snowscrape-scraper-test
     handler: handler.scraper_test_handler
-    timeout: 45
+    timeout: 30
     memorySize: 512
     events:
       - http:

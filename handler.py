@@ -2517,7 +2517,7 @@ def scraper_preview_handler(event, context):
 
 		# Fetch and parse the page
 		try:
-			result = fetch_and_parse_page(url, timeout=30)
+			result = fetch_and_parse_page(url, timeout=25)
 		except Exception as e:
 			logger.error("Failed to fetch/parse page", url=url, error=str(e))
 			return {
@@ -2619,7 +2619,7 @@ def scraper_test_handler(event, context):
 
 		# Test extraction
 		try:
-			results = test_extraction(url, selectors, timeout=30)
+			results = test_extraction(url, selectors, timeout=25)
 		except Exception as e:
 			logger.error("Failed to test extraction", url=url, error=str(e))
 			return {
