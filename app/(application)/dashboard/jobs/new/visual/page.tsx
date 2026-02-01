@@ -85,13 +85,18 @@ export default function VisualBuilderPage() {
       }
 
       // Call backend API to fetch and parse the page
+      console.log('[Visual Builder] Fetching page preview for:', targetUrl);
       const result = await jobsAPI.preview(targetUrl, token);
+      console.log('[Visual Builder] Preview result:', result);
+      console.log('[Visual Builder] Elements count:', result?.elements?.length);
 
       setPageStructure(result);
       setPageLoaded(true);
+      console.log('[Visual Builder] State updated - pageLoaded: true, pageStructure:', result);
+
       toast.success(`Loaded ${result.elements.length} elements from page`);
     } catch (error) {
-      console.error('Error loading page', error);
+      console.error('[Visual Builder] Error loading page:', error);
       toast.error(
         error instanceof Error
           ? error.message
