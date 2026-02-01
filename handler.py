@@ -2468,13 +2468,21 @@ def scraper_preview_handler(event, context):
 	"""
 	log_lambda_invocation(event, context, logger)
 
+	# Define CORS headers to be used in all responses
+	cors_headers = {
+		"Content-Type": "application/json",
+		"Access-Control-Allow-Origin": "*",
+		"Access-Control-Allow-Headers": "Content-Type,Authorization",
+		"Access-Control-Expose-Headers": "Content-Type"
+	}
+
 	try:
 		# Validate authentication
 		token = extract_token_from_event(event)
 		if not token:
 			return {
 				"statusCode": 401,
-				"headers": {"Content-Type": "application/json"},
+				"headers": cors_headers,
 				"body": json.dumps({"message": "No authorization token provided"})
 			}
 
@@ -2482,7 +2490,7 @@ def scraper_preview_handler(event, context):
 		if not user_id:
 			return {
 				"statusCode": 401,
-				"headers": {"Content-Type": "application/json"},
+				"headers": cors_headers,
 				"body": json.dumps({"message": "Invalid authorization token"})
 			}
 
@@ -2492,7 +2500,7 @@ def scraper_preview_handler(event, context):
 		except json.JSONDecodeError:
 			return {
 				"statusCode": 400,
-				"headers": {"Content-Type": "application/json"},
+				"headers": cors_headers,
 				"body": json.dumps({"message": "Invalid JSON in request body"})
 			}
 
@@ -2500,7 +2508,7 @@ def scraper_preview_handler(event, context):
 		if not url:
 			return {
 				"statusCode": 400,
-				"headers": {"Content-Type": "application/json"},
+				"headers": cors_headers,
 				"body": json.dumps({"message": "URL is required"})
 			}
 
@@ -2509,7 +2517,7 @@ def scraper_preview_handler(event, context):
 		if not parsed.scheme or not parsed.netloc:
 			return {
 				"statusCode": 400,
-				"headers": {"Content-Type": "application/json"},
+				"headers": cors_headers,
 				"body": json.dumps({"message": "Invalid URL format"})
 			}
 
@@ -2522,7 +2530,7 @@ def scraper_preview_handler(event, context):
 			logger.error("Failed to fetch/parse page", url=url, error=str(e))
 			return {
 				"statusCode": 500,
-				"headers": {"Content-Type": "application/json"},
+				"headers": cors_headers,
 				"body": json.dumps({
 					"message": "Failed to fetch or parse the page",
 					"error": str(e)
@@ -2536,7 +2544,7 @@ def scraper_preview_handler(event, context):
 
 		return {
 			"statusCode": 200,
-			"headers": {"Content-Type": "application/json"},
+			"headers": cors_headers,
 			"body": json.dumps(result)
 		}
 
@@ -2544,7 +2552,7 @@ def scraper_preview_handler(event, context):
 		log_exception(logger, "Scraper preview handler failed", e)
 		return {
 			"statusCode": 500,
-			"headers": {"Content-Type": "application/json"},
+			"headers": cors_headers,
 			"body": json.dumps({"message": "Internal server error", "error": str(e)})
 		}
 	finally:
@@ -2558,13 +2566,21 @@ def scraper_test_handler(event, context):
 	"""
 	log_lambda_invocation(event, context, logger)
 
+	# Define CORS headers to be used in all responses
+	cors_headers = {
+		"Content-Type": "application/json",
+		"Access-Control-Allow-Origin": "*",
+		"Access-Control-Allow-Headers": "Content-Type,Authorization",
+		"Access-Control-Expose-Headers": "Content-Type"
+	}
+
 	try:
 		# Validate authentication
 		token = extract_token_from_event(event)
 		if not token:
 			return {
 				"statusCode": 401,
-				"headers": {"Content-Type": "application/json"},
+				"headers": cors_headers,
 				"body": json.dumps({"message": "No authorization token provided"})
 			}
 
@@ -2572,7 +2588,7 @@ def scraper_test_handler(event, context):
 		if not user_id:
 			return {
 				"statusCode": 401,
-				"headers": {"Content-Type": "application/json"},
+				"headers": cors_headers,
 				"body": json.dumps({"message": "Invalid authorization token"})
 			}
 
@@ -2582,7 +2598,7 @@ def scraper_test_handler(event, context):
 		except json.JSONDecodeError:
 			return {
 				"statusCode": 400,
-				"headers": {"Content-Type": "application/json"},
+				"headers": cors_headers,
 				"body": json.dumps({"message": "Invalid JSON in request body"})
 			}
 
@@ -2592,14 +2608,14 @@ def scraper_test_handler(event, context):
 		if not url:
 			return {
 				"statusCode": 400,
-				"headers": {"Content-Type": "application/json"},
+				"headers": cors_headers,
 				"body": json.dumps({"message": "URL is required"})
 			}
 
 		if not selectors or not isinstance(selectors, list):
 			return {
 				"statusCode": 400,
-				"headers": {"Content-Type": "application/json"},
+				"headers": cors_headers,
 				"body": json.dumps({"message": "Selectors array is required"})
 			}
 
@@ -2608,7 +2624,7 @@ def scraper_test_handler(event, context):
 		if not parsed.scheme or not parsed.netloc:
 			return {
 				"statusCode": 400,
-				"headers": {"Content-Type": "application/json"},
+				"headers": cors_headers,
 				"body": json.dumps({"message": "Invalid URL format"})
 			}
 
@@ -2624,7 +2640,7 @@ def scraper_test_handler(event, context):
 			logger.error("Failed to test extraction", url=url, error=str(e))
 			return {
 				"statusCode": 500,
-				"headers": {"Content-Type": "application/json"},
+				"headers": cors_headers,
 				"body": json.dumps({
 					"message": "Failed to test extraction",
 					"error": str(e)
@@ -2638,7 +2654,7 @@ def scraper_test_handler(event, context):
 
 		return {
 			"statusCode": 200,
-			"headers": {"Content-Type": "application/json"},
+			"headers": cors_headers,
 			"body": json.dumps(results)
 		}
 
@@ -2646,7 +2662,7 @@ def scraper_test_handler(event, context):
 		log_exception(logger, "Scraper test handler failed", e)
 		return {
 			"statusCode": 500,
-			"headers": {"Content-Type": "application/json"},
+			"headers": cors_headers,
 			"body": json.dumps({"message": "Internal server error", "error": str(e)})
 		}
 	finally:
