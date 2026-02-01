@@ -1264,7 +1264,7 @@ custom:
       - X-Amz-Date
       - X-Api-Key
       - X-Amz-Security-Token
-    allowCredentials: true
+    allowCredentials: false  # Must be false when using wildcard origin
     maxAge: 86400  # 24 hours
 
   # Alarm email notification configuration
