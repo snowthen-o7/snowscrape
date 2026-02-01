@@ -496,6 +496,7 @@ functions:
           cors:
             origin: ${self:custom.corsConfig.origin}
             headers: ${self:custom.corsConfig.headers}
+            exposedHeaders: ${self:custom.corsConfig.exposedHeaders}
             allowCredentials: ${self:custom.corsConfig.allowCredentials}
             maxAge: ${self:custom.corsConfig.maxAge}
     maximumRetryAttempts: 0
@@ -512,6 +513,7 @@ functions:
           cors:
             origin: ${self:custom.corsConfig.origin}
             headers: ${self:custom.corsConfig.headers}
+            exposedHeaders: ${self:custom.corsConfig.exposedHeaders}
             allowCredentials: ${self:custom.corsConfig.allowCredentials}
             maxAge: ${self:custom.corsConfig.maxAge}
     maximumRetryAttempts: 0
@@ -1257,6 +1259,11 @@ custom:
       - X-Api-Key
       - X-Amz-Security-Token
       - X-Amz-User-Agent
+    exposedHeaders:
+      - Content-Type
+      - X-Amz-Date
+      - X-Api-Key
+      - X-Amz-Security-Token
     allowCredentials: true
     maxAge: 86400  # 24 hours
 
