@@ -7,6 +7,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useSession } from '@clerk/nextjs';
 import { AppLayout } from '@/components/layout';
 import { PageHeader } from '@snowforge/ui';
 import { Button } from '@snowforge/ui';
@@ -28,8 +29,10 @@ import {
   Trash2,
   Plus,
   Wand2,
+  Loader2,
 } from 'lucide-react';
 import { toast } from '@/lib/toast';
+import { jobsAPI } from '@/lib/api';
 
 interface ExtractedField {
   id: string;
@@ -42,15 +45,16 @@ interface ExtractedField {
 
 export default function VisualBuilderPage() {
   const router = useRouter();
+  const { session } = useSession();
   const [targetUrl, setTargetUrl] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [pageLoaded, setPageLoaded] = useState(false);
   const [extractedFields, setExtractedFields] = useState<ExtractedField[]>([]);
   const [selectedElement, setSelectedElement] = useState<string | null>(null);
   const [previewData, setPreviewData] = useState<any[]>([]);
-
-  // Sample page structure for demonstration
   const [pageStructure, setPageStructure] = useState<any>(null);
+  const [isTesting, setIsTesting] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const handleLoadPage = async () => {
     if (!targetUrl) {
@@ -58,71 +62,41 @@ export default function VisualBuilderPage() {
       return;
     }
 
+    if (!session) {
+      toast.error('Please sign in to continue');
+      return;
+    }
+
+    // Validate URL format
+    try {
+      new URL(targetUrl);
+    } catch (e) {
+      toast.error('Please enter a valid URL (e.g., https://example.com)');
+      return;
+    }
+
     setIsLoading(true);
 
     try {
-      // Simulate loading page structure
-      // In production, this would make a request to a backend service that:
-      // 1. Fetches the page
-      // 2. Parses the DOM
-      // 3. Returns a simplified structure with selectable elements
+      const token = await session.getToken();
+      if (!token) {
+        toast.error('Authentication failed');
+        return;
+      }
 
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      // Call backend API to fetch and parse the page
+      const result = await jobsAPI.preview(targetUrl, token);
 
-      // Mock page structure
-      const mockStructure = {
-        title: 'Sample E-commerce Product Page',
-        elements: [
-          {
-            id: 'el-1',
-            type: 'h1',
-            text: 'Premium Wireless Headphones',
-            xpath: '//h1[@class="product-title"]',
-            css: '.product-title',
-            path: 'body > div.container > h1.product-title',
-          },
-          {
-            id: 'el-2',
-            type: 'span',
-            text: '$299.99',
-            xpath: '//span[@class="price"]',
-            css: '.price',
-            path: 'body > div.container > div.product-info > span.price',
-          },
-          {
-            id: 'el-3',
-            type: 'div',
-            text: '4.5 stars',
-            xpath: '//div[@class="rating"]',
-            css: '.rating',
-            path: 'body > div.container > div.product-info > div.rating',
-          },
-          {
-            id: 'el-4',
-            type: 'p',
-            text:
-              'Premium noise-cancelling headphones with superior sound quality and long battery life...',
-            xpath: '//p[@class="description"]',
-            css: '.description',
-            path: 'body > div.container > p.description',
-          },
-          {
-            id: 'el-5',
-            type: 'span',
-            text: 'In Stock',
-            xpath: '//span[@class="availability"]',
-            css: '.availability',
-            path: 'body > div.container > div.product-info > span.availability',
-          },
-        ],
-      };
-
-      setPageStructure(mockStructure);
+      setPageStructure(result);
       setPageLoaded(true);
-      toast.success('Page loaded successfully');
+      toast.success(`Loaded ${result.elements.length} elements from page`);
     } catch (error) {
       console.error('Error loading page', error);
-      toast.error('Failed to load page');
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : 'Failed to load page. Please check the URL and try again.'
+      );
     } finally {
       setIsLoading(false);
     }
@@ -170,24 +144,117 @@ export default function VisualBuilderPage() {
     toast.success('Field removed');
   };
 
-  const handleTestExtraction = () => {
-    // Simulate extraction
-    const mockData = extractedFields.map((field) => ({
-      [field.name]: field.value || 'Sample extracted value',
-    }));
+  const handleTestExtraction = async () => {
+    if (!session) {
+      toast.error('Please sign in to continue');
+      return;
+    }
 
-    setPreviewData(mockData);
-    toast.success('Extraction test completed');
+    if (!targetUrl) {
+      toast.error('No URL loaded');
+      return;
+    }
+
+    if (extractedFields.length === 0) {
+      toast.error('Add at least one field to test');
+      return;
+    }
+
+    setIsTesting(true);
+
+    try {
+      const token = await session.getToken();
+      if (!token) {
+        toast.error('Authentication failed');
+        return;
+      }
+
+      // Format selectors for the API
+      const selectors = extractedFields.map((field) => ({
+        name: field.name,
+        type: field.type,
+        selector: field.selector,
+      }));
+
+      // Call backend API to test extraction
+      const results = await jobsAPI.testExtraction(targetUrl, selectors, token);
+
+      setPreviewData(results);
+      toast.success('Extraction test completed successfully');
+    } catch (error) {
+      console.error('Error testing extraction', error);
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : 'Failed to test extraction'
+      );
+    } finally {
+      setIsTesting(false);
+    }
   };
 
-  const handleSaveAsJob = () => {
+  const handleSaveAsJob = async () => {
+    if (!session) {
+      toast.error('Please sign in to continue');
+      return;
+    }
+
     if (extractedFields.length === 0) {
       toast.error('Add at least one field to extract');
       return;
     }
 
-    toast.success('Job created successfully');
-    router.push('/dashboard');
+    if (!targetUrl) {
+      toast.error('No URL loaded');
+      return;
+    }
+
+    // Prompt for job name
+    const jobName = prompt('Enter a name for this scraping job:');
+    if (!jobName || !jobName.trim()) {
+      return;
+    }
+
+    setIsSaving(true);
+
+    try {
+      const token = await session.getToken();
+      if (!token) {
+        toast.error('Authentication failed');
+        return;
+      }
+
+      // Format queries from extracted fields
+      const queries = extractedFields.map((field) => ({
+        name: field.name,
+        type: field.type,
+        query: field.selector,
+        join: false,
+      }));
+
+      // Create the job
+      const job = await jobsAPI.create(
+        {
+          name: jobName.trim(),
+          source: targetUrl,
+          queries,
+          rate_limit: 10, // Default rate limit
+        },
+        token
+      );
+
+      toast.success(`Job "${jobName}" created successfully!`);
+      router.push(`/dashboard/jobs/${job.job_id}`);
+    } catch (error) {
+      console.error('Error creating job', error);
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : 'Failed to create job'
+      );
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleSaveAsTemplate = () => {
@@ -235,7 +302,14 @@ export default function VisualBuilderPage() {
               />
               {!pageLoaded ? (
                 <Button onClick={handleLoadPage} disabled={isLoading}>
-                  {isLoading ? 'Loading...' : 'Load Page'}
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Loading...
+                    </>
+                  ) : (
+                    'Load Page'
+                  )}
                 </Button>
               ) : (
                 <Button
@@ -428,9 +502,18 @@ export default function VisualBuilderPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex gap-2">
-                <Button onClick={handleTestExtraction}>
-                  <Play className="mr-2 h-4 w-4" />
-                  Test Extraction
+                <Button onClick={handleTestExtraction} disabled={isTesting}>
+                  {isTesting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Testing...
+                    </>
+                  ) : (
+                    <>
+                      <Play className="mr-2 h-4 w-4" />
+                      Test Extraction
+                    </>
+                  )}
                 </Button>
               </div>
 
@@ -457,13 +540,22 @@ export default function VisualBuilderPage() {
                   </p>
                 </div>
                 <div className="flex gap-2">
-                  <Button variant="outline" onClick={handleSaveAsTemplate}>
+                  <Button variant="outline" onClick={handleSaveAsTemplate} disabled={isSaving}>
                     <Save className="mr-2 h-4 w-4" />
                     Save as Template
                   </Button>
-                  <Button onClick={handleSaveAsJob}>
-                    <CheckCircle2 className="mr-2 h-4 w-4" />
-                    Create Job
+                  <Button onClick={handleSaveAsJob} disabled={isSaving}>
+                    {isSaving ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Creating...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="mr-2 h-4 w-4" />
+                        Create Job
+                      </>
+                    )}
                   </Button>
                 </div>
               </div>
