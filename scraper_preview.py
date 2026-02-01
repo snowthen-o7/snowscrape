@@ -35,15 +35,28 @@ def fetch_and_parse_page(url: str, timeout: int = 25) -> Dict[str, Any]:
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
         'Accept-Language': 'en-US,en;q=0.9',
         'Accept-Encoding': 'gzip, deflate, br',
+        'Referer': 'https://www.google.com/',
         'DNT': '1',
         'Connection': 'keep-alive',
         'Upgrade-Insecure-Requests': '1',
         'Sec-Fetch-Dest': 'document',
         'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'none',
+        'Sec-Fetch-Site': 'cross-site',
+        'Sec-Fetch-User': '?1',
         'Cache-Control': 'max-age=0'
     }
     response = requests.get(url, headers=headers, timeout=timeout, allow_redirects=True)
+
+    # Handle common bot detection responses
+    if response.status_code == 403:
+        logger.warning("Received 403 Forbidden - site may have bot protection", url=url)
+        raise requests.exceptions.HTTPError(
+            f"403 Forbidden: This site appears to block automated access. "
+            f"Sites with strong bot protection (like Costco, Amazon, etc.) may not work with the visual builder. "
+            f"Try a simpler site or use the manual scraper configuration instead.",
+            response=response
+        )
+
     response.raise_for_status()
 
     # Parse with BeautifulSoup
@@ -224,15 +237,28 @@ def test_extraction(url: str, selectors: List[Dict[str, str]], timeout: int = 25
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
         'Accept-Language': 'en-US,en;q=0.9',
         'Accept-Encoding': 'gzip, deflate, br',
+        'Referer': 'https://www.google.com/',
         'DNT': '1',
         'Connection': 'keep-alive',
         'Upgrade-Insecure-Requests': '1',
         'Sec-Fetch-Dest': 'document',
         'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'none',
+        'Sec-Fetch-Site': 'cross-site',
+        'Sec-Fetch-User': '?1',
         'Cache-Control': 'max-age=0'
     }
     response = requests.get(url, headers=headers, timeout=timeout, allow_redirects=True)
+
+    # Handle common bot detection responses
+    if response.status_code == 403:
+        logger.warning("Received 403 Forbidden - site may have bot protection", url=url)
+        raise requests.exceptions.HTTPError(
+            f"403 Forbidden: This site appears to block automated access. "
+            f"Sites with strong bot protection (like Costco, Amazon, etc.) may not work with the visual builder. "
+            f"Try a simpler site or use the manual scraper configuration instead.",
+            response=response
+        )
+
     response.raise_for_status()
 
     # Parse with both BeautifulSoup and lxml
