@@ -13,9 +13,10 @@ from logger import get_logger, log_lambda_invocation, log_exception
 from metrics import get_metrics_emitter
 from observatory_client import get_observatory_client
 from urllib.parse import urlparse
-from utils import decimal_to_float, detect_csv_settings, extract_token_from_event, parse_links_from_file, refresh_job_urls, validate_clerk_token, validate_job_data
+from utils import decimal_to_float, detect_csv_settings, extract_token_from_event, get_links_for_job, parse_links_from_file, preview_url_template, refresh_job_urls, validate_clerk_token, validate_job_data
 from webhook_dispatcher import WebhookDispatcher
 from proxy_manager import get_proxy_manager
+from scraper_preview import fetch_and_parse_page, test_extraction
 
 # Initialize logger, metrics, and observatory
 logger = get_logger(__name__)
@@ -739,9 +740,10 @@ def schedule_jobs_handler(event, context):
 					print(f"Job {job['job_id']} was already run recently, skipping.")
 					continue
 
-			# Refresh the URLs by re-pulling from the source file
+			# Refresh the URLs based on source type (CSV or direct URL with variables)
+			# For direct_url mode, variables are resolved at execution time
 			try:
-				links = parse_links_from_file(job['file_mapping'], job['source'])
+				links = get_links_for_job(job)  # Handles both CSV and direct_url modes
 				print(f"Refreshed links for job {job['job_id']}: {links}")
 
 				# Update the URL table with the refreshed links
@@ -1035,6 +1037,101 @@ def validate_sftp_url_handler(event, context):
 				"Content-Type": "application/json"
 			}
 		}
+
+
+def preview_url_variables_handler(event, context):
+	"""
+	Preview URL variable resolution without creating a job.
+
+	Allows users to test their URL templates with date/time variables
+	and see the resolved output before creating a job.
+
+	Request body:
+	{
+		"url_template": "https://example.com/data/{{date:Y-m-d}}.pdf",
+		"timezone": "America/New_York"  // optional, defaults to UTC
+	}
+
+	Response:
+	{
+		"valid": true,
+		"template": "https://example.com/data/{{date:Y-m-d}}.pdf",
+		"resolved": "https://example.com/data/2026-01-22.pdf",
+		"variables": [{"type": "date", "offset": null, "format": "Y-m-d"}],
+		"timezone": "America/New_York",
+		"resolved_at": "2026-01-22T15:30:00-05:00"
+	}
+	"""
+	log_lambda_invocation(event, context, logger)
+
+	try:
+		# Parse request body
+		body = json.loads(event.get('body', '{}'))
+		url_template = body.get('url_template', '')
+		timezone = body.get('timezone', 'UTC')
+
+		if not url_template:
+			return {
+				'statusCode': 400,
+				'body': json.dumps({
+					'valid': False,
+					'error': 'url_template is required'
+				}),
+				'headers': {
+					'Access-Control-Allow-Credentials': True,
+					'Access-Control-Allow-Origin': '*',
+					'Content-Type': 'application/json'
+				}
+			}
+
+		# Preview the URL template resolution with timezone
+		preview_result = preview_url_template(url_template, tz=timezone)
+
+		logger.info("URL template preview",
+				   template=url_template,
+				   timezone=timezone,
+				   valid=preview_result.get('valid'),
+				   resolved=preview_result.get('resolved'))
+
+		return {
+			'statusCode': 200,
+			'body': json.dumps(preview_result),
+			'headers': {
+				'Access-Control-Allow-Credentials': True,
+				'Access-Control-Allow-Origin': '*',
+				'Content-Type': 'application/json'
+			}
+		}
+
+	except json.JSONDecodeError:
+		return {
+			'statusCode': 400,
+			'body': json.dumps({
+				'valid': False,
+				'error': 'Invalid JSON in request body'
+			}),
+			'headers': {
+				'Access-Control-Allow-Credentials': True,
+				'Access-Control-Allow-Origin': '*',
+				'Content-Type': 'application/json'
+			}
+		}
+	except Exception as e:
+		log_exception(logger, "Failed to preview URL template", e)
+		return {
+			'statusCode': 500,
+			'body': json.dumps({
+				'valid': False,
+				'error': f'Internal server error: {str(e)}'
+			}),
+			'headers': {
+				'Access-Control-Allow-Credentials': True,
+				'Access-Control-Allow-Origin': '*',
+				'Content-Type': 'application/json'
+			}
+		}
+	finally:
+		logger.clear_context()
 
 
 # Download job results
@@ -2355,6 +2452,202 @@ def proxy_health_checker_handler(event, context):
 		return {
 			"statusCode": 500,
 			"body": json.dumps({"message": "Failed to run health check", "error": str(e)})
+		}
+	finally:
+		logger.clear_context()
+
+
+# ============================================
+# SCRAPER PREVIEW & TEST ENDPOINTS
+# ============================================
+
+def scraper_preview_handler(event, context):
+	"""
+	POST /scraper/preview
+	Fetches a URL and returns a simplified DOM structure for visual selection.
+	"""
+	log_lambda_invocation(event, context, logger)
+
+	try:
+		# Validate authentication
+		token = extract_token_from_event(event)
+		if not token:
+			return {
+				"statusCode": 401,
+				"headers": {"Content-Type": "application/json"},
+				"body": json.dumps({"message": "No authorization token provided"})
+			}
+
+		user_id = validate_clerk_token(token)
+		if not user_id:
+			return {
+				"statusCode": 401,
+				"headers": {"Content-Type": "application/json"},
+				"body": json.dumps({"message": "Invalid authorization token"})
+			}
+
+		# Parse request body
+		try:
+			body = json.loads(event.get('body', '{}'))
+		except json.JSONDecodeError:
+			return {
+				"statusCode": 400,
+				"headers": {"Content-Type": "application/json"},
+				"body": json.dumps({"message": "Invalid JSON in request body"})
+			}
+
+		url = body.get('url')
+		if not url:
+			return {
+				"statusCode": 400,
+				"headers": {"Content-Type": "application/json"},
+				"body": json.dumps({"message": "URL is required"})
+			}
+
+		# Validate URL format
+		parsed = urlparse(url)
+		if not parsed.scheme or not parsed.netloc:
+			return {
+				"statusCode": 400,
+				"headers": {"Content-Type": "application/json"},
+				"body": json.dumps({"message": "Invalid URL format"})
+			}
+
+		logger.info("Processing scraper preview request", user_id=user_id, url=url)
+
+		# Fetch and parse the page
+		try:
+			result = fetch_and_parse_page(url, timeout=10)
+		except Exception as e:
+			logger.error("Failed to fetch/parse page", url=url, error=str(e))
+			return {
+				"statusCode": 500,
+				"headers": {"Content-Type": "application/json"},
+				"body": json.dumps({
+					"message": "Failed to fetch or parse the page",
+					"error": str(e)
+				})
+			}
+
+		logger.info("Scraper preview completed successfully",
+				   user_id=user_id,
+				   url=url,
+				   elements_found=len(result['elements']))
+
+		return {
+			"statusCode": 200,
+			"headers": {"Content-Type": "application/json"},
+			"body": json.dumps(result)
+		}
+
+	except Exception as e:
+		log_exception(logger, "Scraper preview handler failed", e)
+		return {
+			"statusCode": 500,
+			"headers": {"Content-Type": "application/json"},
+			"body": json.dumps({"message": "Internal server error", "error": str(e)})
+		}
+	finally:
+		logger.clear_context()
+
+
+def scraper_test_handler(event, context):
+	"""
+	POST /scraper/test
+	Tests extraction with given selectors on a URL.
+	"""
+	log_lambda_invocation(event, context, logger)
+
+	try:
+		# Validate authentication
+		token = extract_token_from_event(event)
+		if not token:
+			return {
+				"statusCode": 401,
+				"headers": {"Content-Type": "application/json"},
+				"body": json.dumps({"message": "No authorization token provided"})
+			}
+
+		user_id = validate_clerk_token(token)
+		if not user_id:
+			return {
+				"statusCode": 401,
+				"headers": {"Content-Type": "application/json"},
+				"body": json.dumps({"message": "Invalid authorization token"})
+			}
+
+		# Parse request body
+		try:
+			body = json.loads(event.get('body', '{}'))
+		except json.JSONDecodeError:
+			return {
+				"statusCode": 400,
+				"headers": {"Content-Type": "application/json"},
+				"body": json.dumps({"message": "Invalid JSON in request body"})
+			}
+
+		url = body.get('url')
+		selectors = body.get('selectors', [])
+
+		if not url:
+			return {
+				"statusCode": 400,
+				"headers": {"Content-Type": "application/json"},
+				"body": json.dumps({"message": "URL is required"})
+			}
+
+		if not selectors or not isinstance(selectors, list):
+			return {
+				"statusCode": 400,
+				"headers": {"Content-Type": "application/json"},
+				"body": json.dumps({"message": "Selectors array is required"})
+			}
+
+		# Validate URL format
+		parsed = urlparse(url)
+		if not parsed.scheme or not parsed.netloc:
+			return {
+				"statusCode": 400,
+				"headers": {"Content-Type": "application/json"},
+				"body": json.dumps({"message": "Invalid URL format"})
+			}
+
+		logger.info("Processing scraper test request",
+				   user_id=user_id,
+				   url=url,
+				   selector_count=len(selectors))
+
+		# Test extraction
+		try:
+			results = test_extraction(url, selectors, timeout=10)
+		except Exception as e:
+			logger.error("Failed to test extraction", url=url, error=str(e))
+			return {
+				"statusCode": 500,
+				"headers": {"Content-Type": "application/json"},
+				"body": json.dumps({
+					"message": "Failed to test extraction",
+					"error": str(e)
+				})
+			}
+
+		logger.info("Scraper test completed successfully",
+				   user_id=user_id,
+				   url=url,
+				   results_count=len(results))
+
+		return {
+			"statusCode": 200,
+			"headers": {"Content-Type": "application/json"},
+			"body": json.dumps(results)
+		}
+
+	except Exception as e:
+		log_exception(logger, "Scraper test handler failed", e)
+		return {
+			"statusCode": 500,
+			"headers": {"Content-Type": "application/json"},
+			"body": json.dumps({"message": "Internal server error", "error": str(e)})
 		}
 	finally:
 		logger.clear_context()

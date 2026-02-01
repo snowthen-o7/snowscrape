@@ -340,6 +340,16 @@ functions:
           cors: true
     maximumRetryAttempts: 0
 
+  previewUrlVariables:
+    name: snowscrape-preview-url-variables
+    handler: handler.preview_url_variables_handler
+    events:
+      - http:
+          path: preview-url
+          method: post
+          cors: true
+    maximumRetryAttempts: 0
+
   healthCheck:
     name: snowscrape-health-check
     handler: handler.health_check_handler
@@ -469,6 +479,31 @@ functions:
     events:
       - http:
           path: webhooks/{webhook_id}/test
+          method: post
+          cors: true
+    maximumRetryAttempts: 0
+
+  # Scraper Visual Builder Endpoints
+  scraperPreview:
+    name: snowscrape-scraper-preview
+    handler: handler.scraper_preview_handler
+    timeout: 15
+    memorySize: 512
+    events:
+      - http:
+          path: scraper/preview
+          method: post
+          cors: true
+    maximumRetryAttempts: 0
+
+  scraperTest:
+    name: snowscrape-scraper-test
+    handler: handler.scraper_test_handler
+    timeout: 15
+    memorySize: 512
+    events:
+      - http:
+          path: scraper/test
           method: post
           cors: true
     maximumRetryAttempts: 0
