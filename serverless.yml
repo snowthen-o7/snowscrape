@@ -493,7 +493,11 @@ functions:
       - http:
           path: scraper/preview
           method: post
-          cors: true
+          cors:
+            origin: ${self:custom.corsConfig.origin}
+            headers: ${self:custom.corsConfig.headers}
+            allowCredentials: ${self:custom.corsConfig.allowCredentials}
+            maxAge: ${self:custom.corsConfig.maxAge}
     maximumRetryAttempts: 0
 
   scraperTest:
@@ -505,7 +509,11 @@ functions:
       - http:
           path: scraper/test
           method: post
-          cors: true
+          cors:
+            origin: ${self:custom.corsConfig.origin}
+            headers: ${self:custom.corsConfig.headers}
+            allowCredentials: ${self:custom.corsConfig.allowCredentials}
+            maxAge: ${self:custom.corsConfig.maxAge}
     maximumRetryAttempts: 0
 
   # Webhook Delivery Handler (SQS triggered)
