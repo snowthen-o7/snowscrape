@@ -63,13 +63,18 @@ def fetch_and_parse_page(url: str, timeout: int = 25, min_tier: int = 1, max_tie
 
     # Extract soup from result
     soup = result.get('soup')
+    content = result.get('content') or result.get('text', '')
+
     if not soup:
         # If soup not in result, parse content
-        content = result.get('content') or result.get('text', '')
         soup = BeautifulSoup(content, 'html.parser')
 
     # Parse with lxml for better XPath support
-    tree = lxml_html.fromstring(response.content)
+    if isinstance(content, str):
+        content_bytes = content.encode('utf-8')
+    else:
+        content_bytes = content
+    tree = lxml_html.fromstring(content_bytes)
 
     # Extract page title
     title_tag = soup.find('title')
@@ -312,7 +317,8 @@ def test_extraction(url: str, selectors: List[Dict[str, str]], timeout: int = 25
 
             elif selector_type == 'regex':
                 # Apply regex to page content
-                match = re.search(selector, response.text)
+                text_content = content if isinstance(content, str) else content.decode('utf-8', errors='ignore')
+                match = re.search(selector, text_content)
                 if match:
                     # Return first capturing group, or full match if no groups
                     result[name] = match.group(1) if match.groups() else match.group(0)
