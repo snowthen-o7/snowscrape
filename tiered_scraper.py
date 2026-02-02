@@ -58,6 +58,9 @@ def detect_blocking(response: requests.Response, content: Optional[str] = None) 
     """
     Detect if we've been blocked by bot protection.
 
+    Uses conservative detection to avoid false positives. Only flags actual blocking,
+    not just presence of security libraries in normal pages.
+
     Args:
         response: The HTTP response object
         content: Optional page content (for BeautifulSoup parsed content)
@@ -68,7 +71,7 @@ def detect_blocking(response: requests.Response, content: Optional[str] = None) 
     indicators = []
     text_to_check = content if content else (response.text if hasattr(response, 'text') else '')
 
-    # Check 1: HTTP status codes
+    # Check 1: HTTP status codes - STRONG indicators of blocking
     if hasattr(response, 'status_code'):
         if response.status_code == 403:
             indicators.append('403_forbidden')
@@ -77,40 +80,46 @@ def detect_blocking(response: requests.Response, content: Optional[str] = None) 
         elif response.status_code == 503:
             indicators.append('503_service_unavailable')
 
-    # Check 2: Content-based detection
+    # Check 2: Content-based detection - ONLY check for actual challenge pages
+    # Don't check for generic keywords like "captcha" or "cloudflare" since many
+    # normal pages include these in their scripts/libraries
     if text_to_check:
         text_lower = text_to_check.lower()
 
+        # Very specific patterns that indicate actual challenge/block pages
         blocking_patterns = [
-            ('captcha', 'captcha_detected'),
-            ('recaptcha', 'recaptcha_detected'),
-            ('hcaptcha', 'hcaptcha_detected'),
-            ('cloudflare', 'cloudflare_challenge'),
+            # Cloudflare challenge pages
+            ('just a moment...', 'cloudflare_challenge'),
+            ('checking your browser', 'cloudflare_challenge'),
+            ('enable javascript and cookies', 'cloudflare_challenge'),
+            ('cf-browser-verification', 'cloudflare_verification'),
+
+            # Generic access denial messages
             ('access denied', 'access_denied'),
             ('access forbidden', 'access_forbidden'),
-            ('unusual traffic', 'unusual_traffic'),
+
+            # Human verification prompts (these appear in challenge pages, not normal pages)
             ('verify you are human', 'human_verification'),
-            ('please verify', 'verification_required'),
-            ('bot detection', 'bot_detected'),
+            ('prove you are human', 'human_verification'),
+            ('unusual traffic from your computer network', 'unusual_traffic'),
             ('automated access', 'automation_detected'),
             ('please complete the security check', 'security_check'),
-            ('perimeter', 'perimeterx_detected'),
-            ('datadome', 'datadome_detected'),
-            ('distil', 'distil_detected'),
-            ('akamai', 'akamai_detected'),
+
+            # Specific bot protection services (in challenge pages, not just scripts)
+            ('perimeterpx', 'perimeterx_challenge'),
+            ('datadome', 'datadome_challenge'),
         ]
 
         for pattern, indicator_name in blocking_patterns:
             if pattern in text_lower:
                 indicators.append(indicator_name)
 
-    # Check 3: Empty or minimal content (suspicious)
-    if text_to_check and len(text_to_check.strip()) < 100:
-        indicators.append('minimal_content')
-
-    # Check 4: Cloudflare challenge page detection (specific check)
-    if text_to_check and 'cf-browser-verification' in text_to_check:
-        indicators.append('cloudflare_browser_verification')
+    # Check 3: Very minimal content (likely error page or redirect)
+    # Increased threshold to 200 to avoid false positives on legitimate minimal pages
+    if text_to_check and len(text_to_check.strip()) < 200:
+        # Only flag if combined with suspicious status or content
+        if indicators or (hasattr(response, 'status_code') and response.status_code >= 400):
+            indicators.append('minimal_content')
 
     is_blocked = len(indicators) > 0
 
