@@ -133,7 +133,7 @@ def detect_blocking(response: requests.Response, content: Optional[str] = None) 
     return is_blocked, indicators
 
 
-def scrape_tier_1(url: str, timeout: int = 15) -> Dict[str, Any]:
+def scrape_tier_1(url: str, timeout: int = 10) -> Dict[str, Any]:
     """
     Tier 1: Lightweight scraping with requests + BeautifulSoup.
 
@@ -195,7 +195,7 @@ def scrape_tier_1(url: str, timeout: int = 15) -> Dict[str, Any]:
     }
 
 
-def scrape_tier_2(url: str, proxy_config: Optional[Dict[str, str]] = None, timeout: int = 20) -> Dict[str, Any]:
+def scrape_tier_2(url: str, proxy_config: Optional[Dict[str, str]] = None, timeout: int = 15) -> Dict[str, Any]:
     """
     Tier 2: IP Rotation using residential proxies.
 
