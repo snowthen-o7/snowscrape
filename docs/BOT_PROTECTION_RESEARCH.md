@@ -2,8 +2,157 @@
 
 **Status:** Critical Priority
 **Date:** 2026-02-01
-**Problem:** Cannot scrape bot-protected sites like Costco, Amazon, Target, etc.
-**Impact:** Significantly behind competition without this capability
+**Strategy:** Tiered approach - use lightweight methods by default, escalate only when needed
+**Impact:** Competitive capability with cost optimization
+
+---
+
+## Strategy: Smart Tiered Approach
+
+**Core Principle:** Don't use expensive resources unless necessary.
+
+### The Tiered System
+
+**Tier 1 (Default) - Lightweight & Fast** ✅ *Current Implementation*
+- Technology: Python `requests` + BeautifulSoup
+- Cost: Minimal (~$0.01 per 1000 pages)
+- Speed: 1-3 seconds per page
+- Success Rate: ~60% of sites (Forever21, simple sites)
+- **Use when:** Site has no bot protection
+
+**Tier 2 (Auto-Fallback) - IP Rotation** 💡 *Recommended Next Step*
+- Technology: Same stack + residential proxy
+- Cost: ~$0.50 per 1000 pages
+- Speed: 2-5 seconds per page
+- Success Rate: ~80% of sites
+- **Use when:** Tier 1 gets 403/blocked by IP
+
+**Tier 3 (Advanced) - Full Browser** 🔧 *For Hard Targets*
+- Technology: Playwright + stealth + residential proxy
+- Cost: ~$5-8 per 1000 pages
+- Speed: 5-15 seconds per page
+- Success Rate: ~95% of sites (Costco, Amazon)
+- **Use when:** Tier 2 fails, JS challenges detected
+
+**Tier 4 (Nuclear) - Kitchen Sink** 🚀 *Last Resort*
+- Technology: Playwright + stealth + residential proxy + CAPTCHA solving
+- Cost: ~$10-15 per 1000 pages (includes CAPTCHA costs)
+- Speed: 15-30 seconds per page
+- Success Rate: ~99% of public sites
+- **Use when:** Tier 3 fails, CAPTCHA detected
+
+### Automatic Detection & Escalation
+
+```python
+async def smart_scrape(url, user_config):
+    """
+    Automatically escalate through tiers based on detection.
+    """
+    # Start with Tier 1 (unless user forced higher)
+    tier = user_config.get('min_tier', 1)
+
+    for attempt in range(4):  # Try up to 4 tiers
+        try:
+            if tier == 1:
+                result = await scrape_lightweight(url)
+            elif tier == 2:
+                result = await scrape_with_proxy(url)
+            elif tier == 3:
+                result = await scrape_with_browser(url)
+            elif tier == 4:
+                result = await scrape_with_captcha(url)
+
+            # Check for blocking indicators
+            if detect_blocking(result):
+                tier += 1
+                logger.info(f"Escalating to Tier {tier}", url=url)
+                continue
+
+            # Success!
+            return result, tier
+
+        except BlockedError:
+            tier += 1
+            if tier > 4:
+                raise ScrapingFailedError("All tiers exhausted")
+
+    # If we get here, suggest manual review
+    return None, tier
+
+def detect_blocking(response):
+    """
+    Detect if we've been blocked.
+    """
+    indicators = [
+        (403, 'status_code'),  # Forbidden
+        (429, 'status_code'),  # Rate limited
+        ('captcha', 'content'),  # CAPTCHA present
+        ('cloudflare', 'content'),  # Cloudflare challenge
+        ('access denied', 'content'),  # Generic block
+        ('unusual traffic', 'content'),  # Bot detection
+        ('verify you are human', 'content'),  # Human verification
+    ]
+
+    for value, check_type in indicators:
+        if check_type == 'status_code' and response.status_code == value:
+            return True
+        elif check_type == 'content' and value.lower() in response.text.lower():
+            return True
+
+    return False
+```
+
+### User Experience Flow
+
+**Scenario 1: Simple Site (Forever21)**
+1. User enters URL in visual builder
+2. System tries Tier 1 (requests)
+3. ✅ Success! Returns 100 elements in 2 seconds
+4. Cost: $0.01
+5. User never knows tiers exist
+
+**Scenario 2: Bot-Protected Site (Costco)**
+1. User enters URL in visual builder
+2. System tries Tier 1 (requests)
+3. ❌ Detects: 403 Forbidden
+4. System shows: "⚠️ Site has bot protection. Retrying with advanced methods..."
+5. System tries Tier 2 (proxy)
+6. ❌ Still blocked
+7. System tries Tier 3 (browser)
+8. ✅ Success! Returns 100 elements in 12 seconds
+9. System shows: "✅ Successfully loaded using Advanced Mode (Tier 3)"
+10. Cost: $8 (user is warned about cost)
+
+**Scenario 3: User Knows They Need Advanced**
+1. User toggles "Advanced Mode" in job configuration
+2. User sets: "Start with Tier 3" (browser-based)
+3. System skips Tier 1/2, goes straight to browser
+4. Faster for user (no failed attempts)
+5. User in control of costs
+
+### Benefits of This Approach
+
+✅ **Cost Optimization**
+- Only pay for expensive methods when needed
+- 60% of sites work with cheap Tier 1
+- Average cost much lower than always using Tier 4
+
+✅ **Speed Optimization**
+- Fast lightweight scraping for simple sites
+- Only slow down when necessary
+
+✅ **User Control**
+- Users can force a specific tier
+- Users can set cost limits
+- Transparent about what's happening
+
+✅ **Competitive Advantage**
+- Still able to scrape hard targets when needed
+- Better economics than competitors who always use browser
+
+✅ **Graceful Degradation**
+- If Tier 4 fails, suggest manual review
+- If budget exceeded, pause and notify user
 
 ---
 
@@ -65,9 +214,63 @@ Modern bot protection systems (Cloudflare, PerimeterX, Akamai, DataDome, etc.) u
 
 ---
 
-## Solution Architecture
+## Implementation Architecture
 
-### Phase 1: Headless Browser Infrastructure (Required)
+> **Note:** These are tiers, not phases. Implement all tiers, but use them intelligently based on detection.
+
+### Tier 1: Lightweight Scraping (Already Implemented) ✅
+
+**Current stack** - No changes needed for basic sites.
+
+```python
+def scrape_lightweight(url):
+    headers = {
+        'User-Agent': 'Mozilla/5.0...',
+        # ... browser headers
+    }
+    response = requests.get(url, headers=headers, timeout=25)
+    soup = BeautifulSoup(response.content, 'html.parser')
+    return extract_elements(soup)
+```
+
+**When it works:** ~60% of sites without bot protection
+
+---
+
+### Tier 2: IP Rotation (Recommended First Implementation)
+
+**Technology:** Current stack + residential proxy
+
+**Cost per page:** ~$0.50 per 1000 pages
+**Implementation time:** 1-2 days
+**Success rate:** +20% more sites
+
+```python
+def scrape_with_proxy(url, proxy_config):
+    proxies = {
+        'http': proxy_config['http_proxy'],
+        'https': proxy_config['https_proxy']
+    }
+
+    response = requests.get(
+        url,
+        headers=headers,
+        proxies=proxies,
+        timeout=30
+    )
+    return extract_elements(BeautifulSoup(response.content, 'html.parser'))
+```
+
+**Proxy Provider Options:**
+- Bright Data: $500/month for 20GB (most reliable)
+- Oxylabs: $300/month for 15GB (good alternative)
+- SmartProxy: $225/month for 10GB (budget option)
+
+**Recommendation:** Start with Bright Data trial, implement Tier 2 first before Tier 3.
+
+---
+
+### Tier 3: Headless Browser Infrastructure
 
 **Technology:** Playwright or Puppeteer with stealth plugins
 
@@ -146,7 +349,7 @@ async def scrape_with_browser(url):
 
 ---
 
-### Phase 2: Residential Proxy Network (Critical)
+### Tier 4: CAPTCHA Solving
 
 **Problem:** Even with real browsers, datacenter IPs are blocked.
 
@@ -199,7 +402,7 @@ context = await browser.new_context(
 
 ---
 
-### Phase 3: Undetected Browser Techniques
+### Tier 3 Enhancement: Undetected Browser Techniques
 
 **1. Undetected ChromeDriver (Python)**
 
@@ -306,7 +509,233 @@ await page.evaluate(f'document.getElementById("g-recaptcha-response").innerHTML=
 
 ---
 
-### Phase 5: Request Rate Limiting & Session Management
+## User Interface & Controls
+
+### Job Configuration UI
+
+**Advanced Scraping Options** (Collapsible Section in Job Creation)
+
+```typescript
+interface ScraperConfig {
+  // Tier Selection
+  scraping_mode: 'auto' | 'lightweight' | 'proxy' | 'browser' | 'advanced';
+
+  // Auto-escalation settings
+  auto_escalate: boolean;  // Default: true
+  max_tier: 1 | 2 | 3 | 4;  // Default: 4 (allow all)
+
+  // Cost controls
+  cost_limit_per_page: number;  // Default: $0.10
+  notify_on_escalation: boolean;  // Default: true
+
+  // Proxy settings (Tier 2+)
+  proxy_provider?: 'brightdata' | 'oxylabs' | 'smartproxy';
+  proxy_geo?: string;  // 'us', 'uk', 'global', etc.
+
+  // Browser settings (Tier 3+)
+  headless: boolean;  // Default: false (more stealth)
+  stealth_mode: boolean;  // Default: true
+
+  // CAPTCHA settings (Tier 4)
+  solve_captchas: boolean;  // Default: false (user opt-in)
+  captcha_budget: number;  // Max $ to spend on CAPTCHAs
+}
+```
+
+**UI Mockup:**
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ Create New Scraping Job                                 │
+├─────────────────────────────────────────────────────────┤
+│                                                          │
+│ Target URL                                              │
+│ [https://www.example.com/products        ]             │
+│                                                          │
+│ ▼ Advanced Scraping Options                            │
+│   ┌──────────────────────────────────────────────────┐ │
+│   │ Scraping Mode: ○ Auto (Recommended)              │ │
+│   │                ○ Lightweight Only (Fastest)      │ │
+│   │                ○ Force Browser (Slow but Reliable)│ │
+│   │                                                   │ │
+│   │ ☑ Auto-escalate if blocked                      │ │
+│   │   └─ Max Tier: [Tier 4 (All methods) ▼]        │ │
+│   │                                                   │ │
+│   │ Cost Control                                      │ │
+│   │ Max cost per page: [$0.10      ]                │ │
+│   │ ☑ Notify me when using expensive methods        │ │
+│   │                                                   │ │
+│   │ ☐ Enable CAPTCHA solving (Tier 4)               │ │
+│   │   └─ Max CAPTCHA budget: [$50.00    ]          │ │
+│   │       Estimated: ~16,000 CAPTCHAs                │ │
+│   │                                                   │ │
+│   │ [Show cost estimates]                            │ │
+│   └──────────────────────────────────────────────────┘ │
+│                                                          │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Visual Builder Integration
+
+**When user clicks "Load Page":**
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ [⟳ Loading...] Fetching page structure                 │
+└─────────────────────────────────────────────────────────┘
+
+  ↓ (2 seconds)
+
+┌─────────────────────────────────────────────────────────┐
+│ [⚠️] Site has bot protection (403 Forbidden)            │
+│                                                          │
+│ Retrying with Tier 2 (Residential Proxy)...            │
+│ Estimated cost: $0.005                                   │
+└─────────────────────────────────────────────────────────┘
+
+  ↓ (3 seconds)
+
+┌─────────────────────────────────────────────────────────┐
+│ [⚠️] Still blocked. Escalating to Tier 3                │
+│                                                          │
+│ Using headless browser with stealth mode...             │
+│ This may take 10-15 seconds                             │
+│ Estimated cost: $0.08                                    │
+└─────────────────────────────────────────────────────────┘
+
+  ↓ (12 seconds)
+
+┌─────────────────────────────────────────────────────────┐
+│ [✅] Successfully loaded using Tier 3 (Browser Mode)    │
+│                                                          │
+│ Loaded 100 elements from page                           │
+│ Cost: $0.08 | Time: 17 seconds                          │
+│                                                          │
+│ ℹ️ This site requires Tier 3. Consider setting         │
+│    "Start with Browser" for faster future runs.        │
+│                                                          │
+│ [Set as default for this domain]                        │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Real-Time Monitoring Dashboard
+
+**Job Details Page - Tier Usage Stats**
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ Job: Costco Product Scraper                             │
+├─────────────────────────────────────────────────────────┤
+│ Status: Running (47/100 pages)                          │
+│                                                          │
+│ Tier Usage:                                             │
+│ ▓▓▓▓▓▓░░░░ Tier 1: 2% (2 pages)   $0.02              │
+│ ▓▓▓▓▓░░░░░ Tier 2: 5% (5 pages)   $2.50              │
+│ ▓▓▓▓▓▓▓▓▓░ Tier 3: 85% (40 pages) $320.00            │
+│ ▓░░░░░░░░░ Tier 4: 8% (3 pages)   $45.00             │
+│                                                          │
+│ Total Cost So Far: $367.52                              │
+│ Estimated Final: $780.00                                │
+│                                                          │
+│ ⚠️ High Tier 3 usage detected                           │
+│    Recommendation: Set "Force Tier 3" to skip failed    │
+│    Tier 1/2 attempts and save time.                     │
+│                                                          │
+│ [Apply recommendation]  [View detailed logs]            │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Notification Examples
+
+**Email/In-App Notifications:**
+
+```
+🔔 Job Escalation Alert
+
+Your job "Costco Products" is using Tier 3 (Browser Mode).
+
+Current cost: $45.23 (15 pages)
+Estimated total: $301.53 (100 pages)
+
+This is higher than your configured limit of $100.
+
+Actions:
+• Pause job and adjust settings
+• Continue with current settings
+• Increase budget to $350
+```
+
+```
+✅ Job Optimization Tip
+
+Your job "Target Electronics" successfully ran using:
+- Tier 1: 95% of pages
+- Tier 2: 5% of pages
+
+Total cost: $5.23 for 1000 pages
+Average cost: $0.005 per page
+
+This is great! Target works well with lightweight scraping.
+```
+
+### Domain Intelligence
+
+**Automatic learning and suggestions:**
+
+```python
+class DomainIntelligence:
+    """
+    Learn which tier works best for each domain.
+    """
+    def __init__(self):
+        self.domain_stats = {}  # domain -> {tier: success_rate}
+
+    def record_attempt(self, domain, tier, success):
+        """Record tier success for a domain."""
+        if domain not in self.domain_stats:
+            self.domain_stats[domain] = {1: [], 2: [], 3: [], 4: []}
+
+        self.domain_stats[domain][tier].append(success)
+
+    def recommend_tier(self, domain):
+        """Recommend starting tier for a domain."""
+        if domain not in self.domain_stats:
+            return 1  # Default to cheapest
+
+        # Find tier with best success rate
+        best_tier = 1
+        best_rate = 0
+
+        for tier, attempts in self.domain_stats[domain].items():
+            if len(attempts) >= 3:  # Need at least 3 attempts
+                success_rate = sum(attempts) / len(attempts)
+                if success_rate > best_rate:
+                    best_rate = success_rate
+                    best_tier = tier
+
+        return best_tier if best_rate > 0.8 else 1
+```
+
+**UI Integration:**
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ Target URL: https://www.costco.com/products             │
+│                                                          │
+│ 💡 Based on 47 previous scrapes of costco.com:          │
+│    • Tier 1 success rate: 2%                            │
+│    • Tier 3 success rate: 98%                           │
+│                                                          │
+│    Recommendation: Start with Tier 3 (Browser Mode)     │
+│    This will save ~15 seconds per page.                 │
+│                                                          │
+│    [Apply recommendation]  [Start with Tier 1 anyway]   │
+└─────────────────────────────────────────────────────────┘
+```
+
+---
+
+### Supporting Features: Request Rate Limiting & Session Management
 
 **1. Smart Rate Limiting**
 
@@ -412,71 +841,179 @@ async def scrape_with_fallback(url, max_retries=3):
 
 ## Recommended Implementation Plan
 
-### Week 1: Foundation
-1. **Set up Playwright infrastructure**
-   - Lambda layer with Chromium
-   - Stealth plugin integration
-   - Basic fingerprint randomization
+**Strategy:** Implement tiers incrementally, test and deploy each before moving to next.
 
-2. **Test on moderate difficulty sites**
-   - Forever21 (already works)
-   - Target
-   - Walmart
+### Week 1: Tier 1 Enhancement & Tier 2 (Proxy)
+**Goal:** Handle 80% of sites with low cost
 
-### Week 2: Advanced Techniques
-3. **Integrate residential proxy network**
-   - Sign up for Bright Data trial
-   - Test proxy rotation
-   - Measure success rates
+1. **Enhance Tier 1 detection**
+   - Implement `detect_blocking()` function
+   - Add status code and content pattern matching
+   - Log blocking indicators
 
-4. **Implement undetection techniques**
-   - Advanced fingerprint randomization
-   - Behavioral simulation
-   - Request timing optimization
+2. **Implement Tier 2 (Residential Proxy)**
+   - Sign up for Bright Data trial (or SmartProxy for budget)
+   - Add proxy configuration to backend
+   - Integrate proxy rotation logic
+   - Test on moderately protected sites (Walmart, Target)
 
-### Week 3: CAPTCHA & Hard Targets
-5. **Add CAPTCHA solving**
-   - 2Captcha integration
+3. **Frontend: Basic tier controls**
+   - Add "Scraping Mode" dropdown in job creation
+   - Add escalation notifications in visual builder
+   - Show tier used in job results
+
+**Success Criteria:**
+- ✅ Tier 1 → Tier 2 escalation working
+- ✅ 80%+ success rate on moderate sites
+- ✅ Cost: $0.005 per page average
+
+### Week 2: Tier 3 (Browser) Foundation
+**Goal:** Handle hard targets like Costco
+
+4. **Set up Playwright infrastructure**
+   - Create Lambda layer with Chromium
+   - Set up undetected browser config
+   - Integrate stealth plugins
+   - Test on Costco
+
+5. **Frontend: Advanced controls**
+   - Add "Force Browser Mode" option
+   - Add real-time escalation notifications
+   - Show tier breakdown in job monitoring
+
+**Success Criteria:**
+- ✅ Tier 3 working on Costco
+- ✅ 50%+ success rate on hard sites
+- ✅ Sub-20 second scrape time
+
+### Week 3: Tier 4 (CAPTCHA) & Optimization
+**Goal:** Handle the hardest sites, optimize costs
+
+6. **Implement Tier 4 (CAPTCHA Solving)**
+   - Integrate 2Captcha API
    - Automatic CAPTCHA detection
-   - Fallback strategies
+   - Cost tracking and budget limits
 
-6. **Test on hard targets**
-   - Costco
-   - Amazon
-   - Nike/Adidas (very difficult)
+7. **Domain Intelligence**
+   - Build domain learning system
+   - Store tier success rates per domain
+   - Auto-suggest best tier for known domains
 
-### Week 4: Production Readiness
-7. **Monitoring and optimization**
-   - Success rate tracking
-   - Cost optimization
-   - Performance tuning
+8. **Cost Optimization**
+   - Implement session caching
+   - Add request rate limiting
+   - Smart retry strategies
 
-8. **Fallback and error handling**
-   - Automatic retries
-   - Multiple proxy providers
-   - Manual review queue
+**Success Criteria:**
+- ✅ CAPTCHA solving working
+- ✅ 95%+ success on all targets
+- ✅ Average cost under $0.05 per page
+
+### Week 4: Production & Monitoring
+**Goal:** Full production deployment with monitoring
+
+9. **Monitoring Dashboard**
+   - Tier usage statistics per job
+   - Real-time cost tracking
+   - Success rate by domain
+
+10. **User Experience Polish**
+    - Email notifications for escalation
+    - Cost warning alerts
+    - Optimization recommendations
+
+11. **Load Testing**
+    - Test with 1000+ page jobs
+    - Validate cost projections
+    - Ensure Lambda/ECS stability
+
+**Success Criteria:**
+- ✅ Full monitoring in place
+- ✅ Users can control tiers easily
+- ✅ System automatically optimizes
+
+### Post-Launch: Continuous Improvement
+
+12. **Expand proxy providers** (if needed)
+    - Add Oxylabs as fallback
+    - Add SmartProxy for budget users
+
+13. **Advanced features**
+    - Session persistence
+    - Behavioral simulation refinement
+    - ML-based blocking detection
 
 ---
 
 ## Cost Estimation
 
-### Monthly Costs (Mid-Volume: ~100K pages/month)
+**Key Insight:** With tiered approach, actual costs are much lower than max costs.
 
-| Component | Cost | Notes |
-|-----------|------|-------|
-| Residential Proxies (Bright Data) | $500 | 20GB bandwidth |
-| CAPTCHA Solving (2Captcha) | $100 | ~33K CAPTCHAs |
-| AWS Lambda (Browser) | $200 | Increased memory/timeout |
-| AWS ECS (Optional) | $300 | If Lambda insufficient |
-| **Total** | **$800-1,100/month** | Scales with usage |
+### Tiered Cost Model (100K pages/month)
+
+#### Scenario 1: Mixed Sites (60% simple, 30% moderate, 10% hard)
+
+| Tier | Pages | Cost/Page | Subtotal |
+|------|-------|-----------|----------|
+| Tier 1 (requests) | 60,000 | $0.0001 | $6 |
+| Tier 2 (proxy) | 30,000 | $0.005 | $150 |
+| Tier 3 (browser) | 9,000 | $0.08 | $720 |
+| Tier 4 (CAPTCHA) | 1,000 | $0.15 | $150 |
+| **Total** | **100,000** | | **$1,026** |
+
+**Average cost per page:** $0.01
+
+#### Scenario 2: Mostly Simple Sites (90% simple, 8% moderate, 2% hard)
+
+| Tier | Pages | Cost/Page | Subtotal |
+|------|-------|-----------|----------|
+| Tier 1 | 90,000 | $0.0001 | $9 |
+| Tier 2 | 8,000 | $0.005 | $40 |
+| Tier 3 | 1,800 | $0.08 | $144 |
+| Tier 4 | 200 | $0.15 | $30 |
+| **Total** | **100,000** | | **$223** |
+
+**Average cost per page:** $0.002
+
+#### Scenario 3: Mostly Hard Sites (10% simple, 30% moderate, 60% hard)
+
+| Tier | Pages | Cost/Page | Subtotal |
+|------|-------|-----------|----------|
+| Tier 1 | 10,000 | $0.0001 | $1 |
+| Tier 2 | 30,000 | $0.005 | $150 |
+| Tier 3 | 54,000 | $0.08 | $4,320 |
+| Tier 4 | 6,000 | $0.15 | $900 |
+| **Total** | **100,000** | | **$5,371** |
+
+**Average cost per page:** $0.05
+
+### Infrastructure Costs
+
+| Component | Monthly Cost |
+|-----------|--------------|
+| Residential Proxies (Bright Data) | $500 (included in per-page costs) |
+| AWS Lambda (increased resources) | $100-200 |
+| Monitoring & Storage | $50 |
+| **Base Infrastructure** | **$150-250/month** |
+
+### Comparison to "Always Browser" Approach
+
+If you always used Tier 3 for everything:
+- 100K pages × $0.08 = $8,000/month
+- With tiered approach: $223-5,371/month depending on mix
+- **Savings: 60-97% depending on site difficulty distribution**
 
 ### Low Volume (<10K pages/month)
-- $100-200/month (mostly proxy costs)
+
+- Mostly simple sites: $25-50/month
+- Mixed sites: $100-200/month
+- Mostly hard sites: $500-800/month
 
 ### High Volume (>1M pages/month)
-- $3,000-5,000/month
-- Consider dedicated infrastructure
-- Volume discounts from proxy providers
+
+- Mostly simple: $2,000-3,000/month
+- Mixed: $10,000-15,000/month
+- Mostly hard: $50,000+/month (consider negotiating volume discounts)
 
 ---
 
