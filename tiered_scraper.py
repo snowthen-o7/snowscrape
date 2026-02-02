@@ -195,6 +195,10 @@ def scrape_tier_2(url: str, proxy_config: Optional[Dict[str, str]] = None, timeo
     """
     Tier 2: IP Rotation using residential proxies.
 
+    Supports two proxy modes:
+    1. Residential proxy service (Bright Data, Oxylabs, etc.) via RESIDENTIAL_PROXY_URL env var
+    2. AWS EC2 proxy pool via existing proxy_manager infrastructure
+
     Args:
         url: Target URL to scrape
         proxy_config: Proxy configuration (http/https proxy URLs)
@@ -207,11 +211,107 @@ def scrape_tier_2(url: str, proxy_config: Optional[Dict[str, str]] = None, timeo
         BlockingDetectionError: If blocking is detected
         requests.RequestException: For network errors
     """
+    import os
     logger.info("Attempting Tier 2 (IP Rotation) scraping", url=url, has_proxy=bool(proxy_config))
 
-    # TODO: For now, this is a placeholder that returns an error
-    # Week 1 implementation will add actual proxy integration
-    raise NotImplementedError("Tier 2 (Proxy) not yet implemented. Coming in Week 1.")
+    # Determine proxy URL to use
+    proxy_url = None
+
+    # Option 1: Use provided proxy_config
+    if proxy_config and (proxy_config.get('http') or proxy_config.get('https')):
+        proxy_url = proxy_config.get('https') or proxy_config.get('http')
+        logger.info("Using provided proxy config")
+
+    # Option 2: Use residential proxy from environment variable
+    elif os.environ.get('RESIDENTIAL_PROXY_URL'):
+        proxy_url = os.environ.get('RESIDENTIAL_PROXY_URL')
+        logger.info("Using residential proxy from environment")
+
+    # Option 3: Try AWS proxy pool (existing infrastructure)
+    else:
+        try:
+            from proxy_manager import get_proxy_manager
+            proxy_manager = get_proxy_manager()
+            aws_proxy_config = {
+                'enabled': True,
+                'geo_targeting': 'any',
+                'rotation_strategy': 'random',
+                'fallback_to_direct': False
+            }
+            proxy_url = proxy_manager.get_proxy_url(aws_proxy_config)
+            if proxy_url:
+                logger.info("Using AWS proxy pool")
+        except Exception as e:
+            logger.warning("AWS proxy pool not available", error=str(e))
+
+    # If no proxy available, fail with helpful message
+    if not proxy_url:
+        raise NotImplementedError(
+            "Tier 2 (Proxy) requires proxy configuration. "
+            "Set RESIDENTIAL_PROXY_URL environment variable or configure AWS proxy pool. "
+            "Sign up for Bright Data (https://brightdata.com) or Oxylabs for residential proxies."
+        )
+
+    # Use same headers as Tier 1 (browser-like)
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Referer': 'https://www.google.com/',
+        'DNT': '1',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'cross-site',
+        'Sec-Fetch-User': '?1',
+        'Cache-Control': 'max-age=0'
+    }
+
+    # Configure proxies dict for requests
+    proxies = {
+        'http': proxy_url,
+        'https': proxy_url
+    }
+
+    try:
+        response = requests.get(url, headers=headers, proxies=proxies, timeout=timeout, allow_redirects=True)
+
+        # Check for blocking even with proxy
+        is_blocked, indicators = detect_blocking(response)
+
+        if is_blocked:
+            raise BlockingDetectionError(
+                f"Tier 2 blocked even with proxy: {', '.join(indicators)}",
+                tier_used=2,
+                indicators=indicators
+            )
+
+        # Parse with BeautifulSoup
+        soup = BeautifulSoup(response.content, 'html.parser')
+
+        logger.info("Tier 2 scraping successful", url=url, proxy_used=bool(proxy_url))
+
+        return {
+            'status_code': response.status_code,
+            'content': response.content,
+            'text': response.text,
+            'soup': soup,
+            'url': response.url,
+            'headers': dict(response.headers),
+            'tier_used': 2,
+            'tier_name': TIER_INFO[2]['name'],
+            'cost': TIER_INFO[2]['cost_per_page'],
+        }
+
+    except BlockingDetectionError:
+        # Re-raise blocking errors for escalation
+        raise
+    except Exception as e:
+        logger.error("Tier 2 proxy request failed", url=url, error=str(e))
+        # Re-raise for potential escalation to Tier 3
+        raise
 
 
 def scrape_tier_3(url: str, proxy_config: Optional[Dict[str, str]] = None, timeout: int = 30) -> Dict[str, Any]:

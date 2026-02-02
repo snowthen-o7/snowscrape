@@ -62,6 +62,8 @@ provider:
     SNOWGLOBE_URL: ${self:custom.snowglobeUrl}
     SNOWGLOBE_API_KEY: ${env:SNOWGLOBE_API_KEY, ''}  # Set via environment variable (optional)
     SNOWGLOBE_SITE_ID: ${self:custom.snowglobeSiteId}
+    # Tier 2 scraping: Residential proxy configuration (optional)
+    RESIDENTIAL_PROXY_URL: ${env:RESIDENTIAL_PROXY_URL, ''}  # Format: http://user:pass@proxy-server:port
   iamRoleStatements:
     - Effect: "Allow"
       Action:
