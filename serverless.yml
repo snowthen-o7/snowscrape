@@ -489,7 +489,7 @@ functions:
   scraperPreview:
     name: snowscrape-scraper-preview
     handler: handler.scraper_preview_handler
-    timeout: 30  # API Gateway hard limit (can't exceed 30s for synchronous requests)
+    timeout: 90  # Increased for multi-tier escalation and slow-loading sites
     memorySize: 512
     events:
       - http:
@@ -506,7 +506,7 @@ functions:
   scraperTest:
     name: snowscrape-scraper-test
     handler: handler.scraper_test_handler
-    timeout: 30  # API Gateway hard limit (can't exceed 30s for synchronous requests)
+    timeout: 90  # Increased for multi-tier escalation and slow-loading sites
     memorySize: 512
     events:
       - http:

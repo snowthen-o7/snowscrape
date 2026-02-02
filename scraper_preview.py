@@ -15,7 +15,7 @@ import asyncio
 
 logger = get_logger(__name__)
 
-def fetch_and_parse_page(url: str, timeout: int = 10, min_tier: int = 1, max_tier: int = 4) -> Dict[str, Any]:
+def fetch_and_parse_page(url: str, timeout: int = 35, min_tier: int = 1, max_tier: int = 4) -> Dict[str, Any]:
     """
     Fetches a URL and returns a simplified DOM structure for visual selection.
     Uses smart tiered scraping with automatic escalation.
@@ -230,7 +230,7 @@ def generate_dom_path(tag: Any) -> str:
     return ' > '.join(path_parts)
 
 
-def test_extraction(url: str, selectors: List[Dict[str, str]], timeout: int = 10, min_tier: int = 1, max_tier: int = 4) -> List[Dict[str, Any]]:
+def test_extraction(url: str, selectors: List[Dict[str, str]], timeout: int = 35, min_tier: int = 1, max_tier: int = 4) -> List[Dict[str, Any]]:
     """
     Tests extraction with given selectors on a URL.
     Uses smart tiered scraping with automatic escalation.

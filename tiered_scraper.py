@@ -133,7 +133,7 @@ def detect_blocking(response: requests.Response, content: Optional[str] = None) 
     return is_blocked, indicators
 
 
-def scrape_tier_1(url: str, timeout: int = 10) -> Dict[str, Any]:
+def scrape_tier_1(url: str, timeout: int = 35) -> Dict[str, Any]:
     """
     Tier 1: Lightweight scraping with requests + BeautifulSoup.
 
@@ -195,7 +195,7 @@ def scrape_tier_1(url: str, timeout: int = 10) -> Dict[str, Any]:
     }
 
 
-def scrape_tier_2(url: str, proxy_config: Optional[Dict[str, str]] = None, timeout: int = 15) -> Dict[str, Any]:
+def scrape_tier_2(url: str, proxy_config: Optional[Dict[str, str]] = None, timeout: int = 40) -> Dict[str, Any]:
     """
     Tier 2: IP Rotation using residential proxies.
 
@@ -327,7 +327,7 @@ def scrape_tier_2(url: str, proxy_config: Optional[Dict[str, str]] = None, timeo
         raise
 
 
-def scrape_tier_3(url: str, proxy_config: Optional[Dict[str, str]] = None, timeout: int = 30) -> Dict[str, Any]:
+def scrape_tier_3(url: str, proxy_config: Optional[Dict[str, str]] = None, timeout: int = 45) -> Dict[str, Any]:
     """
     Tier 3: Browser-based scraping with Playwright.
 
@@ -372,7 +372,7 @@ async def smart_scrape(
     max_tier: int = 4,
     auto_escalate: bool = True,
     proxy_config: Optional[Dict[str, str]] = None,
-    timeout: int = 30
+    timeout: int = 40
 ) -> Tuple[Dict[str, Any], int, List[str]]:
     """
     Smart scraping with automatic tier escalation.
