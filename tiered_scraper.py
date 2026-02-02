@@ -13,6 +13,10 @@ from bs4 import BeautifulSoup
 from typing import Dict, Any, List, Tuple, Optional
 from logger import get_logger
 import re
+import urllib3
+
+# Suppress SSL warnings when using proxies (they do SSL interception)
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 logger = get_logger(__name__)
 
@@ -276,7 +280,16 @@ def scrape_tier_2(url: str, proxy_config: Optional[Dict[str, str]] = None, timeo
     }
 
     try:
-        response = requests.get(url, headers=headers, proxies=proxies, timeout=timeout, allow_redirects=True)
+        # Disable SSL verification when using proxies (they do SSL interception)
+        # This is standard practice for residential proxy services
+        response = requests.get(
+            url,
+            headers=headers,
+            proxies=proxies,
+            timeout=timeout,
+            allow_redirects=True,
+            verify=False  # Required for proxy SSL interception
+        )
 
         # Check for blocking even with proxy
         is_blocked, indicators = detect_blocking(response)
