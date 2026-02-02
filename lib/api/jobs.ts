@@ -198,6 +198,12 @@ export interface PagePreviewResponse {
     css: string;
     path: string;
   }>;
+  tier_info?: {
+    tier_used: number;
+    tier_name: string;
+    cost_per_page: number;
+    escalation_log: string[];
+  };
 }
 
 // Export singleton instance

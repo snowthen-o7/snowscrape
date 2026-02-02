@@ -80,8 +80,7 @@ export default function VisualBuilderPage() {
           console.log('[Async Scraper] Progress:', message);
           if (message.status === 'escalated') {
             toast.info(
-              `Escalated to Tier ${message.tier} (${message.tier_name})`,
-              { duration: 3000 }
+              `Escalated to Tier ${message.tier} (${message.tier_name})`
             );
           }
           break;
@@ -226,8 +225,7 @@ export default function VisualBuilderPage() {
           setIsAsyncLoading(true);
 
           toast.info(
-            'This site is taking longer than usual. Scraping in progress - you\'ll receive updates in real-time.',
-            { duration: 5000 }
+            'This site is taking longer than usual. Scraping in progress - you\'ll receive updates in real-time.'
           );
 
           // WebSocket will handle the rest via useEffect
@@ -513,9 +511,13 @@ export default function VisualBuilderPage() {
                     {asyncTaskId && (
                       <>
                         {isConnected ? (
-                          <Wifi className="h-4 w-4 text-green-500" title="Connected to WebSocket" />
+                          <span title="Connected to WebSocket">
+                            <Wifi className="h-4 w-4 text-green-500" />
+                          </span>
                         ) : (
-                          <WifiOff className="h-4 w-4 text-yellow-500" title="Connecting to WebSocket..." />
+                          <span title="Connecting to WebSocket...">
+                            <WifiOff className="h-4 w-4 text-yellow-500" />
+                          </span>
                         )}
                       </>
                     )}
