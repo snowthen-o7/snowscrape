@@ -489,7 +489,7 @@ functions:
   scraperPreview:
     name: snowscrape-scraper-preview
     handler: handler.scraper_preview_handler
-    timeout: 30
+    timeout: 120  # Increased for tiered scraping (allows Tier 1->2->3 escalation)
     memorySize: 512
     events:
       - http:
@@ -506,7 +506,7 @@ functions:
   scraperTest:
     name: snowscrape-scraper-test
     handler: handler.scraper_test_handler
-    timeout: 30
+    timeout: 120  # Increased for tiered scraping (allows Tier 1->2->3 escalation)
     memorySize: 512
     events:
       - http:
