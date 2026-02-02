@@ -323,15 +323,23 @@ async def smart_scrape(
             escalation_log.append(f"⬆️ Escalating to Tier {current_tier}")
 
         except NotImplementedError as e:
-            # Tier not implemented yet
+            # Tier not implemented yet - don't escalate, fail with helpful message
             escalation_log.append(f"⚠️ Tier {current_tier} not implemented: {str(e)}")
 
-            if not auto_escalate or current_tier >= max_tier:
-                raise Exception(f"Tier {current_tier} not available: {str(e)}")
+            # Build helpful error message
+            error_msg = (
+                f"This site requires Tier {current_tier} ({tier_name}) which is not yet implemented. "
+                f"{str(e)} "
+            )
 
-            # Try next tier
-            current_tier += 1
-            escalation_log.append(f"⬆️ Escalating to Tier {current_tier}")
+            if current_tier == 2:
+                error_msg += "Proxy integration is planned for Week 1."
+            elif current_tier == 3:
+                error_msg += "Browser mode is planned for Week 2."
+            elif current_tier == 4:
+                error_msg += "CAPTCHA solving is planned for Week 3."
+
+            raise Exception(error_msg)
 
         except Exception as e:
             escalation_log.append(f"❌ Tier {current_tier} error: {str(e)}")
