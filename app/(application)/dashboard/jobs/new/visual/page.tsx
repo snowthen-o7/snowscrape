@@ -89,12 +89,35 @@ export default function VisualBuilderPage() {
       const result = await jobsAPI.preview(targetUrl, token);
       console.log('[Visual Builder] Preview result:', result);
       console.log('[Visual Builder] Elements count:', result?.elements?.length);
+      console.log('[Visual Builder] Tier info:', result?.tier_info);
 
       setPageStructure(result);
       setPageLoaded(true);
       console.log('[Visual Builder] State updated - pageLoaded: true, pageStructure:', result);
 
-      toast.success(`Loaded ${result.elements.length} elements from page`);
+      // Show success message with tier information
+      const tierInfo = result.tier_info;
+      if (tierInfo) {
+        const { tier_used, tier_name, cost_per_page, escalation_log } = tierInfo;
+
+        // Show escalation log if tier > 1 (escalation occurred)
+        if (escalation_log && escalation_log.length > 0) {
+          console.log('[Visual Builder] Escalation log:', escalation_log);
+        }
+
+        // Customize message based on tier
+        if (tier_used === 1) {
+          toast.success(`Loaded ${result.elements.length} elements from page`);
+        } else {
+          toast.success(
+            `Loaded ${result.elements.length} elements using ${tier_name} (Tier ${tier_used}). ` +
+            `Cost: $${cost_per_page.toFixed(4)} per page`
+          );
+        }
+      } else {
+        // Fallback if tier_info not available
+        toast.success(`Loaded ${result.elements.length} elements from page`);
+      }
     } catch (error) {
       console.error('[Visual Builder] Error loading page:', error);
       toast.error(
@@ -350,6 +373,43 @@ export default function VisualBuilderPage() {
             )}
           </CardContent>
         </Card>
+
+        {/* Tier Information Banner */}
+        {pageLoaded && pageStructure?.tier_info && pageStructure.tier_info.tier_used > 1 && (
+          <Card className="border-blue-500 bg-blue-900/10">
+            <CardContent className="pt-6">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="h-5 w-5 text-blue-500 mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <p className="font-medium text-blue-300 mb-2">
+                    Advanced Scraping Used
+                  </p>
+                  <p className="text-sm text-muted-foreground mb-3">
+                    This site required <strong>{pageStructure.tier_info.tier_name}</strong> (Tier {pageStructure.tier_info.tier_used}).
+                    Cost: <strong>${pageStructure.tier_info.cost_per_page.toFixed(4)}</strong> per page.
+                  </p>
+
+                  {pageStructure.tier_info.escalation_log && pageStructure.tier_info.escalation_log.length > 0 && (
+                    <details className="text-sm">
+                      <summary className="cursor-pointer text-blue-400 hover:text-blue-300 mb-2">
+                        View escalation log
+                      </summary>
+                      <div className="rounded-lg bg-muted/50 p-3 font-mono text-xs space-y-1">
+                        {pageStructure.tier_info.escalation_log.map((log: string, idx: number) => (
+                          <div key={idx}>{log}</div>
+                        ))}
+                      </div>
+                    </details>
+                  )}
+
+                  <p className="text-xs text-muted-foreground mt-3">
+                    💡 For future scrapes of this domain, the system will remember to start with Tier {pageStructure.tier_info.tier_used}.
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {pageLoaded && pageStructure && (
           <div className="grid gap-6 lg:grid-cols-2">
