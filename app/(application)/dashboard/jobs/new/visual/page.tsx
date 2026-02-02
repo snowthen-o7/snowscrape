@@ -214,7 +214,8 @@ export default function VisualBuilderPage() {
           );
 
           if (!asyncResponse.ok) {
-            throw new Error(`Async scraper failed: ${asyncResponse.statusText}`);
+            const errorText = await asyncResponse.text().catch(() => asyncResponse.statusText);
+            throw new Error(`Async scraper failed (${asyncResponse.status}): ${errorText || 'Unknown error'}`);
           }
 
           const asyncResult = await asyncResponse.json();
@@ -231,6 +232,12 @@ export default function VisualBuilderPage() {
           // WebSocket will handle the rest via useEffect
         } catch (asyncError) {
           console.error('[Visual Builder] Both sync and async scrapers failed:', asyncError);
+
+          // Clear async loading state
+          setIsAsyncLoading(false);
+          setAsyncTaskId(null);
+          clearMessages();
+
           toast.error(
             asyncError instanceof Error
               ? asyncError.message
