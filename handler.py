@@ -2667,3 +2667,157 @@ def scraper_test_handler(event, context):
 		}
 	finally:
 		logger.clear_context()
+
+
+def scraper_preview_async_start_handler(event, context):
+	"""
+	POST /scraper/preview/async
+	Starts an async scrape operation and returns immediately with task_id.
+	Client should connect to WebSocket to receive progress updates.
+	"""
+	log_lambda_invocation(event, context, logger)
+
+	cors_headers = {
+		"Content-Type": "application/json",
+		"Access-Control-Allow-Origin": "*",
+		"Access-Control-Allow-Headers": "Content-Type,Authorization",
+		"Access-Control-Expose-Headers": "Content-Type"
+	}
+
+	try:
+		# Validate authentication
+		token = extract_token_from_event(event)
+		if not token:
+			return {
+				"statusCode": 401,
+				"headers": cors_headers,
+				"body": json.dumps({"message": "No authorization token provided"})
+			}
+
+		decoded_token = validate_clerk_token(token)
+		user_id = decoded_token.get('sub') if isinstance(decoded_token, dict) else decoded_token
+
+		if not user_id:
+			return {
+				"statusCode": 401,
+				"headers": cors_headers,
+				"body": json.dumps({"message": "Invalid authorization token"})
+			}
+
+		# Parse request body
+		try:
+			body = json.loads(event.get('body', '{}'))
+		except json.JSONDecodeError:
+			return {
+				"statusCode": 400,
+				"headers": cors_headers,
+				"body": json.dumps({"message": "Invalid JSON in request body"})
+			}
+
+		url = body.get('url')
+		if not url:
+			return {
+				"statusCode": 400,
+				"headers": cors_headers,
+				"body": json.dumps({"message": "URL is required"})
+			}
+
+		# Validate URL format
+		parsed = urlparse(url)
+		if not parsed.scheme or not parsed.netloc:
+			return {
+				"statusCode": 400,
+				"headers": cors_headers,
+				"body": json.dumps({"message": "Invalid URL format"})
+			}
+
+		logger.info("Starting async scraper preview", user_id=user_id, url=url)
+
+		# Start async scrape
+		from scraper_preview_async import start_async_scrape
+		result = start_async_scrape(user_id=user_id, url=url)
+
+		return {
+			"statusCode": 202,  # 202 Accepted
+			"headers": cors_headers,
+			"body": json.dumps(result)
+		}
+
+	except Exception as e:
+		log_exception(logger, "Async scraper start handler failed", e)
+		return {
+			"statusCode": 500,
+			"headers": cors_headers,
+			"body": json.dumps({"message": "Internal server error", "error": str(e)})
+		}
+	finally:
+		logger.clear_context()
+
+
+def scraper_preview_async_worker_handler(event, context):
+	"""
+	Worker Lambda function that performs the actual scraping.
+	Invoked asynchronously by scraper_preview_async_start_handler.
+	Sends progress updates via WebSocket.
+	"""
+	log_lambda_invocation(event, context, logger)
+
+	try:
+		# Extract parameters from event (direct invocation, not API Gateway)
+		task_id = event.get('task_id')
+		user_id = event.get('user_id')
+		url = event.get('url')
+		min_tier = event.get('min_tier', 1)
+		max_tier = event.get('max_tier', 4)
+
+		if not all([task_id, user_id, url]):
+			logger.error("Missing required parameters in worker invocation", event=event)
+			return {
+				"statusCode": 400,
+				"body": json.dumps({"message": "Missing required parameters"})
+			}
+
+		logger.info("Starting async scraper worker", task_id=task_id, user_id=user_id, url=url)
+
+		# Perform the scrape with WebSocket updates
+		from scraper_preview_async import scrape_with_websocket_updates
+		scrape_with_websocket_updates(
+			task_id=task_id,
+			user_id=user_id,
+			url=url,
+			min_tier=min_tier,
+			max_tier=max_tier
+		)
+
+		return {
+			"statusCode": 200,
+			"body": json.dumps({"message": "Scrape completed", "task_id": task_id})
+		}
+
+	except Exception as e:
+		log_exception(logger, "Async scraper worker failed", e)
+
+		# Try to send error via WebSocket
+		try:
+			task_id = event.get('task_id')
+			user_id = event.get('user_id')
+			if task_id and user_id:
+				from websocket_handler import broadcast_to_user
+				ws_domain = os.environ.get('WS_API_DOMAIN')
+				ws_stage = os.environ.get('WS_API_STAGE', 'dev')
+				if ws_domain:
+					broadcast_to_user(ws_domain, ws_stage, user_id, {
+						'type': 'scraper:error',
+						'task_id': task_id,
+						'status': 'failed',
+						'error': str(e)
+					})
+		except:
+			pass
+
+		return {
+			"statusCode": 500,
+			"body": json.dumps({"message": "Worker failed", "error": str(e)})
+		}
+	finally:
+		logger.clear_context()

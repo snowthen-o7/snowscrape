@@ -163,6 +163,14 @@ provider:
         - "logs:PutLogEvents"
       Resource: "*"
 
+    # Lambda invoke permissions (for async scraper pattern)
+    - Effect: "Allow"
+      Action:
+        - "lambda:InvokeFunction"
+        - "lambda:InvokeAsync"
+      Resource:
+        - "arn:aws:lambda:${self:provider.region}:*:function:snowscrape-scraper-preview-async-worker"
+
 package:
   individually: false
   patterns:
@@ -518,6 +526,32 @@ functions:
             exposedHeaders: ${self:custom.corsConfig.exposedHeaders}
             allowCredentials: ${self:custom.corsConfig.allowCredentials}
             maxAge: ${self:custom.corsConfig.maxAge}
+    maximumRetryAttempts: 0
+
+  # Async Scraper Endpoints (for sites that exceed 30s API Gateway timeout)
+  scraperPreviewAsyncStart:
+    name: snowscrape-scraper-preview-async-start
+    handler: handler.scraper_preview_async_start_handler
+    timeout: 10  # Just starts the job, returns immediately
+    memorySize: 256
+    events:
+      - http:
+          path: scraper/preview/async
+          method: post
+          cors:
+            origin: ${self:custom.corsConfig.origin}
+            headers: ${self:custom.corsConfig.headers}
+            exposedHeaders: ${self:custom.corsConfig.exposedHeaders}
+            allowCredentials: ${self:custom.corsConfig.allowCredentials}
+            maxAge: ${self:custom.corsConfig.maxAge}
+    maximumRetryAttempts: 0
+
+  scraperPreviewAsyncWorker:
+    name: snowscrape-scraper-preview-async-worker
+    handler: handler.scraper_preview_async_worker_handler
+    timeout: 120  # 2 minutes for slow sites with tier escalation
+    memorySize: 512
+    # No HTTP event - invoked directly by scraperPreviewAsyncStart
     maximumRetryAttempts: 0
 
   # Webhook Delivery Handler (SQS triggered)
