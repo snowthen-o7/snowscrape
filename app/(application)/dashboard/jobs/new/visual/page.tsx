@@ -499,25 +499,33 @@ export default function VisualBuilderPage() {
           </CardContent>
         </Card>
 
-        {/* Async Scraper Loading State */}
-        {isAsyncLoading && (
+        {/* Scraper Loading State */}
+        {(isLoading || isAsyncLoading) && (
           <Card className="border-blue-500 bg-blue-900/10">
             <CardContent className="pt-6">
               <div className="flex items-start gap-3">
                 <Loader2 className="h-5 w-5 text-blue-500 animate-spin mt-0.5 flex-shrink-0" />
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-2">
-                    <p className="font-medium text-blue-300">Scraping in progress...</p>
-                    {isConnected ? (
-                      <Wifi className="h-4 w-4 text-green-500" title="Connected to WebSocket" />
-                    ) : (
-                      <WifiOff className="h-4 w-4 text-yellow-500" title="Connecting to WebSocket..." />
+                    <p className="font-medium text-blue-300">
+                      {isAsyncLoading ? 'Scraping in progress...' : 'Loading page...'}
+                    </p>
+                    {asyncTaskId && (
+                      <>
+                        {isConnected ? (
+                          <Wifi className="h-4 w-4 text-green-500" title="Connected to WebSocket" />
+                        ) : (
+                          <WifiOff className="h-4 w-4 text-yellow-500" title="Connecting to WebSocket..." />
+                        )}
+                      </>
                     )}
                   </div>
                   <p className="text-sm text-muted-foreground mb-2">
-                    This site is taking longer than usual. You'll receive updates in real-time as scraping progresses.
+                    {isAsyncLoading
+                      ? "This site is taking longer than usual. You'll receive updates in real-time as scraping progresses."
+                      : "Analyzing page structure and extracting elements..."}
                   </p>
-                  {!isConnected && (
+                  {asyncTaskId && !isConnected && (
                     <p className="text-xs text-yellow-400">
                       Connecting to real-time updates...
                     </p>
