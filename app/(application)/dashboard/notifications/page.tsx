@@ -43,80 +43,13 @@ export default function NotificationsPage() {
       if (!session) return;
 
       try {
-        // Mock notifications for demo
-        const mockNotifications: Notification[] = [
-          {
-            id: '1',
-            user_id: 'user-1',
-            type: 'success',
-            category: 'job',
-            title: 'Job Completed Successfully',
-            message: 'Amazon Product Scraper has finished extracting 1,250 records',
-            link: '/dashboard/job-1',
-            read: false,
-            created_at: new Date(Date.now() - 1000 * 60 * 5).toISOString(),
-            metadata: { job_id: 'job-1', job_name: 'Amazon Product Scraper' },
-          },
-          {
-            id: '2',
-            user_id: 'user-1',
-            type: 'error',
-            category: 'job',
-            title: 'Job Failed',
-            message: 'LinkedIn Profile Extractor encountered an error: Rate limit exceeded',
-            link: '/dashboard/job-2',
-            read: false,
-            created_at: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
-            metadata: { job_id: 'job-2', job_name: 'LinkedIn Profile Extractor' },
-          },
-          {
-            id: '3',
-            user_id: 'user-1',
-            type: 'warning',
-            category: 'billing',
-            title: 'Approaching Usage Limit',
-            message: 'You have used 85% of your monthly API call quota',
-            link: '/dashboard/settings?tab=billing',
-            read: true,
-            created_at: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
-          },
-          {
-            id: '4',
-            user_id: 'user-1',
-            type: 'info',
-            category: 'system',
-            title: 'New Template Available',
-            message: 'Check out our new Google Maps scraper template',
-            link: '/dashboard/templates',
-            read: true,
-            created_at: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
-          },
-          {
-            id: '5',
-            user_id: 'user-1',
-            type: 'success',
-            category: 'job',
-            title: 'Scheduled Job Started',
-            message: 'Real Estate Listings job has started running',
-            link: '/dashboard/job-3',
-            read: true,
-            created_at: new Date(Date.now() - 1000 * 60 * 60 * 48).toISOString(),
-            metadata: { job_id: 'job-3', job_name: 'Real Estate Listings' },
-          },
-          {
-            id: '6',
-            user_id: 'user-1',
-            type: 'info',
-            category: 'security',
-            title: 'New API Key Created',
-            message: 'A new API key was created for your account',
-            link: '/dashboard/settings?tab=api-keys',
-            read: true,
-            created_at: new Date(Date.now() - 1000 * 60 * 60 * 72).toISOString(),
-          },
-        ];
+        // TODO: Implement notification API endpoint
+        // const token = await session.getToken();
+        // const notifications = await notificationsAPI.list(token);
+        // setNotifications(notifications);
 
-        setNotifications(mockNotifications);
+        // For now, no notifications - persistent notification storage not yet implemented
+        setNotifications([]);
       } catch (error) {
         console.error('Error fetching notifications', error);
       }
