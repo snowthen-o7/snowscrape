@@ -202,7 +202,7 @@ export default function VisualBuilderPage() {
         try {
           // Call async scraper endpoint
           const asyncResponse = await fetch(
-            `${process.env.NEXT_PUBLIC_API_URL}/scraper/preview/async`,
+            `${process.env.NEXT_PUBLIC_API_BASE_URL}/scraper/preview/async`,
             {
               method: 'POST',
               headers: {
