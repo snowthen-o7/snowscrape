@@ -1,66 +1,72 @@
 """
 Scraper Preview Module
 Handles DOM parsing and selector testing for the visual scraper builder.
+Uses tiered scraping system for intelligent bot protection bypass.
 """
 
 import requests
 from bs4 import BeautifulSoup
 from lxml import html as lxml_html, etree
 import re
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from logger import get_logger
+from tiered_scraper import smart_scrape, detect_blocking, TIER_INFO
+import asyncio
 
 logger = get_logger(__name__)
 
-def fetch_and_parse_page(url: str, timeout: int = 25) -> Dict[str, Any]:
+def fetch_and_parse_page(url: str, timeout: int = 25, min_tier: int = 1, max_tier: int = 4) -> Dict[str, Any]:
     """
     Fetches a URL and returns a simplified DOM structure for visual selection.
+    Uses smart tiered scraping with automatic escalation.
 
     Args:
         url: The target URL to fetch and parse
-        timeout: Request timeout in seconds (default: 10)
+        timeout: Request timeout in seconds (default: 25)
+        min_tier: Minimum tier to start with (default: 1)
+        max_tier: Maximum tier to allow (default: 4 - allow all)
 
     Returns:
-        Dictionary containing page title and list of selectable elements
+        Dictionary containing page title, elements, and tier metadata
 
     Raises:
-        requests.RequestException: If the URL cannot be fetched
-        Exception: For parsing errors
+        Exception: If all tiers fail
     """
-    logger.info("Fetching URL for preview", url=url)
+    logger.info("Fetching URL for preview with tiered scraping", url=url, min_tier=min_tier, max_tier=max_tier)
 
-    # Fetch the page with browser-like headers
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Referer': 'https://www.google.com/',
-        'DNT': '1',
-        'Connection': 'keep-alive',
-        'Upgrade-Insecure-Requests': '1',
-        'Sec-Fetch-Dest': 'document',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'cross-site',
-        'Sec-Fetch-User': '?1',
-        'Cache-Control': 'max-age=0'
-    }
-    response = requests.get(url, headers=headers, timeout=timeout, allow_redirects=True)
+    # Use smart_scrape with tier escalation
+    try:
+        # Run async function in sync context
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
 
-    # Handle common bot detection responses
-    if response.status_code == 403:
-        logger.warning("Received 403 Forbidden - site may have bot protection", url=url)
-        raise requests.exceptions.HTTPError(
-            f"403 Forbidden: This site appears to block automated access. "
-            f"Sites with strong bot protection (like Costco, Amazon, etc.) may not work with the visual builder. "
-            f"Try a simpler site or use the manual scraper configuration instead.",
-            response=response
+        result, tier_used, escalation_log = loop.run_until_complete(
+            smart_scrape(
+                url=url,
+                min_tier=min_tier,
+                max_tier=max_tier,
+                auto_escalate=True,
+                timeout=timeout
+            )
         )
 
-    response.raise_for_status()
+        loop.close()
 
-    # Parse with BeautifulSoup
-    soup = BeautifulSoup(response.content, 'html.parser')
+    except Exception as e:
+        logger.error("Smart scrape failed", url=url, error=str(e))
+        # Re-raise with user-friendly message
+        raise Exception(
+            f"Failed to fetch page: {str(e)}. "
+            f"This site may have strong bot protection. "
+            f"Try enabling advanced scraping options or use manual configuration."
+        )
+
+    # Extract soup from result
+    soup = result.get('soup')
+    if not soup:
+        # If soup not in result, parse content
+        content = result.get('content') or result.get('text', '')
+        soup = BeautifulSoup(content, 'html.parser')
 
     # Parse with lxml for better XPath support
     tree = lxml_html.fromstring(response.content)
@@ -131,12 +137,18 @@ def fetch_and_parse_page(url: str, timeout: int = 25) -> Dict[str, Any]:
         if len(elements) >= 100:
             break
 
-    logger.info("Page parsed successfully", url=url, element_count=len(elements))
+    logger.info("Page parsed successfully", url=url, element_count=len(elements), tier_used=tier_used)
 
     return {
         'url': url,
         'title': title,
-        'elements': elements
+        'elements': elements,
+        'tier_info': {
+            'tier_used': tier_used,
+            'tier_name': TIER_INFO[tier_used]['name'],
+            'cost_per_page': TIER_INFO[tier_used]['cost_per_page'],
+            'escalation_log': escalation_log,
+        }
     }
 
 
@@ -213,57 +225,61 @@ def generate_dom_path(tag: Any) -> str:
     return ' > '.join(path_parts)
 
 
-def test_extraction(url: str, selectors: List[Dict[str, str]], timeout: int = 25) -> List[Dict[str, Any]]:
+def test_extraction(url: str, selectors: List[Dict[str, str]], timeout: int = 25, min_tier: int = 1, max_tier: int = 4) -> List[Dict[str, Any]]:
     """
     Tests extraction with given selectors on a URL.
+    Uses smart tiered scraping with automatic escalation.
 
     Args:
         url: The target URL to scrape
         selectors: List of selector definitions with name, type, and selector
-        timeout: Request timeout in seconds (default: 10)
+        timeout: Request timeout in seconds (default: 25)
+        min_tier: Minimum tier to start with (default: 1)
+        max_tier: Maximum tier to allow (default: 4)
 
     Returns:
-        List containing extracted data as dictionaries
+        List containing extracted data as dictionaries with tier metadata
 
     Raises:
-        requests.RequestException: If the URL cannot be fetched
         Exception: For extraction errors
     """
-    logger.info("Testing extraction", url=url, selector_count=len(selectors))
+    logger.info("Testing extraction with tiered scraping", url=url, selector_count=len(selectors))
 
-    # Fetch the page with browser-like headers
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Referer': 'https://www.google.com/',
-        'DNT': '1',
-        'Connection': 'keep-alive',
-        'Upgrade-Insecure-Requests': '1',
-        'Sec-Fetch-Dest': 'document',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'cross-site',
-        'Sec-Fetch-User': '?1',
-        'Cache-Control': 'max-age=0'
-    }
-    response = requests.get(url, headers=headers, timeout=timeout, allow_redirects=True)
+    # Use smart_scrape with tier escalation
+    try:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
 
-    # Handle common bot detection responses
-    if response.status_code == 403:
-        logger.warning("Received 403 Forbidden - site may have bot protection", url=url)
-        raise requests.exceptions.HTTPError(
-            f"403 Forbidden: This site appears to block automated access. "
-            f"Sites with strong bot protection (like Costco, Amazon, etc.) may not work with the visual builder. "
-            f"Try a simpler site or use the manual scraper configuration instead.",
-            response=response
+        result, tier_used, escalation_log = loop.run_until_complete(
+            smart_scrape(
+                url=url,
+                min_tier=min_tier,
+                max_tier=max_tier,
+                auto_escalate=True,
+                timeout=timeout
+            )
         )
 
-    response.raise_for_status()
+        loop.close()
 
-    # Parse with both BeautifulSoup and lxml
-    soup = BeautifulSoup(response.content, 'html.parser')
-    tree = lxml_html.fromstring(response.content)
+    except Exception as e:
+        logger.error("Smart scrape failed during test extraction", url=url, error=str(e))
+        raise Exception(
+            f"Failed to fetch page: {str(e)}. "
+            f"This site may have strong bot protection."
+        )
+
+    # Extract soup and tree from result
+    soup = result.get('soup')
+    content = result.get('content') or result.get('text', '')
+
+    if not soup:
+        soup = BeautifulSoup(content, 'html.parser')
+
+    # Parse with lxml for XPath support
+    if isinstance(content, str):
+        content = content.encode('utf-8')
+    tree = lxml_html.fromstring(content)
 
     # Extract data using selectors
     result = {}
@@ -314,7 +330,15 @@ def test_extraction(url: str, selectors: List[Dict[str, str]], timeout: int = 25
                         error=str(e))
             result[name] = None
 
-    logger.info("Extraction test completed", url=url, results_count=len(result))
+    logger.info("Extraction test completed", url=url, results_count=len(result), tier_used=tier_used)
 
-    # Return as array with single result object
-    return [result]
+    # Return as array with single result object plus tier metadata
+    return [{
+        **result,
+        '_tier_info': {
+            'tier_used': tier_used,
+            'tier_name': TIER_INFO[tier_used]['name'],
+            'cost_per_page': TIER_INFO[tier_used]['cost_per_page'],
+            'escalation_log': escalation_log,
+        }
+    }]
