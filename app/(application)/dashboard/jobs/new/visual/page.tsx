@@ -5,7 +5,7 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from '@clerk/nextjs';
 import { AppLayout } from '@/components/layout';
@@ -30,9 +30,12 @@ import {
   Plus,
   Wand2,
   Loader2,
+  Wifi,
+  WifiOff,
 } from 'lucide-react';
 import { toast } from '@/lib/toast';
 import { jobsAPI } from '@/lib/api';
+import { useWebSocket } from '@/lib/useWebSocket';
 
 interface ExtractedField {
   id: string;
@@ -55,6 +58,80 @@ export default function VisualBuilderPage() {
   const [pageStructure, setPageStructure] = useState<any>(null);
   const [isTesting, setIsTesting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Async scraper state
+  const [asyncTaskId, setAsyncTaskId] = useState<string | null>(null);
+  const [isAsyncLoading, setIsAsyncLoading] = useState(false);
+
+  // WebSocket connection (only connect when we have an async task)
+  const { isConnected, messages, subscribe, clearMessages } = useWebSocket(!!asyncTaskId);
+
+  // Handle WebSocket messages for async scraper
+  useEffect(() => {
+    if (!asyncTaskId) return;
+
+    for (const message of messages) {
+      // Only process messages for our task
+      if (message.task_id !== asyncTaskId) continue;
+
+      switch (message.type) {
+        case 'scraper:progress':
+          // Show progress update
+          console.log('[Async Scraper] Progress:', message);
+          if (message.status === 'escalated') {
+            toast.info(
+              `Escalated to Tier ${message.tier} (${message.tier_name})`,
+              { duration: 3000 }
+            );
+          }
+          break;
+
+        case 'scraper:complete':
+          // Scraping completed successfully
+          console.log('[Async Scraper] Complete:', message.data);
+          setPageStructure(message.data);
+          setPageLoaded(true);
+          setIsAsyncLoading(false);
+          setAsyncTaskId(null);
+          clearMessages();
+
+          // Show success message with tier info
+          const tierInfo = message.data.tier_info;
+          if (tierInfo) {
+            const { tier_used, tier_name, cost_per_page } = tierInfo;
+
+            if (tier_used === 1) {
+              toast.success(`Loaded ${message.data.elements.length} elements from page`);
+            } else {
+              toast.success(
+                `Loaded ${message.data.elements.length} elements using ${tier_name} (Tier ${tier_used}). Cost: $${cost_per_page.toFixed(4)} per page`
+              );
+            }
+          } else {
+            toast.success(`Loaded ${message.data.elements.length} elements from page`);
+          }
+          break;
+
+        case 'scraper:error':
+          // Scraping failed
+          console.error('[Async Scraper] Error:', message.error);
+          setIsAsyncLoading(false);
+          setAsyncTaskId(null);
+          clearMessages();
+          toast.error(`Failed to load page: ${message.error}`);
+          break;
+      }
+    }
+  }, [messages, asyncTaskId, clearMessages]);
+
+  // Subscribe to scraper channel when task ID changes
+  useEffect(() => {
+    if (asyncTaskId && isConnected) {
+      const channel = `scraper:${asyncTaskId}`;
+      console.log('[Async Scraper] Subscribing to channel:', channel);
+      subscribe(channel);
+    }
+  }, [asyncTaskId, isConnected, subscribe]);
 
   const handleLoadPage = async () => {
     if (!targetUrl) {
@@ -84,20 +161,21 @@ export default function VisualBuilderPage() {
         return;
       }
 
-      // Call backend API to fetch and parse the page
-      console.log('[Visual Builder] Fetching page preview for:', targetUrl);
-      const result = await jobsAPI.preview(targetUrl, token);
-      console.log('[Visual Builder] Preview result:', result);
-      console.log('[Visual Builder] Elements count:', result?.elements?.length);
-      console.log('[Visual Builder] Tier info:', result?.tier_info);
+      // Try synchronous scraper first (fast path)
+      console.log('[Visual Builder] Fetching page preview (sync) for:', targetUrl);
+      try {
+        const result = await jobsAPI.preview(targetUrl, token);
+        console.log('[Visual Builder] Preview result (sync):', result);
+        console.log('[Visual Builder] Elements count:', result?.elements?.length);
+        console.log('[Visual Builder] Tier info:', result?.tier_info);
 
-      setPageStructure(result);
-      setPageLoaded(true);
-      console.log('[Visual Builder] State updated - pageLoaded: true, pageStructure:', result);
+        setPageStructure(result);
+        setPageLoaded(true);
+        console.log('[Visual Builder] State updated - pageLoaded: true, pageStructure:', result);
 
-      // Show success message with tier information
-      const tierInfo = result.tier_info;
-      if (tierInfo) {
+        // Show success message with tier information
+        const tierInfo = result.tier_info;
+        if (tierInfo) {
         const { tier_used, tier_name, cost_per_page, escalation_log } = tierInfo;
 
         // Show escalation log if tier > 1 (escalation occurred)
@@ -118,12 +196,56 @@ export default function VisualBuilderPage() {
         // Fallback if tier_info not available
         toast.success(`Loaded ${result.elements.length} elements from page`);
       }
+      } catch (syncError) {
+        // Sync scraper failed - fall back to async scraper
+        console.log('[Visual Builder] Sync scraper failed, trying async...', syncError);
+
+        try {
+          // Call async scraper endpoint
+          const asyncResponse = await fetch(
+            `${process.env.NEXT_PUBLIC_API_URL}/scraper/preview/async`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({ url: targetUrl }),
+            }
+          );
+
+          if (!asyncResponse.ok) {
+            throw new Error(`Async scraper failed: ${asyncResponse.statusText}`);
+          }
+
+          const asyncResult = await asyncResponse.json();
+          console.log('[Visual Builder] Async scraper started:', asyncResult);
+
+          // Set async task state
+          setAsyncTaskId(asyncResult.task_id);
+          setIsAsyncLoading(true);
+
+          toast.info(
+            'This site is taking longer than usual. Scraping in progress - you\'ll receive updates in real-time.',
+            { duration: 5000 }
+          );
+
+          // WebSocket will handle the rest via useEffect
+        } catch (asyncError) {
+          console.error('[Visual Builder] Both sync and async scrapers failed:', asyncError);
+          toast.error(
+            asyncError instanceof Error
+              ? asyncError.message
+              : 'Failed to load page. Please check the URL and try again.'
+          );
+        }
+      }
     } catch (error) {
-      console.error('[Visual Builder] Error loading page:', error);
+      console.error('[Visual Builder] Error in handleLoadPage:', error);
       toast.error(
         error instanceof Error
           ? error.message
-          : 'Failed to load page. Please check the URL and try again.'
+          : 'An unexpected error occurred'
       );
     } finally {
       setIsLoading(false);
@@ -329,11 +451,11 @@ export default function VisualBuilderPage() {
                 disabled={pageLoaded}
               />
               {!pageLoaded ? (
-                <Button onClick={handleLoadPage} disabled={isLoading}>
-                  {isLoading ? (
+                <Button onClick={handleLoadPage} disabled={isLoading || isAsyncLoading}>
+                  {isLoading || isAsyncLoading ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Loading...
+                      {isAsyncLoading ? 'Scraping...' : 'Loading...'}
                     </>
                   ) : (
                     'Load Page'
@@ -347,6 +469,9 @@ export default function VisualBuilderPage() {
                     setPageStructure(null);
                     setExtractedFields([]);
                     setPreviewData([]);
+                    setAsyncTaskId(null);
+                    setIsAsyncLoading(false);
+                    clearMessages();
                   }}
                 >
                   Change URL
@@ -373,6 +498,40 @@ export default function VisualBuilderPage() {
             )}
           </CardContent>
         </Card>
+
+        {/* Async Scraper Loading State */}
+        {isAsyncLoading && (
+          <Card className="border-blue-500 bg-blue-900/10">
+            <CardContent className="pt-6">
+              <div className="flex items-start gap-3">
+                <Loader2 className="h-5 w-5 text-blue-500 animate-spin mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-2">
+                    <p className="font-medium text-blue-300">Scraping in progress...</p>
+                    {isConnected ? (
+                      <Wifi className="h-4 w-4 text-green-500" title="Connected to WebSocket" />
+                    ) : (
+                      <WifiOff className="h-4 w-4 text-yellow-500" title="Connecting to WebSocket..." />
+                    )}
+                  </div>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    This site is taking longer than usual. You'll receive updates in real-time as scraping progresses.
+                  </p>
+                  {!isConnected && (
+                    <p className="text-xs text-yellow-400">
+                      Connecting to real-time updates...
+                    </p>
+                  )}
+                  {asyncTaskId && (
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Task ID: {asyncTaskId}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Tier Information Banner */}
         {pageLoaded && pageStructure?.tier_info && pageStructure.tier_info.tier_used > 1 && (
