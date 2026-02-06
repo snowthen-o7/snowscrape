@@ -1,6 +1,7 @@
 /**
- * Next.js Error Page
- * Global error boundary for the application
+ * Error boundary for the application dashboard section.
+ * Catches errors in dashboard, webhooks, and other protected routes
+ * without taking down the entire app.
  */
 
 'use client';
@@ -14,13 +15,13 @@ interface ErrorPageProps {
   reset: () => void;
 }
 
-export default function ErrorPage({ error, reset }: ErrorPageProps) {
+export default function ApplicationError({ error, reset }: ErrorPageProps) {
   useEffect(() => {
     Sentry.captureException(error, {
-      tags: { boundary: 'global' },
+      tags: { boundary: 'application' },
       extra: { digest: error.digest },
     });
   }, [error]);
 
-  return <ErrorFallback error={error} resetError={reset} fullPage />;
+  return <ErrorFallback error={error} resetError={reset} />;
 }

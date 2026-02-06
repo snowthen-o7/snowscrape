@@ -5,14 +5,14 @@
  * Supports channel subscriptions for receiving targeted messages.
  *
  * Usage:
- * const { isConnected, messages, subscribe, unsubscribe } = useWebSocket();
+ * const { isConnected, isAuthenticated, messages, subscribe, unsubscribe } = useWebSocket();
  *
- * // Subscribe to a channel
+ * // Subscribe to a channel (wait for authentication, not just connection)
  * useEffect(() => {
- *   if (isConnected) {
+ *   if (isAuthenticated) {
  *     subscribe('scraper:task-id-here');
  *   }
- * }, [isConnected, subscribe]);
+ * }, [isAuthenticated, subscribe]);
  */
 
 import { useAuth } from '@clerk/nextjs';
@@ -25,6 +25,7 @@ export interface WebSocketMessage {
 
 export interface UseWebSocketReturn {
   isConnected: boolean;
+  isAuthenticated: boolean;
   messages: WebSocketMessage[];
   subscribe: (channel: string) => void;
   unsubscribe: (channel: string) => void;
@@ -35,10 +36,12 @@ export interface UseWebSocketReturn {
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'wss://p3x9vdmf4h.execute-api.us-east-2.amazonaws.com/dev';
 const RECONNECT_DELAY = 3000; // 3 seconds
 const MAX_RECONNECT_ATTEMPTS = 5;
+const MAX_MESSAGE_BUFFER_SIZE = 100;
 
 export function useWebSocket(autoConnect = true): UseWebSocketReturn {
   const { getToken } = useAuth();
   const [isConnected, setIsConnected] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [messages, setMessages] = useState<WebSocketMessage[]>([]);
   const [connectionError, setConnectionError] = useState<Error | null>(null);
 
@@ -46,6 +49,7 @@ export function useWebSocket(autoConnect = true): UseWebSocketReturn {
   const reconnectAttempts = useRef(0);
   const reconnectTimeout = useRef<NodeJS.Timeout | null>(null);
   const subscribedChannels = useRef<Set<string>>(new Set());
+  const isAuthenticatedRef = useRef(false);
 
   const clearMessages = useCallback(() => {
     setMessages([]);
@@ -65,32 +69,68 @@ export function useWebSocket(autoConnect = true): UseWebSocketReturn {
         ws.current.close();
       }
 
-      const wsUrl = `${WS_URL}?token=${token}`;
+      // Connect WITHOUT the token in the URL to avoid token exposure in logs/history
       console.log('[WebSocket] Connecting to:', WS_URL);
-
-      ws.current = new WebSocket(wsUrl);
+      ws.current = new WebSocket(WS_URL);
 
       ws.current.onopen = () => {
-        console.log('[WebSocket] Connected successfully');
+        console.log('[WebSocket] Connected, authenticating...');
         setIsConnected(true);
         setConnectionError(null);
         reconnectAttempts.current = 0;
 
-        // Resubscribe to all channels
-        subscribedChannels.current.forEach(channel => {
-          ws.current?.send(JSON.stringify({
-            type: 'subscribe',
-            channel: channel
-          }));
-          console.log('[WebSocket] Resubscribed to:', channel);
-        });
+        // Send auth token as the first message instead of in the URL
+        ws.current?.send(JSON.stringify({
+          action: 'authenticate',
+          token: token
+        }));
       };
 
       ws.current.onmessage = (event) => {
         try {
           const message = JSON.parse(event.data) as WebSocketMessage;
+
+          // Handle authentication response
+          if (message.type === 'auth_success') {
+            console.log('[WebSocket] Authenticated successfully');
+            isAuthenticatedRef.current = true;
+            setIsAuthenticated(true);
+
+            // Now that we are authenticated, resubscribe to all channels
+            subscribedChannels.current.forEach(channel => {
+              ws.current?.send(JSON.stringify({
+                type: 'subscribe',
+                channel: channel
+              }));
+              console.log('[WebSocket] Resubscribed to:', channel);
+            });
+            return;
+          }
+
+          if (message.type === 'auth_error') {
+            console.error('[WebSocket] Authentication failed:', message.message);
+            isAuthenticatedRef.current = false;
+            setIsAuthenticated(false);
+            setConnectionError(new Error(`Authentication failed: ${message.message}`));
+            ws.current?.close(4001, 'Authentication failed');
+            return;
+          }
+
+          // Only process other messages after authentication is confirmed
+          if (!isAuthenticatedRef.current) {
+            console.warn('[WebSocket] Ignoring message before authentication:', message.type);
+            return;
+          }
+
           console.log('[WebSocket] Message received:', message.type, message);
-          setMessages(prev => [...prev, message]);
+          setMessages(prev => {
+            const updated = [...prev, message];
+            // Cap the buffer to prevent unbounded memory growth
+            if (updated.length > MAX_MESSAGE_BUFFER_SIZE) {
+              return updated.slice(updated.length - MAX_MESSAGE_BUFFER_SIZE);
+            }
+            return updated;
+          });
         } catch (error) {
           console.error('[WebSocket] Failed to parse message:', error);
         }
@@ -104,10 +144,14 @@ export function useWebSocket(autoConnect = true): UseWebSocketReturn {
       ws.current.onclose = (event) => {
         console.log('[WebSocket] Disconnected:', event.code, event.reason);
         setIsConnected(false);
+        isAuthenticatedRef.current = false;
+        setIsAuthenticated(false);
 
-        // Attempt to reconnect if not a normal closure and under max attempts
+        // Attempt to reconnect if not a normal closure, not an auth failure,
+        // and under max attempts
         if (
           event.code !== 1000 &&
+          event.code !== 4001 &&
           reconnectAttempts.current < MAX_RECONNECT_ATTEMPTS &&
           autoConnect
         ) {
@@ -139,7 +183,7 @@ export function useWebSocket(autoConnect = true): UseWebSocketReturn {
 
     subscribedChannels.current.add(channel);
 
-    if (ws.current && isConnected) {
+    if (ws.current && isAuthenticated) {
       ws.current.send(JSON.stringify({
         type: 'subscribe',
         channel: channel
@@ -148,19 +192,19 @@ export function useWebSocket(autoConnect = true): UseWebSocketReturn {
     } else {
       console.log('[WebSocket] Queued subscription for:', channel);
     }
-  }, [isConnected]);
+  }, [isAuthenticated]);
 
   const unsubscribe = useCallback((channel: string) => {
     subscribedChannels.current.delete(channel);
 
-    if (ws.current && isConnected) {
+    if (ws.current && isAuthenticated) {
       ws.current.send(JSON.stringify({
         type: 'unsubscribe',
         channel: channel
       }));
       console.log('[WebSocket] Unsubscribed from:', channel);
     }
-  }, [isConnected]);
+  }, [isAuthenticated]);
 
   // Connect on mount
   useEffect(() => {
@@ -181,6 +225,7 @@ export function useWebSocket(autoConnect = true): UseWebSocketReturn {
 
   return {
     isConnected,
+    isAuthenticated,
     messages,
     subscribe,
     unsubscribe,
