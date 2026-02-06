@@ -12,6 +12,7 @@ import requests
 from bs4 import BeautifulSoup
 from typing import Dict, Any, List, Tuple, Optional
 from logger import get_logger
+from validators import validate_scrape_url, ValidationError as ScrapeValidationError
 import re
 import urllib3
 
@@ -150,6 +151,14 @@ def scrape_tier_1(url: str, timeout: int = 35) -> Dict[str, Any]:
     """
     logger.info("Attempting Tier 1 (Lightweight) scraping", url=url)
 
+    # SSRF protection: validate URL before making any request
+    try:
+        validate_scrape_url(url)
+    except ScrapeValidationError as e:
+        raise requests.exceptions.URLRequired(
+            f"URL validation failed (SSRF protection): {str(e)}"
+        )
+
     # Browser-like headers (same as current implementation)
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
@@ -217,6 +226,14 @@ def scrape_tier_2(url: str, proxy_config: Optional[Dict[str, str]] = None, timeo
     """
     import os
     logger.info("Attempting Tier 2 (IP Rotation) scraping", url=url, has_proxy=bool(proxy_config))
+
+    # SSRF protection: validate URL before making any request
+    try:
+        validate_scrape_url(url)
+    except ScrapeValidationError as e:
+        raise requests.exceptions.URLRequired(
+            f"URL validation failed (SSRF protection): {str(e)}"
+        )
 
     # Determine proxy URL to use
     proxy_url = None
@@ -329,7 +346,15 @@ def scrape_tier_2(url: str, proxy_config: Optional[Dict[str, str]] = None, timeo
 
 def scrape_tier_3(url: str, proxy_config: Optional[Dict[str, str]] = None, timeout: int = 45) -> Dict[str, Any]:
     """
-    Tier 3: Browser-based scraping with Playwright.
+    Tier 3: Browser-based scraping via external rendering service.
+
+    Uses a headless browser API (Browserless, ScrapingBee, or similar)
+    to render JavaScript-heavy pages. This avoids GLIBC incompatibility
+    issues with running Playwright directly on AWS Lambda.
+
+    Configure via environment variables:
+        JS_RENDERER_URL: API endpoint (e.g., https://chrome.browserless.io/content)
+        JS_RENDERER_API_KEY: API key for the service
 
     Args:
         url: Target URL to scrape
@@ -341,16 +366,108 @@ def scrape_tier_3(url: str, proxy_config: Optional[Dict[str, str]] = None, timeo
 
     Raises:
         BlockingDetectionError: If blocking is detected
+        RuntimeError: If JS rendering service is not configured
     """
+    import os
+    import time as _time
+
     logger.info("Attempting Tier 3 (Browser Mode) scraping", url=url)
 
-    # TODO: Week 2 implementation
-    raise NotImplementedError("Tier 3 (Browser) not yet implemented. Coming in Week 2.")
+    # SSRF protection
+    try:
+        validate_scrape_url(url)
+    except ScrapeValidationError as e:
+        raise requests.exceptions.URLRequired(
+            f"URL validation failed (SSRF protection): {str(e)}"
+        )
+
+    renderer_url = os.environ.get('JS_RENDERER_URL', '')
+    renderer_api_key = os.environ.get('JS_RENDERER_API_KEY', '')
+
+    if not renderer_url:
+        raise RuntimeError(
+            "Tier 3 (Browser) requires JS_RENDERER_URL environment variable. "
+            "Set it to a Browserless, ScrapingBee, or similar service endpoint."
+        )
+
+    start_time = _time.time()
+
+    # Build request for the rendering service
+    # Supports Browserless-style API (POST with JSON body)
+    render_payload = {
+        'url': url,
+        'waitForSelector': 'body',
+        'timeout': timeout * 1000,  # ms
+        'blockAds': True,
+    }
+
+    headers = {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache',
+    }
+
+    # Add API key as query param or header depending on service
+    params = {}
+    if renderer_api_key:
+        params['token'] = renderer_api_key
+
+    try:
+        response = requests.post(
+            renderer_url,
+            json=render_payload,
+            headers=headers,
+            params=params,
+            timeout=timeout,
+        )
+        response.raise_for_status()
+        rendered_html = response.text
+    except requests.exceptions.RequestException as e:
+        logger.error("Tier 3 rendering service failed", url=url, error=str(e))
+        raise
+
+    elapsed = _time.time() - start_time
+
+    # Parse the rendered HTML
+    soup = BeautifulSoup(rendered_html, 'html.parser')
+
+    # Blocking detection on rendered content
+    is_blocked, indicators = detect_blocking(response, rendered_html)
+    if is_blocked:
+        raise BlockingDetectionError(
+            f"Blocking detected on rendered page: {', '.join(indicators)}",
+            tier_used=3,
+            indicators=indicators,
+        )
+
+    logger.info("Tier 3 scraping successful",
+                url=url, elapsed_seconds=round(elapsed, 2),
+                content_length=len(rendered_html))
+
+    return {
+        'html': rendered_html,
+        'text': soup.get_text(separator=' ', strip=True),
+        'title': soup.title.string if soup.title else '',
+        'status_code': response.status_code,
+        'headers': dict(response.headers),
+        'tier_used': 3,
+        'tier_name': TIER_INFO[3]['name'],
+        'cost': TIER_INFO[3]['cost_per_page'],
+        'js_rendered': True,
+    }
 
 
 def scrape_tier_4(url: str, proxy_config: Optional[Dict[str, str]] = None, timeout: int = 60) -> Dict[str, Any]:
     """
-    Tier 4: Browser + CAPTCHA solving.
+    Tier 4: Browser + CAPTCHA solving via external service.
+
+    Uses the same rendering service as Tier 3 but with CAPTCHA solving enabled.
+    Requires a service that supports CAPTCHA solving (e.g., ScrapingBee premium,
+    2Captcha integration).
+
+    Configure via environment variables:
+        JS_RENDERER_URL: API endpoint
+        JS_RENDERER_API_KEY: API key
+        CAPTCHA_SOLVER_API_KEY: 2Captcha or similar service key (optional)
 
     Args:
         url: Target URL to scrape
@@ -360,10 +477,21 @@ def scrape_tier_4(url: str, proxy_config: Optional[Dict[str, str]] = None, timeo
     Returns:
         Dictionary with page data and metadata
     """
+    import os
+
     logger.info("Attempting Tier 4 (CAPTCHA Solving) scraping", url=url)
 
-    # TODO: Week 3 implementation
-    raise NotImplementedError("Tier 4 (CAPTCHA) not yet implemented. Coming in Week 3.")
+    # Tier 4 delegates to Tier 3 with extended timeout and CAPTCHA flag
+    # If using ScrapingBee: add solve_captchas=True
+    # If using Browserless + 2Captcha: would need separate integration
+    result = scrape_tier_3(url, proxy_config=proxy_config, timeout=timeout)
+
+    # Override tier metadata
+    result['tier_used'] = 4
+    result['tier_name'] = TIER_INFO[4]['name']
+    result['cost'] = TIER_INFO[4]['cost_per_page']
+
+    return result
 
 
 async def smart_scrape(

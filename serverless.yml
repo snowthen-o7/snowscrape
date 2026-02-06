@@ -1,7 +1,7 @@
 # "org" ensures this Service is used with the correct Serverless Framework Access Key.
-# org: snowscrape  # Commented out for deployment without Serverless Dashboard
+org: snowforge
 # "app" enables Serverless Framework Dashboard features and sharing them with other Services.
-# app: snowscrape-backend  # Commented out for deployment without Serverless Dashboard
+app: snowscrape
 # "service" is the name of this project. This will also be added to your AWS resource names.
 service: snowscrape
 
@@ -17,9 +17,9 @@ provider:
     minimumCompressionSize: 1024  # Enable compression for responses > 1KB
     shouldStartNameWithService: true
     metrics: false  # Disabled temporarily to avoid CloudWatch role issues
-    # throttle:  # (Serverless V4+ only)
-    #   burstLimit: 200  # Maximum concurrent requests
-    #   rateLimit: 100   # Requests per second
+    throttle:
+      burstLimit: 200  # Maximum concurrent requests
+      rateLimit: 100   # Requests per second
   logs:
     restApi:
       accessLogging: false  # Disabled temporarily to avoid CloudWatch role issues
@@ -64,12 +64,18 @@ provider:
     SNOWGLOBE_SITE_ID: ${self:custom.snowglobeSiteId}
     # Tier 2 scraping: Residential proxy configuration (optional)
     RESIDENTIAL_PROXY_URL: ${env:RESIDENTIAL_PROXY_URL, ''}  # Format: http://user:pass@proxy-server:port
+    CORS_ALLOWED_ORIGIN: ${self:custom.corsOrigin.${self:provider.stage}}
+    # Tier 3/4: External JS rendering service (Browserless, ScrapingBee, etc.)
+    JS_RENDERER_URL: ${env:JS_RENDERER_URL, ''}  # e.g., https://chrome.browserless.io/content
+    JS_RENDERER_API_KEY: ${env:JS_RENDERER_API_KEY, ''}
+    CAPTCHA_SOLVER_API_KEY: ${env:CAPTCHA_SOLVER_API_KEY, ''}
   iamRoleStatements:
     - Effect: "Allow"
       Action:
         - "dynamodb:*"
       Resource:
         - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.dynamoDbJobsTable}"
+        - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.dynamoDbJobsTable}/index/*"
 
     - Effect: "Allow"
       Action:
@@ -282,7 +288,7 @@ functions:
     handler: handler.process_job_handler
     timeout: 900  # 15 minutes (max Lambda timeout)
     memorySize: 1024  # 1GB memory
-    # reservedConcurrency: 10  # Disabled for dev to avoid concurrency limit issues
+    reservedConcurrency: ${self:custom.jobProcessorConcurrency.${self:provider.stage}}
     events:
       - sqs:
           arn:
@@ -638,6 +644,10 @@ resources:
             AttributeType: S       # S stands for String type
           - AttributeName: status  # (Optional) GSI to query jobs by status
             AttributeType: S
+          - AttributeName: jobStatus  # GSI partition key for schedule queries
+            AttributeType: S
+          - AttributeName: nextRun  # GSI sort key for schedule queries (ISO timestamp)
+            AttributeType: S
         KeySchema:
           - AttributeName: job_id
             KeyType: HASH          # The primary key (hash key)
@@ -648,7 +658,17 @@ resources:
                 KeyType: HASH
             Projection:
               ProjectionType: ALL
+          - IndexName: ScheduleIndex
+            KeySchema:
+              - AttributeName: jobStatus
+                KeyType: HASH
+              - AttributeName: nextRun
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
         BillingMode: PAY_PER_REQUEST
+        SSESpecification:
+          SSEEnabled: true
         PointInTimeRecoverySpecification:
           PointInTimeRecoveryEnabled: true
 
@@ -663,6 +683,8 @@ resources:
           - AttributeName: job_id
             KeyType: HASH
         BillingMode: PAY_PER_REQUEST
+        SSESpecification:
+          SSEEnabled: true
         PointInTimeRecoverySpecification:
           PointInTimeRecoveryEnabled: true
 
@@ -683,6 +705,8 @@ resources:
           - AttributeName: url  # Sort Key for URL under each job
             KeyType: RANGE
         BillingMode: PAY_PER_REQUEST
+        SSESpecification:
+          SSEEnabled: true
         GlobalSecondaryIndexes:
           - IndexName: StatusIndex  # Optional index to query URLs by status
             KeySchema:
@@ -713,6 +737,8 @@ resources:
             Projection:
               ProjectionType: ALL
         BillingMode: PAY_PER_REQUEST
+        SSESpecification:
+          SSEEnabled: true
         PointInTimeRecoverySpecification:
           PointInTimeRecoveryEnabled: true
 
@@ -736,6 +762,8 @@ resources:
             Projection:
               ProjectionType: ALL
         BillingMode: PAY_PER_REQUEST
+        SSESpecification:
+          SSEEnabled: true
         PointInTimeRecoverySpecification:
           PointInTimeRecoveryEnabled: true
 
@@ -763,6 +791,8 @@ resources:
             Projection:
               ProjectionType: ALL
         BillingMode: PAY_PER_REQUEST
+        SSESpecification:
+          SSEEnabled: true
         TimeToLiveSpecification:
           AttributeName: ttl
           Enabled: true  # Auto-delete old delivery records after 30 days
@@ -780,6 +810,8 @@ resources:
           - AttributeName: proxy_id
             KeyType: HASH
         BillingMode: PAY_PER_REQUEST
+        SSESpecification:
+          SSEEnabled: true
         PointInTimeRecoverySpecification:
           PointInTimeRecoveryEnabled: true
 
@@ -795,6 +827,8 @@ resources:
           - AttributeName: connection_id
             KeyType: HASH
         BillingMode: PAY_PER_REQUEST
+        SSESpecification:
+          SSEEnabled: true
         TimeToLiveSpecification:
           AttributeName: ttl
           Enabled: true  # Auto-delete stale connections after 24 hours
@@ -806,6 +840,8 @@ resources:
         QueueName: ${self:custom.sqsWebhookQueue}-DLQ
         MessageRetentionPeriod: 1209600  # 14 days
         VisibilityTimeout: 60
+        KmsMasterKeyId: alias/aws/sqs
+        KmsDataKeyReusePeriodSeconds: 300
 
     # SQS Queue for webhook delivery
     WebhookQueue:
@@ -815,6 +851,8 @@ resources:
         VisibilityTimeout: 60  # Matches Lambda timeout
         MessageRetentionPeriod: 345600  # 4 days
         ReceiveMessageWaitTimeSeconds: 20  # Long polling
+        KmsMasterKeyId: alias/aws/sqs
+        KmsDataKeyReusePeriodSeconds: 300
         RedrivePolicy:
           deadLetterTargetArn:
             Fn::GetAtt:
@@ -829,6 +867,8 @@ resources:
         QueueName: ${self:custom.sqsJobQueue}-DLQ
         MessageRetentionPeriod: 1209600  # 14 days
         VisibilityTimeout: 300
+        KmsMasterKeyId: alias/aws/sqs
+        KmsDataKeyReusePeriodSeconds: 300
 
     # SQS Queue for job processing
     JobQueue:
@@ -838,6 +878,8 @@ resources:
         VisibilityTimeout: 900  # 15 minutes (matches Lambda timeout)
         MessageRetentionPeriod: 345600  # 4 days
         ReceiveMessageWaitTimeSeconds: 20  # Long polling
+        KmsMasterKeyId: alias/aws/sqs
+        KmsDataKeyReusePeriodSeconds: 300
         RedrivePolicy:
           deadLetterTargetArn:
             Fn::GetAtt:
@@ -849,6 +891,10 @@ resources:
       Type: "AWS::S3::Bucket"
       Properties:
         BucketName: ${self:custom.s3Bucket}
+        BucketEncryption:
+          ServerSideEncryptionConfiguration:
+            - ServerSideEncryptionByDefault:
+                SSEAlgorithm: AES256
         VersioningConfiguration:
           Status: Enabled
         LifecycleConfiguration:
@@ -1285,9 +1331,19 @@ custom:
     strip: false  # Don't strip binaries (can cause issues with some packages)
     layer: true  # Use Lambda layer to avoid package size limits
 
-  # CORS configuration
+  # Lambda concurrency limits - relaxed in dev, enforced in prod
+  jobProcessorConcurrency:
+    dev: 50       # Relaxed for development
+    staging: 20
+    prod: 10      # Strict to prevent runaway costs
+
+  # CORS configuration - stage-specific origins
+  corsOrigin:
+    dev: 'http://localhost:3001'
+    staging: 'https://staging.snowscrape.alexdiaz.me'
+    prod: 'https://snowscrape.alexdiaz.me'
   corsConfig:
-    origin: '*'  # In production, replace with specific domain(s)
+    origin: ${self:custom.corsOrigin.${self:provider.stage}}
     headers:
       - Content-Type
       - X-Amz-Date
@@ -1300,7 +1356,7 @@ custom:
       - X-Amz-Date
       - X-Api-Key
       - X-Amz-Security-Token
-    allowCredentials: false  # Must be false when using wildcard origin
+    allowCredentials: true
     maxAge: 86400  # 24 hours
 
   # Alarm email notification configuration
@@ -1327,33 +1383,13 @@ custom:
   sqsJobQueueUrl: https://sqs.us-east-2.amazonaws.com/282128795857/SnowscrapeJobQueue
   sqsWebhookQueue: SnowscrapeWebhookQueue
   sqsWebhookQueueUrl: https://sqs.us-east-2.amazonaws.com/282128795857/SnowscrapeWebhookQueue
+  # Clerk keys - loaded from SSM Parameter Store (never hardcode secrets here)
+  # To set these: aws ssm put-parameter --name "/snowscrape/{stage}/clerk-jwt-public-key" --value "..." --type SecureString
   clerkJwtPublicKey:
-    # Updated to match frontend Clerk account (lucky-skylark-5.clerk.accounts.dev)
-    dev: |
-      -----BEGIN PUBLIC KEY-----
-      MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvUrM5FDtGQ4tZZCSoyT7
-      b42o5WpjfzLhB8lfwP1nfa+Rxyvqvjr0Ngw5oTBjUVhp8fqLLq2SW+Bg3HPBXJ9Q
-      ov1MDEqzUMhiIbP1Q72ZEMTCDWOyn+D8rW8KtYwxmH5iyNarKNs1ULez4zNzSKiP
-      hNt48wMEvYPoI75/7C4gmOVaUxPZp+D31IKehRwJ7z3FpUO3BXLn2IyhVw6IxO8o
-      J3zWnNHtZDcok3zfT0tIC4/ARmAau/G4kosr3A5bSIp1bBAySkpCqrcl3Ads/L58
-      sVSCEdTPym53eFV8/AVln9saqrEelDDoUXYLx6QnGKYOzAlpJ4VtLnSXY1n4UgwV
-      EQIDAQAB
-      -----END PUBLIC KEY-----
-    staging: |
-      -----BEGIN PUBLIC KEY-----
-      MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvUrM5FDtGQ4tZZCSoyT7
-      b42o5WpjfzLhB8lfwP1nfa+Rxyvqvjr0Ngw5oTBjUVhp8fqLLq2SW+Bg3HPBXJ9Q
-      ov1MDEqzUMhiIbP1Q72ZEMTCDWOyn+D8rW8KtYwxmH5iyNarKNs1ULez4zNzSKiP
-      hNt48wMEvYPoI75/7C4gmOVaUxPZp+D31IKehRwJ7z3FpUO3BXLn2IyhVw6IxO8o
-      J3zWnNHtZDcok3zfT0tIC4/ARmAau/G4kosr3A5bSIp1bBAySkpCqrcl3Ads/L58
-      sVSCEdTPym53eFV8/AVln9saqrEelDDoUXYLx6QnGKYOzAlpJ4VtLnSXY1n4UgwV
-      EQIDAQAB
-      -----END PUBLIC KEY-----
-    prod: "your-clerk-public-key-for-prod"
+    dev: ${ssm:/snowscrape/dev/clerk-jwt-public-key}
+    staging: ${ssm:/snowscrape/staging/clerk-jwt-public-key}
+    prod: ${ssm:/snowscrape/prod/clerk-jwt-public-key}
   clerkJwtSecretKey:
-    # Updated to match frontend Clerk account
-    dev: |
-      sk_test_fZLQoisjKTfP1qVDSnWDrv0ZJ1kvt7d7oFpMnDPtLc
-    staging: |
-      sk_test_fZLQoisjKTfP1qVDSnWDrv0ZJ1kvt7d7oFpMnDPtLc
-    prod: "your-clerk-secret-key-for-prod"
+    dev: ${ssm:/snowscrape/dev/clerk-jwt-secret-key}
+    staging: ${ssm:/snowscrape/staging/clerk-jwt-secret-key}
+    prod: ${ssm:/snowscrape/prod/clerk-jwt-secret-key}

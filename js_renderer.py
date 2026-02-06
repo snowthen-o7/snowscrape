@@ -238,4 +238,4 @@ if __name__ == '__main__':
     }
 
     result = render_handler(test_event, None)
-    print(json.dumps(json.loads(result['body']), indent=2))
+    logger.info("Render result", result=json.loads(result['body']))

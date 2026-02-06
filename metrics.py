@@ -7,6 +7,9 @@ import boto3
 import os
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
+from logger import get_logger
+
+logger = get_logger(__name__)
 
 
 # Use singleton pattern for CloudWatch client
@@ -64,7 +67,7 @@ class MetricsEmitter:
 			)
 		except Exception as e:
 			# Don't fail the request if metrics fail
-			print(f"Failed to emit metric {metric_name}: {str(e)}")
+			logger.warning("Failed to emit metric", metric_name=metric_name, error=str(e))
 
 	def emit_crawl_success(self, job_id: str, url: str, duration_ms: float):
 		"""
@@ -227,7 +230,7 @@ class MetricsEmitter:
 					MetricData=metric_data
 				)
 		except Exception as e:
-			print(f"Failed to emit batch metrics: {str(e)}")
+			logger.warning("Failed to emit batch metrics", error=str(e))
 
 
 # Singleton instance

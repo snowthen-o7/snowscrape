@@ -44,7 +44,8 @@ def get_api_gateway_client(event):
 def ws_connect_handler(event, context):
     """
     Handle WebSocket $connect route.
-    Validates authentication token and stores connection.
+    Accepts the connection without requiring auth in the query string.
+    Authentication is performed via the first message after connection opens.
     """
     connection_id = event.get('requestContext', {}).get('connectionId')
 
@@ -52,39 +53,25 @@ def ws_connect_handler(event, context):
         logger.error("No connection ID in event")
         return {'statusCode': 400, 'body': 'Missing connection ID'}
 
-    # Extract token from query string (WebSocket connections pass auth via query params)
-    query_params = event.get('queryStringParameters') or {}
-    token = query_params.get('token')
-
-    if not token:
-        logger.warning(f"[WS Connect] No token provided for connection {connection_id}")
-        return {'statusCode': 401, 'body': 'Unauthorized: No token provided'}
-
     try:
-        # Validate the token
-        decoded_token = validate_clerk_token(token)
-        user_id = decoded_token.get('sub')
-
-        if not user_id:
-            logger.warning(f"[WS Connect] No user ID in token for connection {connection_id}")
-            return {'statusCode': 401, 'body': 'Unauthorized: Invalid token'}
-
-        # Store the connection
+        # Store the connection in a pending (unauthenticated) state.
+        # The client must send an 'authenticate' action as its first message.
         table = get_connections_table()
         table.put_item(Item={
             'connection_id': connection_id,
-            'user_id': user_id,
+            'user_id': '__unauthenticated__',
+            'authenticated': False,
             'connected_at': int(time.time()),
-            'subscriptions': [],  # List of channels the user is subscribed to
-            'ttl': int(time.time()) + 86400  # 24 hour TTL
+            'subscriptions': [],
+            'ttl': int(time.time()) + 300  # Short 5-minute TTL until authenticated
         })
 
-        logger.info(f"[WS Connect] Connection {connection_id} established for user {user_id}")
+        logger.info(f"[WS Connect] Connection {connection_id} established (pending auth)")
         return {'statusCode': 200, 'body': 'Connected'}
 
     except Exception as e:
-        logger.error(f"[WS Connect] Error validating token: {str(e)}")
-        return {'statusCode': 401, 'body': f'Unauthorized: {str(e)}'}
+        logger.error(f"[WS Connect] Error storing connection: {str(e)}")
+        return {'statusCode': 500, 'body': f'Connection error: {str(e)}'}
 
 
 def ws_disconnect_handler(event, context):
@@ -109,10 +96,24 @@ def ws_disconnect_handler(event, context):
         return {'statusCode': 500, 'body': 'Error disconnecting'}
 
 
+def is_connection_authenticated(connection_id):
+    """Check if a connection has been authenticated."""
+    try:
+        table = get_connections_table()
+        response = table.get_item(Key={'connection_id': connection_id})
+        item = response.get('Item')
+        if not item:
+            return False
+        return item.get('authenticated', False)
+    except Exception as e:
+        logger.error(f"[WS Auth Check] Error checking auth for {connection_id}: {str(e)}")
+        return False
+
+
 def ws_default_handler(event, context):
     """
     Handle WebSocket $default route (all messages).
-    Processes subscription requests and other commands.
+    Requires authentication before processing any actions other than 'authenticate'.
     """
     connection_id = event.get('requestContext', {}).get('connectionId')
 
@@ -121,10 +122,23 @@ def ws_default_handler(event, context):
 
     try:
         body = json.loads(event.get('body', '{}'))
+        action = body.get('action')
         message_type = body.get('type')
 
+        # Handle the 'authenticate' action (sent as first message after connect)
+        if action == 'authenticate':
+            return handle_authenticate(connection_id, body, event)
+
+        # For all other actions, require authentication first
+        if not is_connection_authenticated(connection_id):
+            logger.warning(f"[WS Default] Unauthenticated message from {connection_id}")
+            return send_to_connection(event, connection_id, {
+                'type': 'auth_error',
+                'message': 'Not authenticated. Send an authenticate action first.'
+            })
+
+        # Handle re-authentication (token refresh) for already-authenticated connections
         if message_type == 'auth':
-            # Re-authenticate (useful for token refresh)
             return handle_auth(connection_id, body, event)
 
         elif message_type == 'subscribe':
@@ -151,6 +165,56 @@ def ws_default_handler(event, context):
     except Exception as e:
         logger.error(f"[WS Default] Error processing message: {str(e)}")
         return {'statusCode': 500, 'body': 'Internal error'}
+
+
+def handle_authenticate(connection_id, body, event):
+    """
+    Handle initial authentication after WebSocket connection.
+    This is sent as the first message from the client, replacing the old
+    query-string token approach to avoid token exposure in logs and browser history.
+    """
+    token = body.get('token')
+
+    if not token:
+        return send_to_connection(event, connection_id, {
+            'type': 'auth_error',
+            'message': 'No token provided'
+        })
+
+    try:
+        decoded_token = validate_clerk_token(token)
+        user_id = decoded_token.get('sub')
+
+        if not user_id:
+            return send_to_connection(event, connection_id, {
+                'type': 'auth_error',
+                'message': 'Invalid token: no user ID'
+            })
+
+        # Upgrade the connection from pending to authenticated
+        table = get_connections_table()
+        table.update_item(
+            Key={'connection_id': connection_id},
+            UpdateExpression='SET user_id = :uid, authenticated = :auth, ttl = :ttl',
+            ExpressionAttributeValues={
+                ':uid': user_id,
+                ':auth': True,
+                ':ttl': int(time.time()) + 86400  # Extend TTL to 24 hours once authenticated
+            }
+        )
+
+        logger.info(f"[WS Authenticate] Connection {connection_id} authenticated as user {user_id}")
+        return send_to_connection(event, connection_id, {
+            'type': 'auth_success',
+            'user_id': user_id
+        })
+
+    except Exception as e:
+        logger.error(f"[WS Authenticate] Error: {str(e)}")
+        return send_to_connection(event, connection_id, {
+            'type': 'auth_error',
+            'message': str(e)
+        })
 
 
 def handle_auth(connection_id, body, event):

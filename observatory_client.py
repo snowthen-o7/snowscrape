@@ -7,6 +7,9 @@ import os
 import requests
 from typing import Dict, Any, Literal, Optional
 from datetime import datetime, timezone
+from logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class ObservatoryClient:
@@ -70,13 +73,13 @@ class ObservatoryClient:
 			response.raise_for_status()
 			return True
 		except requests.exceptions.Timeout:
-			print(f'Observatory request timed out: {endpoint}')
+			logger.warning("Observatory request timed out", endpoint=endpoint)
 			return False
 		except requests.exceptions.RequestException as e:
-			print(f'Observatory request failed: {endpoint} - {str(e)}')
+			logger.warning("Observatory request failed", endpoint=endpoint, error=str(e))
 			return False
 		except Exception as e:
-			print(f'Unexpected error reporting to Observatory: {str(e)}')
+			logger.error("Unexpected error reporting to Observatory", error=str(e))
 			return False
 
 	def report_health(

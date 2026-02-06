@@ -1,5 +1,7 @@
+import ipaddress
 import re
 import json
+import socket
 from typing import Any, Dict, List, Optional, Union
 from urllib.parse import urlparse, urlunparse
 from url_variable_resolver import URLVariableResolver
@@ -25,14 +27,23 @@ class InputValidator:
 		r'(?::\d+)?'  # optional port
 		r'(?:/?|[/?]\S+)$', re.IGNORECASE)
 
-	# Dangerous XPath patterns to block
-	DANGEROUS_XPATH_PATTERNS = [
-		r'document\(',
-		r'unparsed-text\(',
-		r'doc\(',
-		r'collection\(',
-		r'system-property\(',
-	]
+	# Whitelist of safe XPath functions
+	ALLOWED_XPATH_FUNCTIONS = {
+		# Text functions
+		'text', 'contains', 'starts-with', 'ends-with', 'normalize-space',
+		# Positional functions
+		'position', 'last', 'count', 'string-length',
+		# String manipulation functions
+		'concat', 'substring', 'substring-before', 'substring-after',
+		# Boolean functions
+		'not', 'and', 'or', 'true', 'false',
+		# Type conversion functions
+		'string', 'number', 'boolean', 'translate', 'sum',
+		# Node functions
+		'local-name', 'name', 'namespace-uri',
+		# Node type tests
+		'comment', 'processing-instruction', 'node',
+	}
 
 	# Maximum lengths for various inputs
 	MAX_JOB_NAME_LENGTH = 200
@@ -41,6 +52,9 @@ class InputValidator:
 	MAX_QUERY_SELECTOR_LENGTH = 1000
 	MAX_QUERIES_PER_JOB = 50
 	MAX_URLS_PER_JOB = 10000
+	MAX_XPATH_LENGTH = 1000
+	MAX_REGEX_PATTERN_LENGTH = 500
+	MAX_REGEX_QUANTIFIERS = 5
 
 	@staticmethod
 	def validate_url(url: str, allow_sftp: bool = True) -> str:
@@ -144,7 +158,10 @@ class InputValidator:
 	@staticmethod
 	def validate_xpath_query(xpath: str) -> str:
 		"""
-		Validate and sanitize an XPath query.
+		Validate and sanitize an XPath query using a function whitelist approach.
+
+		Only allows known-safe XPath functions. Any function call not in the
+		ALLOWED_XPATH_FUNCTIONS whitelist will be rejected.
 
 		Args:
 			xpath: XPath query to validate
@@ -153,20 +170,30 @@ class InputValidator:
 			Sanitized XPath query
 
 		Raises:
-			ValidationError: If query is invalid or dangerous
+			ValidationError: If query is invalid or contains disallowed functions
 		"""
 		if not xpath or not isinstance(xpath, str):
 			raise ValidationError("XPath query must be a non-empty string")
 
 		xpath = xpath.strip()
 
-		if len(xpath) > InputValidator.MAX_QUERY_SELECTOR_LENGTH:
-			raise ValidationError(f"XPath query exceeds maximum length of {InputValidator.MAX_QUERY_SELECTOR_LENGTH}")
+		# Check max expression length
+		if len(xpath) > InputValidator.MAX_XPATH_LENGTH:
+			raise ValidationError(f"XPath query exceeds maximum length of {InputValidator.MAX_XPATH_LENGTH}")
 
-		# Check for dangerous patterns
-		for pattern in InputValidator.DANGEROUS_XPATH_PATTERNS:
-			if re.search(pattern, xpath, re.IGNORECASE):
-				raise ValidationError(f"XPath query contains potentially dangerous function: {pattern}")
+		# Extract all function calls from the XPath expression
+		# Matches word characters (including hyphens) followed by an opening parenthesis
+		function_call_pattern = re.compile(r'(\w[\w-]*)\s*\(')
+		found_functions = function_call_pattern.findall(xpath)
+
+		# Check each function call against the whitelist
+		for func_name in found_functions:
+			if func_name not in InputValidator.ALLOWED_XPATH_FUNCTIONS:
+				raise ValidationError(
+					f"XPath function '{func_name}' is not allowed. "
+					f"Only the following functions are permitted: "
+					f"{', '.join(sorted(InputValidator.ALLOWED_XPATH_FUNCTIONS))}"
+				)
 
 		# Basic XPath syntax validation (check for balanced brackets)
 		if xpath.count('[') != xpath.count(']'):
@@ -175,12 +202,32 @@ class InputValidator:
 		if xpath.count('(') != xpath.count(')'):
 			raise ValidationError("XPath query has unbalanced parentheses")
 
+		# Check for excessive nesting depth
+		max_depth = 0
+		current_depth = 0
+		for char in xpath:
+			if char in ('[', '('):
+				current_depth += 1
+				max_depth = max(max_depth, current_depth)
+			elif char in (']', ')'):
+				current_depth -= 1
+		if max_depth > 20:
+			raise ValidationError("XPath query has excessive nesting depth (max 20 levels)")
+
 		return xpath
 
 	@staticmethod
 	def validate_regex_pattern(pattern: str) -> str:
 		"""
-		Validate a regex pattern.
+		Validate a regex pattern with enhanced ReDoS detection.
+
+		Checks for:
+		- Pattern length limit (500 characters)
+		- Valid regex syntax
+		- Nested quantifiers (e.g., (a+)+, (a*)*)
+		- Alternation with overlapping patterns (e.g., (a|a), (a|ab))
+		- Quantified groups with quantified alternation
+		- Excessive quantifier count (max 5)
 
 		Args:
 			pattern: Regex pattern to validate
@@ -189,15 +236,19 @@ class InputValidator:
 			Validated pattern
 
 		Raises:
-			ValidationError: If pattern is invalid
+			ValidationError: If pattern is invalid or potentially dangerous
 		"""
 		if not pattern or not isinstance(pattern, str):
 			raise ValidationError("Regex pattern must be a non-empty string")
 
 		pattern = pattern.strip()
 
-		if len(pattern) > InputValidator.MAX_QUERY_SELECTOR_LENGTH:
-			raise ValidationError(f"Regex pattern exceeds maximum length of {InputValidator.MAX_QUERY_SELECTOR_LENGTH}")
+		# Enforce max pattern length of 500 characters
+		if len(pattern) > InputValidator.MAX_REGEX_PATTERN_LENGTH:
+			raise ValidationError(
+				f"Regex pattern exceeds maximum length of "
+				f"{InputValidator.MAX_REGEX_PATTERN_LENGTH} characters"
+			)
 
 		# Try to compile the pattern to check validity
 		try:
@@ -205,11 +256,51 @@ class InputValidator:
 		except re.error as e:
 			raise ValidationError(f"Invalid regex pattern: {str(e)}")
 
-		# Check for catastrophic backtracking patterns (basic check)
-		# Look for nested quantifiers like (a+)+ or (a*)*
+		# Check for catastrophic backtracking patterns
+
+		# 1. Nested quantifiers like (a+)+ or (a*)*
 		nested_quantifier_pattern = r'\([^)]*[*+]\)[*+]'
 		if re.search(nested_quantifier_pattern, pattern):
-			raise ValidationError("Regex pattern may cause catastrophic backtracking")
+			raise ValidationError(
+				"Regex pattern may cause catastrophic backtracking "
+				"(nested quantifiers detected)"
+			)
+
+		# 2. Alternation with overlapping patterns like (a|a) or (a|ab)
+		# Extract groups with alternation and check for prefix overlap
+		alternation_groups = re.findall(r'\(([^()]*\|[^()]*)\)', pattern)
+		for group in alternation_groups:
+			alternatives = group.split('|')
+			# Check if any alternative is a prefix of another (overlapping)
+			for i, alt_a in enumerate(alternatives):
+				for j, alt_b in enumerate(alternatives):
+					if i != j and alt_a and alt_b:
+						# Strip quantifiers for comparison
+						clean_a = re.sub(r'[*+?{}\[\]]', '', alt_a).strip()
+						clean_b = re.sub(r'[*+?{}\[\]]', '', alt_b).strip()
+						if clean_a and clean_b and (
+							clean_a.startswith(clean_b) or clean_b.startswith(clean_a)
+						):
+							raise ValidationError(
+								"Regex pattern may cause catastrophic backtracking "
+								"(alternation with overlapping patterns detected)"
+							)
+
+		# 3. Quantified groups containing quantified alternation, e.g., (a+|b+)+
+		quantified_alternation_pattern = r'\([^)]*[*+][^)]*\|[^)]*\)[*+]'
+		if re.search(quantified_alternation_pattern, pattern):
+			raise ValidationError(
+				"Regex pattern may cause catastrophic backtracking "
+				"(quantified group with quantified alternation detected)"
+			)
+
+		# 4. Max pattern complexity check: count quantifiers (* + ? {n} {n,m})
+		quantifier_count = len(re.findall(r'(?<!\\)[*+?]|\{[\d,]+\}', pattern))
+		if quantifier_count > InputValidator.MAX_REGEX_QUANTIFIERS:
+			raise ValidationError(
+				f"Regex pattern is too complex ({quantifier_count} quantifiers "
+				f"detected, maximum is {InputValidator.MAX_REGEX_QUANTIFIERS})"
+			)
 
 		return pattern
 
@@ -599,7 +690,126 @@ class InputValidator:
 		return tz
 
 
-# Convenience functions for common validations
+# ---- SSRF Protection ----
+
+# IPv4 networks that must be blocked to prevent SSRF attacks
+_BLOCKED_IPV4_NETWORKS = [
+	ipaddress.IPv4Network('127.0.0.0/8'),       # Loopback
+	ipaddress.IPv4Network('10.0.0.0/8'),         # Private (Class A)
+	ipaddress.IPv4Network('172.16.0.0/12'),      # Private (Class B)
+	ipaddress.IPv4Network('192.168.0.0/16'),     # Private (Class C)
+	ipaddress.IPv4Network('169.254.0.0/16'),     # Link-local (includes AWS metadata 169.254.169.254)
+	ipaddress.IPv4Network('0.0.0.0/8'),          # Unspecified / "this" network
+]
+
+# IPv6 networks that must be blocked to prevent SSRF attacks
+_BLOCKED_IPV6_NETWORKS = [
+	ipaddress.IPv6Network('::1/128'),            # Loopback
+	ipaddress.IPv6Network('fc00::/7'),           # Unique local addresses
+	ipaddress.IPv6Network('fe80::/10'),          # Link-local
+]
+
+
+def _is_ip_blocked(ip_str: str) -> bool:
+	"""
+	Check whether an IP address falls within any blocked range.
+
+	Args:
+		ip_str: IP address string (IPv4 or IPv6)
+
+	Returns:
+		True if the IP is in a blocked range, False otherwise.
+	"""
+	try:
+		addr = ipaddress.ip_address(ip_str)
+	except ValueError:
+		# If the string is not a valid IP address, treat it as blocked
+		# (fail-safe: deny rather than allow)
+		return True
+
+	if isinstance(addr, ipaddress.IPv4Address):
+		return any(addr in network for network in _BLOCKED_IPV4_NETWORKS)
+	elif isinstance(addr, ipaddress.IPv6Address):
+		# Also check IPv4-mapped IPv6 addresses (e.g. ::ffff:127.0.0.1)
+		mapped_v4 = addr.ipv4_mapped
+		if mapped_v4 is not None:
+			return any(mapped_v4 in network for network in _BLOCKED_IPV4_NETWORKS)
+		return any(addr in network for network in _BLOCKED_IPV6_NETWORKS)
+
+	return True  # Unknown address type -- fail-safe deny
+
+
+def validate_scrape_url(url: str) -> str:
+	"""
+	Validate a URL to prevent Server-Side Request Forgery (SSRF).
+
+	Ensures the URL does not resolve to any private, loopback, or link-local
+	IP address, blocking access to internal services such as the AWS metadata
+	endpoint (169.254.169.254).
+
+	Args:
+		url: The URL to validate.
+
+	Returns:
+		The validated URL (stripped of whitespace).
+
+	Raises:
+		ValidationError: If the URL targets a blocked IP range, uses a
+			disallowed scheme, or cannot be resolved.
+	"""
+	if not url or not isinstance(url, str):
+		raise ValidationError("URL must be a non-empty string")
+
+	url = url.strip()
+
+	# Parse the URL
+	try:
+		parsed = urlparse(url)
+	except Exception as e:
+		raise ValidationError(f"Invalid URL format: {str(e)}")
+
+	# Only allow http and https schemes
+	if parsed.scheme not in ('http', 'https'):
+		raise ValidationError(
+			f"URL scheme '{parsed.scheme}' is not allowed. Only http and https are permitted."
+		)
+
+	# Extract hostname (strip port if present)
+	hostname = parsed.hostname
+	if not hostname:
+		raise ValidationError("URL must contain a valid hostname")
+
+	# Block literal 'localhost' hostnames (including subdomains)
+	hostname_lower = hostname.lower()
+	if hostname_lower == 'localhost' or hostname_lower.endswith('.localhost'):
+		raise ValidationError(
+			"URLs targeting localhost are not allowed"
+		)
+
+	# Resolve hostname to IP addresses and check each one
+	try:
+		addr_infos = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+	except socket.gaierror as e:
+		raise ValidationError(f"Could not resolve hostname '{hostname}': {str(e)}")
+
+	if not addr_infos:
+		raise ValidationError(f"Hostname '{hostname}' did not resolve to any IP address")
+
+	for addr_info in addr_infos:
+		# addr_info is (family, type, proto, canonname, sockaddr)
+		# sockaddr is (ip, port) for IPv4 or (ip, port, flowinfo, scope_id) for IPv6
+		ip_str = addr_info[4][0]
+
+		if _is_ip_blocked(ip_str):
+			raise ValidationError(
+				f"URL resolves to a blocked IP address ({ip_str}). "
+				"Requests to private, loopback, and link-local addresses are not allowed."
+			)
+
+	return url
+
+
+# ---- Convenience functions for common validations ----
 
 def validate_job_data_strict(job_data: Dict[str, Any]) -> Dict[str, Any]:
 	"""

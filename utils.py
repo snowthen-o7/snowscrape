@@ -29,7 +29,11 @@ from io import StringIO
 from requests.sessions import Session
 from typing import Dict, Any, List, Optional
 from urllib.parse import urlparse
+from logger import get_logger
 from url_variable_resolver import URLVariableResolver
+from validators import validate_scrape_url, ValidationError as ScrapeValidationError
+
+logger = get_logger(__name__)
 
 # Use connection pool for AWS services
 s3 = get_s3_client()
@@ -135,7 +139,7 @@ def cron_to_seconds(cron_expression):
 
 	parts = cron_expression.strip().split()
 	if len(parts) != 5:
-		print(f"Invalid cron expression format: {cron_expression}")
+		logger.warning("Invalid cron expression format", cron_expression=cron_expression)
 		return None
 
 	minute, hour, day, month, weekday = parts
@@ -164,11 +168,11 @@ def cron_to_seconds(cron_expression):
 		if minute.isdigit() and hour.isdigit():
 			return 86400  # Daily
 
-		print(f"Cron expression pattern not supported for interval conversion: {cron_expression}")
+		logger.warning("Cron expression pattern not supported for interval conversion", cron_expression=cron_expression)
 		return None
 
 	except (ValueError, IndexError) as e:
-		print(f"Error parsing cron expression {cron_expression}: {str(e)}")
+		logger.error("Error parsing cron expression", cron_expression=cron_expression, error=str(e))
 		return None
 
 def decimal_to_float(obj):
@@ -201,19 +205,19 @@ def delete_job_links(job_id):
 						'url': url_item['url']
 					}
 				)
-		print(f"Deleted {len(urls)} URLs for job {job_id}.")
+		logger.info("Deleted URLs for job", job_id=job_id, url_count=len(urls))
 	
 	except ClientError as e:
-		print(f"Error deleting URLs for job {job_id}: {e.response['Error']['Message']}")
+		logger.error("Error deleting URLs for job", job_id=job_id, error=e.response['Error']['Message'])
 
 # Helper function to delete the S3 result file for the job
 def delete_s3_result_file(job_id):
 	try:
 		s3.delete_object(Bucket=os.environ['S3_BUCKET'], Key=f'jobs/{job_id}/result.json')
-		print(f"Deleted result file for job {job_id} from S3.")
+		logger.info("Deleted result file from S3", job_id=job_id)
 	
 	except ClientError as e:
-		print(f"Error deleting result file from S3 for job {job_id}: {e.response['Error']['Message']}")
+		logger.error("Error deleting result file from S3", job_id=job_id, error=e.response['Error']['Message'])
 
 def detect_csv_settings(file_content):
 	"""
@@ -223,21 +227,14 @@ def detect_csv_settings(file_content):
 	
 	# Detect delimiter and quoting
 	sample = file_content[:1024]  # Use the first 1024 bytes for sampling
-	print(f"Sample content for sniffing:\n{sample}\n")
+	logger.debug("Sample content for sniffing", sample_length=len(sample))
 
 	try:
 		dialect = sniffer.sniff(sample, delimiters=[',', ';', '\t', '|'])
 		# Log detailed information about the dialect detected
-		print(f"Detected CSV dialect:\n"
-			f"Delimiter: {dialect.delimiter}\n"
-			f"Quote character: {repr(dialect.quotechar)}\n"
-			f"Escape character: {repr(dialect.escapechar)}\n"
-			f"Doublequote: {dialect.doublequote}\n"
-			f"Skip initial space: {dialect.skipinitialspace}\n"
-			f"Line terminator: {repr(dialect.lineterminator)}\n"
-			f"Quoting: {dialect.quoting}\n")
+		logger.debug("Detected CSV dialect", delimiter=dialect.delimiter, quotechar=repr(dialect.quotechar), escapechar=repr(dialect.escapechar), doublequote=dialect.doublequote, skipinitialspace=dialect.skipinitialspace, quoting=dialect.quoting)
 	except csv.Error as e:
-		print(f"Error detecting CSV dialect: {e}")
+		logger.error("Error detecting CSV dialect", error=str(e))
 		return {
 			'delimiter': ',',
 			'enclosure': '"',
@@ -249,7 +246,7 @@ def detect_csv_settings(file_content):
 	reader = csv.reader(StringIO(file_content), dialect)
 	headers = next(reader, None)  # Assume the first row is the header
 
-	print(f"Detected headers: {headers}\n")
+	logger.debug("Detected headers", header_count=len(headers) if headers else 0)
 	
 	return {
 		'delimiter': dialect.delimiter,
@@ -294,10 +291,17 @@ def fetch_url_with_session(url: str, session: Session, job_id: str, proxy_config
 	import time
 	import boto3
 
+	# SSRF protection: validate URL before making any request
+	try:
+		validate_scrape_url(url)
+	except ScrapeValidationError as e:
+		logger.warning("SSRF protection blocked URL", job_id=job_id, url=url, error=str(e))
+		return {"status": "error", "message": f"URL validation failed: {str(e)}"}
+
 	# Check if JavaScript rendering is enabled
 	if render_config and render_config.get('enabled'):
 		try:
-			print(f"[Job {job_id}] Using JavaScript rendering for {url}")
+			logger.info("Using JavaScript rendering", job_id=job_id, url=url)
 
 			# Get proxy URL if proxy is enabled
 			proxy_url = None
@@ -333,7 +337,7 @@ def fetch_url_with_session(url: str, session: Session, job_id: str, proxy_config
 			body = json.loads(result.get('body', '{}'))
 
 			if body.get('status') == 'success':
-				print(f"[Job {job_id}] JavaScript rendering successful for {url}")
+				logger.info("JavaScript rendering successful", job_id=job_id, url=url)
 				return {
 					'status': 'success',
 					'content': body['content'].encode('utf-8'),
@@ -342,16 +346,16 @@ def fetch_url_with_session(url: str, session: Session, job_id: str, proxy_config
 				}
 			else:
 				error_msg = body.get('error', 'Unknown rendering error')
-				print(f"[Job {job_id}] JavaScript rendering failed for {url}: {error_msg}")
+				logger.warning("JavaScript rendering failed", job_id=job_id, url=url, error=error_msg)
 
 				# Fallback to standard request if configured
 				if render_config.get('fallback_to_standard', True):
-					print(f"[Job {job_id}] Falling back to standard request")
+					logger.info("Falling back to standard request", job_id=job_id)
 				else:
 					return {'status': 'error', 'message': f"JS rendering failed: {error_msg}"}
 
 		except Exception as e:
-			print(f"[Job {job_id}] Error invoking JS renderer: {str(e)}")
+			logger.error("Error invoking JS renderer", job_id=job_id, error=str(e))
 
 			# Fallback to standard request if configured
 			if not render_config.get('fallback_to_standard', True):
@@ -362,12 +366,12 @@ def fetch_url_with_session(url: str, session: Session, job_id: str, proxy_config
 
 	for attempt in range(max_retries):
 		try:
-			print(f"[Job {job_id}] Fetching URL: {url} (attempt {attempt + 1}/{max_retries})")
+			logger.info("Fetching URL", job_id=job_id, url=url, attempt=attempt + 1, max_retries=max_retries)
 			response = session.get(url, timeout=30)
 
 			# Success - status code < 400
 			if response.status_code < 400:
-				print(f"[Job {job_id}] Successfully fetched {url}")
+				logger.info("Successfully fetched URL", job_id=job_id, url=url)
 
 				# Track proxy usage if using proxy
 				if proxy_config and proxy_config.get('enabled') and session.proxies:
@@ -377,13 +381,13 @@ def fetch_url_with_session(url: str, session: Session, job_id: str, proxy_config
 						content_length = len(response.content) if response.content else 0
 						proxy_manager.track_usage(proxy_url, success=True, bytes_transferred=content_length)
 					except Exception as e:
-						print(f"[Job {job_id}] Failed to track proxy usage: {str(e)}")
+						logger.warning("Failed to track proxy usage", job_id=job_id, error=str(e))
 
 				return {"status": "success", "content": response.content, "http_code": response.status_code, "content_type": response.headers.get('Content-Type', '')}
 
 			# Proxy errors - rotate and retry
 			if response.status_code in [407, 502, 504] and attempt < max_retries - 1:
-				print(f"[Job {job_id}] Proxy error (HTTP {response.status_code}), rotating proxy...")
+				logger.warning("Proxy error, rotating proxy", job_id=job_id, http_code=response.status_code)
 
 				if proxy_config and proxy_config.get('enabled'):
 					try:
@@ -399,17 +403,17 @@ def fetch_url_with_session(url: str, session: Session, job_id: str, proxy_config
 
 						if new_proxy:
 							session.proxies = {'http': new_proxy, 'https': new_proxy}
-							print(f"[Job {job_id}] Rotated to new proxy")
+							logger.info("Rotated to new proxy", job_id=job_id)
 							time.sleep(2 ** attempt)
 							continue
 					except Exception as e:
-						print(f"[Job {job_id}] Failed to rotate proxy: {str(e)}")
+						logger.error("Failed to rotate proxy", job_id=job_id, error=str(e))
 
 			# Other HTTP errors
 			return {"status": "error", "message": f"HTTP {response.status_code}", "http_code": response.status_code}
 
 		except requests.exceptions.Timeout:
-			print(f"[Job {job_id}] Request timeout for {url}")
+			logger.warning("Request timeout", job_id=job_id, url=url)
 
 			# Mark proxy as failed
 			if proxy_config and proxy_config.get('enabled') and session.proxies:
@@ -418,7 +422,7 @@ def fetch_url_with_session(url: str, session: Session, job_id: str, proxy_config
 					proxy_url = session.proxies.get('http') or session.proxies.get('https')
 					proxy_manager.mark_proxy_failed(proxy_url, "Timeout")
 				except Exception as e:
-					print(f"[Job {job_id}] Failed to mark proxy as failed: {str(e)}")
+					logger.warning("Failed to mark proxy as failed", job_id=job_id, error=str(e))
 
 			if attempt < max_retries - 1:
 				time.sleep(2 ** attempt)
@@ -427,7 +431,7 @@ def fetch_url_with_session(url: str, session: Session, job_id: str, proxy_config
 			return {"status": "error", "message": "Request timeout"}
 
 		except requests.RequestException as e:
-			print(f"[Job {job_id}] Error fetching {url}: {str(e)}")
+			logger.error("Error fetching URL", job_id=job_id, url=url, error=str(e))
 
 			# Mark proxy as failed
 			if proxy_config and proxy_config.get('enabled') and session.proxies:
@@ -454,10 +458,10 @@ def fetch_urls_for_job(job_id: str) -> list:
 		response = url_table.query(
 			KeyConditionExpression=boto3.dynamodb.conditions.Key('job_id').eq(job_id)
 		)
-		print(f"Fetched URLs for job {job_id}: {response}")
+		logger.debug("Fetched URLs for job", job_id=job_id, url_count=len(response.get('Items', [])))
 		return response.get('Items', [])
 	except ClientError as e:
-		print(f"Error fetching URLs for job {job_id}: {e.response['Error']['Message']}")
+		logger.error("Error fetching URLs for job", job_id=job_id, error=e.response['Error']['Message'])
 		return []
 
 # This utility function initializes a session, rotates user agents, referrers, and manages session cookies.
@@ -513,13 +517,13 @@ def initialize_session(job_id: str, session_data: dict = None, proxy_config: dic
 					'https': proxy_url
 				}
 				session.verify = True
-				print(f"[Job {job_id}] Session configured with proxy")
+				logger.info("Session configured with proxy", job_id=job_id)
 			elif proxy_config.get('fallback_to_direct', True):
-				print(f"[Job {job_id}] No proxy available, using direct connection")
+				logger.info("No proxy available, using direct connection", job_id=job_id)
 			else:
 				raise Exception("No proxy available and fallback disabled")
 		except Exception as e:
-			print(f"[Job {job_id}] Error configuring proxy: {str(e)}")
+			logger.error("Error configuring proxy", job_id=job_id, error=str(e))
 			if not proxy_config.get('fallback_to_direct', True):
 				raise
 
@@ -542,7 +546,7 @@ def load_from_s3(bucket_name, key):
 def log_error(job_id, error_message):
 	"""Logs an error for a job."""
 	# This can be integrated with a logging service or simply print the error
-	print(f"Job {job_id}: {error_message}")
+	logger.error("Job error", job_id=job_id, error=error_message)
 
 def parse_file(file_content, delimiter=',', enclosure='"', escape='\\', url_column=0):
 	"""Parses a file containing URLs and returns a list of URLs."""
@@ -560,13 +564,13 @@ def retrieve_links_from_s3(s3_key):
 	try:
 		s3 = boto3.client('s3')
 		response = s3.get_object(Bucket=os.environ['S3_BUCKET'], Key=s3_key)
-		print(f"Retrieved links from S3: {s3_key} ({response})")
+		logger.debug("Retrieved links from S3", s3_key=s3_key)
 		links_content = response['Body'].read().decode('utf-8')
 		links = links_content.splitlines()  # Convert the file content back to a list of links
-		print(f"Links: {links}")
+		logger.debug("Links retrieved", link_count=len(links))
 		return links
 	except Exception as e:
-		print(f"Error retrieving links from S3: {e}")
+		logger.error("Error retrieving links from S3", error=str(e))
 		return []
 
 def save_results_to_s3(results, job_id):
@@ -581,10 +585,10 @@ def save_results_to_s3(results, job_id):
 			Key=s3_key,
 			Body=json.dumps(results)
 		)
-		print(f"Results successfully saved to S3: {s3_key}")
+		logger.info("Results successfully saved to S3", s3_key=s3_key)
 		return s3_key
 	except Exception as e:
-		print(f"Error saving results to S3: {str(e)}")
+		logger.error("Error saving results to S3", error=str(e))
 		return None
 
 def save_session_data(job_id: str, session_data: Dict[str, Any]) -> None:
@@ -606,9 +610,9 @@ def save_session_data(job_id: str, session_data: Dict[str, Any]) -> None:
 				'last_updated': datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
 			}
 		)
-		print(f"Session data for job {job_id} saved successfully")
+		logger.info("Session data saved successfully", job_id=job_id)
 	except Exception as e:
-		print(f"Error saving session data for job {job_id}: {str(e)}")
+		logger.error("Error saving session data", job_id=job_id, error=str(e))
 
 def send_job_to_queue(job_id, job_data):
 	sqs = boto3.client('sqs', region_name=os.environ.get('REGION', 'us-east-2'))
@@ -633,6 +637,20 @@ def validate_clerk_token(token):
 		raise Exception("Token expired.")
 	except jwt.InvalidTokenError:
 		raise Exception("Invalid token.")
+
+
+def verify_resource_ownership(resource: dict, user_id: str, resource_type: str = 'resource') -> None:
+	"""
+	Verify the authenticated user owns this resource.
+	Raises PermissionError if the resource does not belong to the user.
+
+	Args:
+		resource: The resource dict (job, template, webhook, etc.)
+		user_id: The authenticated user's ID (from JWT 'sub' claim)
+		resource_type: Human-readable resource type for error messages
+	"""
+	if resource.get('user_id') != user_id:
+		raise PermissionError(f"You do not have permission to access this {resource_type}")
 
 def validate_job_data(data):
 	"""
@@ -675,6 +693,12 @@ def fetch_file_content(file_url):
 	parsed_url = urlparse(file_url)
 
 	if parsed_url.scheme in ['http', 'https']:
+		# SSRF protection: validate URL before fetching
+		try:
+			validate_scrape_url(file_url)
+		except ScrapeValidationError as e:
+			raise Exception(f"URL validation failed (SSRF protection): {str(e)}")
+
 		# Fetch file from HTTP/HTTPS
 		response = requests.get(file_url)
 		response.raise_for_status()
@@ -724,14 +748,12 @@ def parse_links_from_file(file_mapping, file_url):
 		# Extract the URLs from the specified column
 		urls = df[url_column].dropna().tolist()
   
-		print("Pandas auto-detection successful.")
-		print(urls)
+		logger.info("Pandas auto-detection successful", url_count=len(urls))
 		return urls
 
 	except Exception as e:
 		# Step 2: If pandas fails, fallback to csv with manual file_mapping settings
-		print(f"Pandas failed to parse file. Falling back to manual parsing. Error: {e}")
-		print(file_mapping)
+		logger.warning("Pandas failed to parse file, falling back to manual parsing", error=str(e))
 
 		# Manual parsing using csv.reader
 		delimiter = file_mapping.get('delimiter', ',')
@@ -784,9 +806,9 @@ def refresh_job_urls(job_id, links):
 					'last_updated': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 				})
 
-		print(f"Successfully refreshed URLs for job {job_id}")
+		logger.info("Successfully refreshed URLs for job", job_id=job_id)
 	except Exception as e:
-		print(f"Error refreshing URLs for job {job_id}: {e}")
+		logger.error("Error refreshing URLs for job", job_id=job_id, error=str(e))
 
 
 def resolve_direct_url(url_template: str, exec_time: Optional[datetime] = None, tz: Optional[str] = None) -> str:
@@ -843,7 +865,7 @@ def get_links_for_job(job_data: dict, exec_time: Optional[datetime] = None) -> L
 		tz = job_data.get('timezone')
 
 		resolved_url = resolve_direct_url(url_template, exec_time, tz)
-		print(f"Resolved URL template: {url_template} -> {resolved_url} (timezone: {tz or 'UTC'})")
+		logger.info("Resolved URL template", url_template=url_template, resolved_url=resolved_url, timezone=tz or 'UTC')
 		return [resolved_url]
 
 	else:
@@ -905,9 +927,9 @@ def update_job_status(job_id: str, status: str) -> None:
 				':last_updated': datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
 			}
 		)
-		print(f"Job {job_id} status updated to {status}")
+		logger.info("Job status updated", job_id=job_id, status=status)
 	except Exception as e:
-		print(f"Error updating job status for job {job_id}: {str(e)}")
+		logger.error("Error updating job status", job_id=job_id, error=str(e))
 
 def update_url_status(job_id: str, url: str, status: str) -> None:
 	"""
@@ -925,6 +947,6 @@ def update_url_status(job_id: str, url: str, status: str) -> None:
 			ExpressionAttributeNames={'#status': 'status'},
 			ExpressionAttributeValues={':status': status}
 		)
-		print(f"Updated URL {url} status to {status}.")
+		logger.debug("Updated URL status", url=url, status=status)
 	except ClientError as e:
-		print(f"Error updating status for URL {url}: {e.response['Error']['Message']}")
+		logger.error("Error updating URL status", url=url, error=e.response['Error']['Message'])

@@ -12,7 +12,10 @@ Usage:
 import argparse
 import os
 import sys
+from logger import get_logger
 from observatory_client import ObservatoryClient
+
+logger = get_logger(__name__)
 
 
 def register_snowscrape(stage='dev'):
@@ -26,16 +29,11 @@ def register_snowscrape(stage='dev'):
 	observatory = ObservatoryClient()
 
 	if not observatory.enabled:
-		print("❌ Error: SNOWGLOBE_API_KEY environment variable is not set")
-		print("\nPlease set the following environment variables:")
-		print("  export SNOWGLOBE_API_KEY='your-api-key'")
-		print("  export SNOWGLOBE_URL='https://snowglobe.alexdiaz.me'  # optional")
-		print("  export SNOWGLOBE_SITE_ID='snowscrape'  # optional")
+		logger.error("SNOWGLOBE_API_KEY environment variable is not set")
+		logger.error("Please set the following environment variables: SNOWGLOBE_API_KEY, SNOWGLOBE_URL (optional), SNOWGLOBE_SITE_ID (optional)")
 		sys.exit(1)
 
-	print(f"🚀 Registering Snowscrape ({stage}) with Observatory...")
-	print(f"   URL: {observatory.url}")
-	print(f"   Site ID: {observatory.site_id}")
+	logger.info("Registering Snowscrape with Observatory", stage=stage, url=observatory.url, site_id=observatory.site_id)
 
 	# Register with Observatory
 	success = observatory.register(
@@ -52,12 +50,9 @@ def register_snowscrape(stage='dev'):
 	)
 
 	if success:
-		print("✅ Successfully registered with Observatory!")
-		print(f"\n📊 View dashboard: {observatory.url}/observatory")
-		print(f"🔍 View Snowscrape: {observatory.url}/observatory/{observatory.site_id}")
+		logger.info("Successfully registered with Observatory", dashboard_url=f"{observatory.url}/observatory", site_url=f"{observatory.url}/observatory/{observatory.site_id}")
 	else:
-		print("❌ Failed to register with Observatory")
-		print("   Check your API key and network connection")
+		logger.error("Failed to register with Observatory, check your API key and network connection")
 		sys.exit(1)
 
 

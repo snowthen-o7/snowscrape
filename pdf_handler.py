@@ -12,6 +12,9 @@ Uses pdfplumber for reliable text and table extraction.
 import io
 import re
 from typing import Any, Dict, List, Optional, Union
+from logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def extract_pdf_text(
@@ -247,11 +250,11 @@ def process_pdf_query(
             return extract_pdf_metadata(pdf_bytes)
 
         else:
-            print(f"Unknown PDF query type: {query_type}")
+            logger.warning("Unknown PDF query type", query_type=query_type)
             return None
 
     except Exception as e:
-        print(f"Error processing PDF query: {str(e)}")
+        logger.error("Error processing PDF query", error=str(e))
         return None
 
 
@@ -302,7 +305,7 @@ def process_pdf_queries(
         # Only process PDF-type queries
         query_type = query.get("type", "")
         if not query_type.startswith("pdf_"):
-            print(f"Skipping non-PDF query type: {query_type}")
+            logger.debug("Skipping non-PDF query type", query_type=query_type)
             extracted_data[query_name] = None
             continue
 

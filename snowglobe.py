@@ -9,6 +9,9 @@ from datetime import datetime, timezone
 from typing import Dict, Any, Optional
 import urllib.request
 import urllib.error
+from logger import get_logger
+
+logger = get_logger(__name__)
 
 # Configuration from environment
 SNOWGLOBE_URL = os.environ.get("SNOWGLOBE_URL", "https://snowglobe.alexdiaz.me")
@@ -37,10 +40,10 @@ def _make_request(
         with urllib.request.urlopen(req, timeout=10) as response:
             return json.loads(response.read().decode("utf-8"))
     except urllib.error.URLError as e:
-        print(f"[Snowglobe] Request failed: {e}")
+        logger.warning("Snowglobe request failed", error=str(e))
         return None
     except Exception as e:
-        print(f"[Snowglobe] Request error: {e}")
+        logger.error("Snowglobe request error", error=str(e))
         return None
 
 

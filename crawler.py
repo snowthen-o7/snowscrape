@@ -6,12 +6,22 @@ import time
 
 from bs4 import BeautifulSoup
 from lxml import etree
+from logger import get_logger
+from rate_limiter import DomainRateLimiter, DEFAULT_MIN_DELAY
+from validators import validate_scrape_url, ValidationError as ScrapeValidationError
+
+logger = get_logger(__name__)
 
 
 def process_job(job_data):
+    # Initialize per-domain rate limiter with optional crawl_delay from job config
+    crawl_delay = job_data.get("crawl_delay", DEFAULT_MIN_DELAY)
+    rate_limiter = DomainRateLimiter(min_delay=crawl_delay)
+
     urls = job_data["urls"]
     results = []
     for url in urls[:3] if job_data.get("test") else urls:
+        rate_limiter.wait_if_needed(url)
         result = crawl_url(url, job_data["queries"])
         results.append(result)
     return results
@@ -27,6 +37,13 @@ def crawl_url(url, queries):
         "ran": False,
     }
     try:
+        # SSRF protection: validate URL before making any request
+        try:
+            validate_scrape_url(url)
+        except ScrapeValidationError as e:
+            result["error_info"] = f"URL validation failed (SSRF protection): {str(e)}"
+            return result
+
         response = requests.get(url)
         result["http_code"] = response.status_code
         for query in queries:
@@ -75,11 +92,11 @@ def execute_query(content, query):
                 jsonpath_expr = jsonpath_ng.parse(selector)
                 results = [match.value for match in jsonpath_expr.find(json_data)]
             except json.JSONDecodeError as e:
-                print(f"Error parsing JSON for JSONPath query: {str(e)}")
+                logger.error("Error parsing JSON for JSONPath query", error=str(e))
                 return None
 
         else:
-            print(f"Unknown query type: {query_type}")
+            logger.warning("Unknown query type", query_type=query_type)
             return None
 
         # If join flag is set, concatenate results with pipe delimiter
@@ -91,5 +108,5 @@ def execute_query(content, query):
             return None
 
     except Exception as e:
-        print(f"Error executing {query_type} query: {str(e)}")
+        logger.error("Error executing query", query_type=query_type, error=str(e))
         return None

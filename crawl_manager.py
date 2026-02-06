@@ -3,12 +3,60 @@ import json
 import jsonpath_ng
 import os
 import re
+import signal
 
 from bs4 import BeautifulSoup
 from lxml import etree
 from typing import Any, Dict, List, Optional
 
+from logger import get_logger
 from pdf_handler import is_pdf_content, process_pdf_query
+
+logger = get_logger(__name__)
+
+
+class RegexTimeoutError(Exception):
+	"""Raised when a regex operation exceeds the allowed execution time."""
+	pass
+
+
+def _regex_timeout_handler(signum, frame):
+	"""Signal handler for regex execution timeout."""
+	raise RegexTimeoutError("Regex execution timed out after 5 seconds")
+
+
+def safe_regex_findall(pattern: str, text: str, timeout_seconds: int = 5) -> List[str]:
+	"""
+	Execute re.findall() with a timeout to prevent catastrophic backtracking.
+
+	Uses signal.alarm() on Linux/Lambda to enforce a 5-second timeout.
+
+	Args:
+		pattern: The regex pattern to search for.
+		text: The text to search in.
+		timeout_seconds: Maximum seconds allowed for execution.
+
+	Returns:
+		List of matches found.
+
+	Raises:
+		RegexTimeoutError: If regex execution exceeds timeout.
+		re.error: If the regex pattern is invalid.
+	"""
+	old_handler = signal.signal(signal.SIGALRM, _regex_timeout_handler)
+	signal.alarm(timeout_seconds)
+	try:
+		results = re.findall(pattern, text)
+		signal.alarm(0)  # Cancel the alarm on success
+		return results
+	except RegexTimeoutError:
+		raise RegexTimeoutError(
+			f"Regex pattern execution timed out after {timeout_seconds} seconds. "
+			"The pattern may cause catastrophic backtracking."
+		)
+	finally:
+		signal.alarm(0)  # Ensure alarm is always cancelled
+		signal.signal(signal.SIGALRM, old_handler)  # Restore previous handler
 
 dynamodb = boto3.resource('dynamodb', region_name=os.environ.get('REGION', 'us-east-2'))
 table = dynamodb.Table(os.environ['DYNAMODB_JOBS_TABLE'])
@@ -50,11 +98,11 @@ def get_crawl(job_id, crawl_id):
 				'results': item.get('results', {})
 			}
 		else:
-			print(f"Crawl not found for job_id: {job_id}, crawl_id: {crawl_id}")
+			logger.warning("Crawl not found", job_id=job_id, crawl_id=crawl_id)
 			return None
 
 	except Exception as e:
-		print(f"Error retrieving crawl details: {str(e)}")
+		logger.error("Error retrieving crawl details", error=str(e))
 		return None
 
 def process_queries(
@@ -88,7 +136,7 @@ def process_queries(
 			soup = BeautifulSoup(page_content, 'html.parser')
 			html_tree = etree.HTML(page_content)
 		except Exception as e:
-			print(f"Error parsing HTML content: {str(e)}")
+			logger.error("Error parsing HTML content", error=str(e))
 
 	for query in queries:
 		query_name = query.get('name', 'unnamed')
@@ -105,7 +153,7 @@ def process_queries(
 
 			if query_type == 'xpath':
 				if html_tree is None:
-					print(f"Cannot run XPath on PDF content. Use pdf_text or pdf_table instead.")
+					logger.warning("Cannot run XPath on PDF content, use pdf_text or pdf_table instead")
 					extracted_data[query_name] = None
 					continue
 				# Use XPath to extract data
@@ -113,14 +161,19 @@ def process_queries(
 				results = [str(result) for result in xpath_results]
 
 			elif query_type == 'regex':
-				# Use Regex to extract data
+				# Use Regex to extract data with timeout protection
 				# For PDFs, we should extract text first
-				if is_pdf:
-					from pdf_handler import extract_pdf_text
-					text_content = extract_pdf_text(page_content)
-					results = re.findall(query_expression, text_content)
-				else:
-					results = re.findall(query_expression, str(page_content))
+				try:
+					if is_pdf:
+						from pdf_handler import extract_pdf_text
+						text_content = extract_pdf_text(page_content)
+						results = safe_regex_findall(query_expression, text_content)
+					else:
+						results = safe_regex_findall(query_expression, str(page_content))
+				except RegexTimeoutError as e:
+					logger.warning("Regex timeout for query", query_name=query_name, error=str(e))
+					extracted_data[query_name] = None
+					continue
 
 			elif query_type == 'jsonpath':
 				# Use JSONPath to extract data from JSON
@@ -131,7 +184,7 @@ def process_queries(
 			elif query_type in ['pdf_text', 'pdf_table', 'pdf_metadata']:
 				# PDF query types
 				if not is_pdf:
-					print(f"Cannot run PDF query on non-PDF content.")
+					logger.warning("Cannot run PDF query on non-PDF content")
 					extracted_data[query_name] = None
 					continue
 
@@ -141,7 +194,7 @@ def process_queries(
 				continue  # Skip the join logic below, PDF handler handles it
 
 			else:
-				print(f"Unknown query type: {query_type}")
+				logger.warning("Unknown query type", query_type=query_type)
 				extracted_data[query_name] = None
 				continue
 
@@ -152,7 +205,7 @@ def process_queries(
 				extracted_data[query_name] = results
 
 		except Exception as e:
-			print(f"Error processing query {query_name}: {str(e)}")
+			logger.error("Error processing query", query_name=query_name, error=str(e))
 			extracted_data[query_name] = None
 
 	return extracted_data

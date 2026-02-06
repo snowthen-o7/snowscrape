@@ -12,6 +12,7 @@ import time
 import requests
 from typing import Dict, List
 from logger import get_logger
+from validators import validate_scrape_url, ValidationError as ScrapeValidationError
 
 logger = get_logger(__name__)
 
@@ -113,6 +114,18 @@ def deliver_webhook(webhook_url: str, webhook_secret: str, event_type: str,
         Tuple of (success: bool, status_code: int, response_body: str, error: str)
     """
     try:
+        # SSRF protection: validate webhook URL before making any request
+        try:
+            validate_scrape_url(webhook_url)
+        except ScrapeValidationError as e:
+            logger.error(
+                "Webhook URL blocked by SSRF protection",
+                delivery_id=delivery_id,
+                webhook_url=webhook_url,
+                error=str(e)
+            )
+            return False, 0, '', f"URL validation failed (SSRF protection): {str(e)}"
+
         # Prepare payload
         payload_json = json.dumps(payload)
 

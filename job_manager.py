@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from logger import get_logger, log_exception
 from metrics import get_metrics_emitter
 from typing import Any, Dict
+from rate_limiter import DomainRateLimiter, DEFAULT_MIN_DELAY
 from utils import decimal_to_float, delete_job_links, fetch_url_with_session, fetch_urls_for_job, get_links_for_job, initialize_session, parse_links_from_file, save_results_to_s3, save_session_data, update_job_status, update_url_status, validate_job_data
 from webhook_dispatcher import WebhookDispatcher
 
@@ -79,6 +80,7 @@ def create_job(job_data):
 				'block_resources': [],
 				'fallback_to_standard': True
 			}),
+			'crawl_delay': job_data.get('crawl_delay', DEFAULT_MIN_DELAY),
 		}
 
 		# Add source-type specific fields
@@ -145,7 +147,7 @@ def delete_job(job_id):
 		return f"Job {job_id} and related links deleted successfully."
 	
 	except ClientError as e:
-		print(f"Error deleting job: {e.response['Error']['Message']}")
+		logger.error("Error deleting job", error=e.response['Error']['Message'])
 		return None
 
 # Retrieve all job statuses
@@ -203,12 +205,12 @@ def get_all_jobs(limit=None, last_evaluated_key=None, projection=None):
 def get_job(job_id):
 	try:
 		response = job_table.get_item(Key={'job_id': job_id})
-		print(f"Retrieved job response: {response}")
+		logger.debug("Retrieved job response", job_id=job_id)
 		response_cleaned = decimal_to_float(response)
-		print(f"Cleaned job response: {response_cleaned}")
+		logger.debug("Cleaned job response", job_id=job_id)
 		return response_cleaned.get('Item')
 	except ClientError as e:
-		print(f"Error retrieving job {job_id}: {e.response['Error']['Message']}")
+		logger.error("Error retrieving job", job_id=job_id, error=e.response['Error']['Message'])
 		return None
 
 # Retrieve all crawls for a specific job
@@ -221,7 +223,7 @@ def get_job_crawls(job_id):
 		)
 		return response.get('Items', [])
 	except ClientError as e:
-		print(f"Error retrieving crawls for job {job_id}: {e.response['Error']['Message']}")
+		logger.error("Error retrieving crawls for job", job_id=job_id, error=e.response['Error']['Message'])
 		return []
 
 # Pause a job (update status to "paused")
@@ -235,7 +237,7 @@ def pause_job(job_id):
 		)
 		return f"Job {job_id} paused successfully."
 	except ClientError as e:
-		print(f"Error pausing job: {e.response['Error']['Message']}")
+		logger.error("Error pausing job", error=e.response['Error']['Message'])
 		return None
 
 # Cancel a job (update status to "cancelled")
@@ -275,10 +277,10 @@ def cancel_job(job_id):
 		except Exception as webhook_error:
 			logger.warning("Failed to dispatch job.cancelled webhook", error=str(webhook_error))
 
-		print(f"Job {job_id} cancelled successfully.")
+		logger.info("Job cancelled successfully", job_id=job_id)
 		return f"Job {job_id} cancelled successfully."
 	except ClientError as e:
-		print(f"Error cancelling job: {e.response['Error']['Message']}")
+		logger.error("Error cancelling job", error=e.response['Error']['Message'])
 		return None
 
 def process_job(job_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -300,7 +302,7 @@ def process_job(job_data: Dict[str, Any]) -> Dict[str, Any]:
 	# Check if job is cancelled before starting
 	job = get_job(job_id)
 	if job and job.get('status') == 'cancelled':
-		print(f"Job {job_id} is cancelled. Skipping processing.")
+		logger.info("Job is cancelled, skipping processing", job_id=job_id)
 		return {'status': 'cancelled', 'message': 'Job was cancelled'}
 
 	try:
@@ -309,10 +311,10 @@ def process_job(job_data: Dict[str, Any]) -> Dict[str, Any]:
 		if not urls:
 			raise ValueError("No URLs found for the job.")
 	except ClientError as e:
-		print(f"Error fetching URLs for job {job_id}: {e.response['Error']['Message']}")
+		logger.error("Error fetching URLs for job", job_id=job_id, error=e.response['Error']['Message'])
 		return {'status': 'error', 'message': f"Failed to fetch URLs for job {job_id}"}
 	except Exception as e:
-		print(f"General error fetching URLs for job {job_id}: {str(e)}")
+		logger.error("General error fetching URLs for job", job_id=job_id, error=str(e))
 		return {'status': 'error', 'message': f"General error: {str(e)}"}
 
 	# Initialize progress tracking
@@ -348,12 +350,18 @@ def process_job(job_data: Dict[str, Any]) -> Dict[str, Any]:
 			logger.warning("Failed to dispatch job.started webhook", error=str(webhook_error))
 
 	except Exception as e:
-		print(f"Error updating progress: {str(e)}")
+		logger.error("Error updating initial progress", job_id=job_id, error=str(e))
 
 	# Initialize session with random user agent, referrer, proxy, and cookie handling
 	proxy_config = job_data.get('proxy_config')
 	render_config = job_data.get('render_config')
 	session, session_data = initialize_session(job_id, proxy_config=proxy_config)
+
+	# Initialize per-domain rate limiter.
+	# Uses crawl_delay from job config if provided, otherwise defaults to 1.0s.
+	crawl_delay = job_data.get('crawl_delay', DEFAULT_MIN_DELAY)
+	rate_limiter = DomainRateLimiter(min_delay=crawl_delay)
+	logger.info("Rate limiter initialized", job_id=job_id, crawl_delay=crawl_delay)
 
 	try:
 		# Process each URL
@@ -374,6 +382,9 @@ def process_job(job_data: Dict[str, Any]) -> Dict[str, Any]:
 				if job and job.get('status') == 'cancelled':
 					logger.info("Job cancellation detected", job_id=job_id)
 					return {'status': 'cancelled', 'message': 'Job was cancelled during processing'}
+
+				# Enforce per-domain rate limit before making the request
+				rate_limiter.wait_if_needed(url)
 
 				# Fetch URL (with proxy if configured)
 				response = fetch_url_with_session(url, session, job_id, proxy_config=proxy_config, render_config=render_config)
@@ -459,10 +470,10 @@ def process_job(job_data: Dict[str, Any]) -> Dict[str, Any]:
 						}
 					)
 				except Exception as e:
-					print(f"Error updating progress: {str(e)}")
+					logger.error("Error updating progress", job_id=job_id, error=str(e))
 
 	except Exception as e:
-		print(f"Error processing job {job_id}: {str(e)}")
+		logger.error("Error processing job", job_id=job_id, error=str(e))
 		# Optionally update job status as failed
 		update_job_status(job_id, 'error')
 
@@ -486,7 +497,7 @@ def process_job(job_data: Dict[str, Any]) -> Dict[str, Any]:
 		# Save the consolidated results to S3 or DynamoDB
 		results_file_key = save_results_to_s3(results, job_id)
 	except Exception as e:
-		print(f"Error saving results for job {job_id} to S3: {str(e)}")
+		logger.error("Error saving results to S3", job_id=job_id, error=str(e))
 		return {'status': 'error', 'message': f"Failed to save results: {str(e)}"}
 
 	# Update the job's last_run timestamp and status in the job table at the end of the process
@@ -524,7 +535,7 @@ def process_job(job_data: Dict[str, Any]) -> Dict[str, Any]:
 			logger.warning("Failed to dispatch job.completed webhook", error=str(webhook_error))
 
 	except Exception as e:
-		print(f"Error updating job status for job {job_id}: {str(e)}")
+		logger.error("Error updating job status", job_id=job_id, error=str(e))
 		return {'status': 'error', 'message': f"Failed to update job status: {str(e)}"}
 
 	# Emit crawl success rate metric
@@ -601,7 +612,7 @@ def refresh_job(job_id):
 				'url': url,
 				'queries': job_data['queries'],
 			}
-			print(f"Sending URL {url} to SQS for job {job_id}")
+			logger.info("Sending URL to SQS", job_id=job_id, url=url)
 			sqs.send_message(
 				QueueUrl=queue_url,
 				MessageBody=json.dumps(url_data)
@@ -633,7 +644,7 @@ def resume_job(job_id):
 		)
 		return f"Job {job_id} resumed successfully."
 	except ClientError as e:
-		print(f"Error resuming job: {e.response['Error']['Message']}")
+		logger.error("Error resuming job", error=e.response['Error']['Message'])
 		return None
 
 # Update job information in DynamoDB
@@ -662,8 +673,8 @@ def update_job(job_id, job_data):
 		)
 		return f"Job {job_id} updated successfully."
 	except ValueError as e:
-		print(f"Job validation failed: {str(e)}")
+		logger.error("Job validation failed", error=str(e))
 		return None
 	except ClientError as e:
-		print(f"Error updating job: {e.response['Error']['Message']}")
+		logger.error("Error updating job", error=e.response['Error']['Message'])
 		return None
