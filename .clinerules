@@ -1,0 +1,64 @@
+# SnowScrape - Serverless Web Scraping Automation
+
+## Project Overview
+SnowScrape is a serverless web scraping automation tool with scheduled jobs and cloud storage capabilities. It enables users to extract data from websites on a schedule and store results securely.
+
+## Tech Stack
+- **Frontend**: Located in `frontend/` directory
+- **Backend**: Located in `backend/` directory
+- Architecture split between frontend and backend services
+
+## Project Structure
+- `frontend/`: User interface for configuring scraping jobs
+- `backend/`: Serverless functions for scraping execution
+- `app.js`: Main application entry point
+- Architecture and implementation documentation
+
+## Key Features
+- Scheduled web scraping jobs
+- Cloud storage integration
+- Serverless execution (cost-efficient)
+- Data extraction and transformation
+- Job monitoring and management
+
+## Documentation
+- `ARCHITECTURE.md`: System architecture and design decisions
+- `IMPLEMENTATION_PLAN.md`: Implementation roadmap
+- `PHASE_8_SUMMARY.md` & `PHASE_9_SUMMARY.md`: Development phase summaries
+- `README.md`: Project overview and setup
+
+## Development Environment
+- **Frontend dev server port**: 3001 (configured in `frontend/snowscrape/package.json`)
+- Run frontend with `npm run dev` from the `frontend/snowscrape` directory
+
+## Development Guidelines
+- Respect robots.txt and website terms of service
+- Implement rate limiting to avoid overloading target sites
+- Handle errors gracefully
+- Store scraped data securely
+- Follow ethical scraping practices
+
+## Code Style Guidelines
+- Use TypeScript where possible
+- Document scraping logic clearly
+- Add error handling for all network requests
+- Implement retry logic for failed requests
+
+## Privacy & Legal
+- Privacy policy and terms hosted on SnowForge main site
+- Contact: alexitofrancis@gmail.com
+- Deployed at: scrape.snowforge.dev
+
+## Important Notes
+- Always check robots.txt before scraping
+- Respect rate limits and crawl delays
+- Users are responsible for their use of scraped data
+- Comply with website terms of service
+- Handle personal data in compliance with GDPR and other regulations
+
+## Ethical Scraping
+- Do not scrape personal information without consent
+- Respect intellectual property rights
+- Do not use for malicious purposes
+- Implement proper caching to minimize requests
+- Be transparent about scraping activities
