@@ -8,6 +8,151 @@ import { Badge } from '@snowforge/ui';
 import { Calendar, Clock, ArrowLeft, Share2 } from 'lucide-react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import React from 'react';
+
+/**
+ * Parse inline markdown formatting (bold and inline code) into React elements.
+ * This avoids dangerouslySetInnerHTML entirely, preventing XSS.
+ */
+function renderInlineContent(text: string): React.ReactNode[] {
+  // Match **bold** and `inline code` patterns
+  const inlinePattern = /(\*\*(.*?)\*\*|`([^`]+)`)/g;
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = inlinePattern.exec(text)) !== null) {
+    // Add text before the match
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index));
+    }
+
+    if (match[2] !== undefined) {
+      // **bold** match
+      parts.push(
+        <strong key={`bold-${match.index}`}>{match[2]}</strong>
+      );
+    } else if (match[3] !== undefined) {
+      // `inline code` match
+      parts.push(
+        <code
+          key={`code-${match.index}`}
+          className="rounded bg-muted px-1.5 py-0.5 text-sm"
+        >
+          {match[3]}
+        </code>
+      );
+    }
+
+    lastIndex = match.index + match[0].length;
+  }
+
+  // Add remaining text after last match
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+
+  return parts.length > 0 ? parts : [text];
+}
+
+/**
+ * Safely render markdown-like blog content as React elements.
+ * Handles: paragraphs, ## headings, **bold**, `inline code`, ```code blocks```,
+ * and - / numbered list items.
+ *
+ * No dangerouslySetInnerHTML is used anywhere -- all content is text nodes
+ * or React elements, so injected HTML/scripts are rendered as plain text.
+ */
+function renderMarkdownContent(content: string): React.ReactNode[] {
+  const trimmed = content.trim();
+  const elements: React.ReactNode[] = [];
+
+  // First, split on fenced code blocks (```...```)
+  const codeBlockPattern = /```(\w*)\n([\s\S]*?)```/g;
+  const segments: { type: 'text' | 'codeblock'; value: string; lang?: string }[] = [];
+  let lastIdx = 0;
+  let codeMatch: RegExpExecArray | null;
+
+  while ((codeMatch = codeBlockPattern.exec(trimmed)) !== null) {
+    if (codeMatch.index > lastIdx) {
+      segments.push({ type: 'text', value: trimmed.slice(lastIdx, codeMatch.index) });
+    }
+    segments.push({ type: 'codeblock', value: codeMatch[2], lang: codeMatch[1] || undefined });
+    lastIdx = codeMatch.index + codeMatch[0].length;
+  }
+  if (lastIdx < trimmed.length) {
+    segments.push({ type: 'text', value: trimmed.slice(lastIdx) });
+  }
+
+  let blockIndex = 0;
+
+  for (const segment of segments) {
+    if (segment.type === 'codeblock') {
+      elements.push(
+        <pre
+          key={`codeblock-${blockIndex++}`}
+          className="mt-6 overflow-x-auto rounded-lg bg-muted p-4"
+        >
+          <code className="text-sm text-foreground">{segment.value.trimEnd()}</code>
+        </pre>
+      );
+      continue;
+    }
+
+    // Split text segments into blocks by double newlines
+    const blocks = segment.value.split(/\n\n+/);
+
+    for (const block of blocks) {
+      const trimmedBlock = block.trim();
+      if (!trimmedBlock) continue;
+
+      // Heading: ## ...
+      if (trimmedBlock.startsWith('## ')) {
+        const headingText = trimmedBlock.slice(3).trim();
+        elements.push(
+          <h2
+            key={`heading-${blockIndex++}`}
+            className="mt-12 mb-4 text-2xl font-bold text-foreground"
+          >
+            {renderInlineContent(headingText)}
+          </h2>
+        );
+      }
+      // Unordered list block: lines starting with "- "
+      else if (/^- /.test(trimmedBlock)) {
+        const items = trimmedBlock.split('\n').filter((line) => line.trim().startsWith('- '));
+        elements.push(
+          <ul key={`ul-${blockIndex++}`} className="mt-4 list-disc space-y-2 pl-6 text-muted-foreground">
+            {items.map((item, i) => (
+              <li key={i}>{renderInlineContent(item.replace(/^-\s+/, ''))}</li>
+            ))}
+          </ul>
+        );
+      }
+      // Ordered list block: lines starting with "1. ", "2. ", etc.
+      else if (/^\d+\.\s/.test(trimmedBlock)) {
+        const items = trimmedBlock.split('\n').filter((line) => /^\d+\.\s/.test(line.trim()));
+        elements.push(
+          <ol key={`ol-${blockIndex++}`} className="mt-4 list-decimal space-y-2 pl-6 text-muted-foreground">
+            {items.map((item, i) => (
+              <li key={i}>{renderInlineContent(item.replace(/^\d+\.\s+/, ''))}</li>
+            ))}
+          </ol>
+        );
+      }
+      // Regular paragraph
+      else {
+        elements.push(
+          <p key={`p-${blockIndex++}`} className="mt-6 text-muted-foreground leading-relaxed">
+            {renderInlineContent(trimmedBlock)}
+          </p>
+        );
+      }
+    }
+  }
+
+  return elements;
+}
 
 // Sample blog posts data (matches blog list page)
 const blogPosts = [
@@ -224,11 +369,8 @@ export default async function BlogPost({ params }: BlogPostPageProps) {
       {/* Article Content */}
       <article className="bg-background pb-24">
         <div className="mx-auto max-w-4xl px-6 lg:px-8">
-          <div className="prose prose-lg prose-slate max-w-none dark:prose-invert">
-            <div
-              className="whitespace-pre-line text-muted-foreground leading-relaxed"
-              dangerouslySetInnerHTML={{ __html: post.content.replace(/\n\n/g, '</p><p class="mt-6">').replace(/##/g, '<h2 class="mt-12 mb-4 text-2xl font-bold text-foreground">').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/`(.*?)`/g, '<code class="rounded bg-muted px-1.5 py-0.5 text-sm">$1</code>') }}
-            />
+          <div className="prose prose-lg max-w-none">
+            {renderMarkdownContent(post.content)}
           </div>
         </div>
       </article>
