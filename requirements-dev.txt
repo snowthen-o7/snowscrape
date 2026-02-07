@@ -1,0 +1,7 @@
+# Testing dependencies (not deployed to Lambda)
+pytest>=8.3.4
+pytest-cov>=6.0.0
+pytest-mock>=3.14.0
+pytest-env>=1.1.5
+moto>=5.0.24
+responses>=0.25.3

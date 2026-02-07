@@ -3,7 +3,8 @@ name: Deploy to AWS Lambda
 on:
   push:
     branches:
-      - main  # Change to your main branch
+      - main  # Trigger for production
+      - dev   # Trigger for development
 
 jobs:
   deploy:
@@ -34,4 +35,8 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           SERVERLESS_ACCESS_KEY: ${{ secrets.SERVERLESS_ACCESS_KEY }}
         run: |
-          serverless deploy --debug
+          if [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            serverless deploy --stage prod --debug
+          elif [ "${{ github.ref }}" == "refs/heads/dev" ]; then
+            serverless deploy --stage dev --debug
+          fi

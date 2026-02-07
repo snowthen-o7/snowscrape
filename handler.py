@@ -1,57 +1,470 @@
+import boto3
 import json
+import os
+import time
+import uuid
+# paramiko is imported lazily in validate_sftp_url_handler when needed
 
-from job_manager import create_job, delete_job, get_all_jobs, get_job, get_job_crawls, pause_job, refresh_job, resume_job, update_job
+from botocore.exceptions import ClientError
+from connection_pool import get_table, get_s3_client, get_sqs_client
 from crawl_manager import get_crawl
-from utils import validate_job_data
+from datetime import datetime, timedelta, timezone
+from job_manager import cancel_job, create_job, delete_job, get_all_jobs, get_job, get_job_crawls, pause_job, process_job, refresh_job, resume_job, update_job
+from logger import get_logger, log_lambda_invocation, log_exception
+from metrics import get_metrics_emitter
+from observatory_client import get_observatory_client
+from urllib.parse import urlparse
+from utils import decimal_to_float, detect_csv_settings, extract_token_from_event, get_links_for_job, parse_links_from_file, preview_url_template, refresh_job_urls, validate_clerk_token, validate_job_data, verify_resource_ownership
+from cache import cache_get, cache_set, cache_delete
+from webhook_dispatcher import WebhookDispatcher
+from proxy_manager import get_proxy_manager
+from scraper_preview import fetch_and_parse_page, test_extraction
+
+# Initialize logger, metrics, and observatory
+logger = get_logger(__name__)
+metrics = get_metrics_emitter()
+observatory = get_observatory_client()
+
+# CORS origin from environment - never use wildcard in production
+CORS_ALLOWED_ORIGIN = os.environ.get('CORS_ALLOWED_ORIGIN', 'http://localhost:3001')
+
+# Use connection pool for AWS services
+job_table = get_table(os.environ['DYNAMODB_JOBS_TABLE'])
+template_table = get_table(os.environ['DYNAMODB_TEMPLATES_TABLE'])
+webhook_table = get_table(os.environ['DYNAMODB_WEBHOOKS_TABLE'])
+webhook_deliveries_table = get_table(os.environ['DYNAMODB_WEBHOOK_DELIVERIES_TABLE'])
+s3 = get_s3_client()
+sqs = get_sqs_client()
+
+# Health check endpoint
+def health_check_handler(event, context):
+	"""
+	Health check endpoint for monitoring service availability.
+	Tests connectivity to DynamoDB, S3, and SQS.
+	Also reports health status to Observatory for centralized monitoring.
+	"""
+	start_time = time.time()
+	health_status = {
+		'status': 'healthy',
+		'timestamp': datetime.now(timezone.utc).isoformat(),
+		'service': 'snowscrape-backend',
+		'version': '1.0.0',
+		'checks': {}
+	}
+
+	try:
+		# Check DynamoDB connectivity
+		try:
+			job_table.table_status
+			health_status['checks']['dynamodb'] = {'status': 'healthy'}
+		except Exception as e:
+			health_status['checks']['dynamodb'] = {'status': 'unhealthy', 'error': str(e)}
+			health_status['status'] = 'degraded'
+
+		# Check S3 connectivity
+		try:
+			s3.list_buckets()
+			health_status['checks']['s3'] = {'status': 'healthy'}
+		except Exception as e:
+			health_status['checks']['s3'] = {'status': 'unhealthy', 'error': str(e)}
+			health_status['status'] = 'degraded'
+
+		# Check SQS connectivity
+		try:
+			sqs.get_queue_url(QueueName=os.environ['SQS_JOB_QUEUE'])
+			health_status['checks']['sqs'] = {'status': 'healthy'}
+		except Exception as e:
+			health_status['checks']['sqs'] = {'status': 'unhealthy', 'error': str(e)}
+			health_status['status'] = 'degraded'
+
+		# Calculate response time
+		response_time_ms = int((time.time() - start_time) * 1000)
+
+		# Report to Observatory (non-blocking - don't fail health check if Observatory is down)
+		try:
+			if health_status['status'] == 'healthy':
+				observatory.report_health('healthy', response_time_ms)
+			elif health_status['status'] == 'degraded':
+				unhealthy_services = [
+					service for service, check in health_status['checks'].items()
+					if check['status'] == 'unhealthy'
+				]
+				error_msg = f"Degraded services: {', '.join(unhealthy_services)}"
+				observatory.report_health('degraded', response_time_ms, error_msg)
+			else:
+				observatory.report_health('down', response_time_ms, 'Service down')
+		except Exception as obs_error:
+			# Don't fail health check if Observatory reporting fails
+			logger.warning("Failed to report health to Observatory", error=str(obs_error))
+
+		# Determine overall status code
+		status_code = 200 if health_status['status'] == 'healthy' else 503
+
+		logger.info("Health check completed", overall_status=health_status['status'],
+				   response_time_ms=response_time_ms)
+
+		return {
+			'statusCode': status_code,
+			'body': json.dumps(health_status),
+			'headers': {
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Content-Type': 'application/json',
+				'Cache-Control': 'no-cache, no-store, must-revalidate'
+			}
+		}
+
+	except Exception as e:
+		log_exception(logger, "Health check failed", e)
+
+		# Report critical failure to Observatory
+		try:
+			response_time_ms = int((time.time() - start_time) * 1000)
+			observatory.report_health('down', response_time_ms, str(e))
+		except Exception:
+			pass  # Don't fail if Observatory is unreachable
+
+		return {
+			'statusCode': 503,
+			'body': json.dumps({
+				'status': 'unhealthy',
+				'timestamp': datetime.now(timezone.utc).isoformat(),
+				'error': str(e)
+			}),
+			'headers': {
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Content-Type': 'application/json'
+			}
+		}
 
 # Create a new job
 def create_job_handler(event, context):
-	print(event)
-	job_data = event['body']
-	validate_job_data(json.loads(job_data))  # Ensure the job request is valid
-	job_id = create_job(job_data)
-	return {
-		"statusCode": 201,
-		"body": f"Job {job_id} created successfully",
-		"headers": {
-				'Access-Control-Allow-Credentials': True,
-				'Access-Control-Allow-Origin': '*',
+	start_time = time.time()
+	log_lambda_invocation(event, context, logger)
+
+	try:
+		# Authentication
+		token = extract_token_from_event(event)
+		if not token:
+			logger.warning("Authentication failed - No token provided")
+			duration_ms = (time.time() - start_time) * 1000
+			logger.log_request('POST', '/jobs', 401, duration_ms)
+			return {
+				"statusCode": 401,
+				"body": json.dumps({"message": "Unauthorized - No token provided"}),
+				"headers": {
+					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					"Content-Type": "application/json"
+				}
+			}
+
+		try:
+			user_data = validate_clerk_token(token)
+			logger.info("User authenticated", user_id=user_data.get("sub"))
+		except Exception as e:
+			logger.warning("Token validation failed", error=str(e))
+			duration_ms = (time.time() - start_time) * 1000
+			logger.log_request('POST', '/jobs', 401, duration_ms)
+			return {
+				"statusCode": 401,
+				"body": json.dumps({"message": str(e)}),
+				"headers": {
+					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					"Content-Type": "application/json"
+				}
+			}
+
+		# Parse and validate job data
+		job_data = json.loads(event['body'])
+		validate_job_data(job_data)
+		job_data["user_id"] = user_data["sub"]
+
+		logger.info("Creating job", job_name=job_data.get('name'), user_id=user_data.get("sub"))
+
+		# Create job
+		job_id = create_job(job_data)
+
+		if job_id:
+			# Invalidate user's job list cache
+			cache_delete(f"jobs:{user_data['sub']}")
+			logger.log_job_event(job_id, 'created', 'ready', job_name=job_data.get('name'))
+
+			# Emit custom metrics for job creation
+			try:
+				url_count = len(job_data.get('links', []))
+				metrics.emit_job_created(job_id, url_count)
+			except Exception as metrics_error:
+				logger.warning("Failed to emit job creation metrics", error=str(metrics_error))
+
+			duration_ms = (time.time() - start_time) * 1000
+			logger.log_request('POST', '/jobs', 201, duration_ms, job_id=job_id)
+
+			return {
+				"statusCode": 201,
+				"body": json.dumps({"message": "Job created successfully", "job_id": job_id}),
+				"headers": {
+					'Access-Control-Allow-Credentials': True,
+					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					"Content-Type": "application/json"
+				}
+			}
+		else:
+			logger.error("Job creation failed", job_data=job_data)
+			duration_ms = (time.time() - start_time) * 1000
+			logger.log_request('POST', '/jobs', 500, duration_ms)
+
+			return {
+				"statusCode": 500,
+				"body": json.dumps({"message": "Failed to create job"}),
+				"headers": {
+					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					"Content-Type": "application/json"
+				}
+			}
+
+	except ValueError as e:
+		log_exception(logger, "Job validation failed", e)
+		duration_ms = (time.time() - start_time) * 1000
+		logger.log_request('POST', '/jobs', 400, duration_ms)
+
+		return {
+			"statusCode": 400,
+			"body": json.dumps({"message": f"Validation error: {str(e)}"}),
+			"headers": {
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
 				"Content-Type": "application/json"
 			}
-	}
+		}
+
+	except Exception as e:
+		log_exception(logger, "Unexpected error in create_job_handler", e)
+		duration_ms = (time.time() - start_time) * 1000
+		logger.log_request('POST', '/jobs', 500, duration_ms)
+
+		return {
+			"statusCode": 500,
+			"body": json.dumps({"message": "Internal server error"}),
+			"headers": {
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+	finally:
+		logger.clear_context()
 
 # Delete a job and cancel all associated crawls
 def delete_job_handler(event, context):
-	print(event)
+	logger.debug("Received event", event_keys=list(event.keys()))
+
+	# Authentication
+	token = extract_token_from_event(event)
+	if not token:
+		return {
+			"statusCode": 401,
+			"body": json.dumps({"message": "Unauthorized - No token provided"}),
+			"headers": {
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+
+	try:
+		user_data = validate_clerk_token(token)
+		user_id = user_data.get("sub")
+	except Exception as e:
+		return {
+			"statusCode": 401,
+			"body": json.dumps({"message": str(e)}),
+			"headers": {
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+
 	job_id = event['pathParameters']['job_id']
+
+	# Verify ownership
+	job = get_job(job_id)
+	if not job:
+		return {
+			"statusCode": 404,
+			"body": json.dumps({"message": "Job not found"}),
+			"headers": {
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+
+	try:
+		verify_resource_ownership(job, user_id, 'job')
+	except PermissionError as e:
+		logger.warning("Unauthorized job deletion attempt", job_id=job_id, user_id=user_id)
+		return {
+			"statusCode": 403,
+			"body": json.dumps({"message": str(e)}),
+			"headers": {
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+
 	delete_job(job_id)
+	cache_delete(f"job:{job_id}")
+	cache_delete(f"jobs:{user_id}")
 	return {
 		"statusCode": 200,
-		"body": f"Job {job_id} deleted successfully",
+		"body": json.dumps({"message": "Job deleted successfully", "job_id": job_id}),
 		"headers": {
 				'Access-Control-Allow-Credentials': True,
-				'Access-Control-Allow-Origin': '*',
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
 				"Content-Type": "application/json"
 			}
 	}
 
 # Get the status of all jobs
 def get_all_job_statuses_handler(event, context):
-	jobs = get_all_jobs()
-	return {
-		"statusCode": 200,
-		"body": json.dumps(jobs),  # Ensure body is a JSON string
-		"headers": {
-			'Access-Control-Allow-Credentials': True,
-    	'Access-Control-Allow-Origin': '*',
-			"Content-Type": "application/json"
+	"""
+	Get all job statuses with pagination support.
+	Only returns jobs belonging to the authenticated user.
+
+	Query parameters:
+		- limit: Number of items to return (default: 50, max: 100)
+		- last_key: Base64-encoded pagination key
+	"""
+	try:
+		# Authentication
+		token = extract_token_from_event(event)
+		if not token:
+			return {
+				"statusCode": 401,
+				"body": json.dumps({"message": "Unauthorized - No token provided"}),
+				"headers": {
+					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					"Content-Type": "application/json"
+				}
+			}
+
+		try:
+			user_data = validate_clerk_token(token)
+			user_id = user_data.get("sub")
+		except Exception as e:
+			return {
+				"statusCode": 401,
+				"body": json.dumps({"message": str(e)}),
+				"headers": {
+					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					"Content-Type": "application/json"
+				}
+			}
+
+		# Extract pagination parameters from query string
+		query_params = event.get('queryStringParameters') or {}
+		limit = min(int(query_params.get('limit', 50)), 100)  # Max 100 items per request
+
+		last_evaluated_key = None
+		if 'last_key' in query_params:
+			# Decode pagination key (base64 encoded JSON)
+			import base64
+			try:
+				last_evaluated_key = json.loads(base64.b64decode(query_params['last_key']))
+			except Exception as e:
+				logger.warning("Invalid pagination key", error=str(e))
+
+		# Fetch jobs with pagination
+		result = get_all_jobs(limit=limit, last_evaluated_key=last_evaluated_key)
+
+		# Filter jobs to only include those belonging to the authenticated user
+		user_jobs = [job for job in result['items'] if job.get('user_id') == user_id]
+
+		# Encode pagination key for response
+		import base64
+		response_body = {
+			'jobs': user_jobs,
+			'count': len(user_jobs)
 		}
-	}
+
+		if 'last_evaluated_key' in result:
+			response_body['last_key'] = base64.b64encode(
+				json.dumps(result['last_evaluated_key']).encode()
+			).decode()
+
+		logger.info("Retrieved job statuses", count=len(user_jobs), user_id=user_id)
+
+		return {
+			"statusCode": 200,
+			"body": json.dumps(response_body),
+			"headers": {
+				'Access-Control-Allow-Credentials': True,
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+	except Exception as e:
+		log_exception(logger, "Error retrieving job statuses", e)
+		return {
+			"statusCode": 500,
+			"body": json.dumps({"message": "Internal server error"}),
+			"headers": {
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
 
 # Get specific crawl details
 def get_crawl_handler(event, context):
-	print(event)
+	logger.debug("Received event", event_keys=list(event.keys()))
+
+	# Authentication
+	token = extract_token_from_event(event)
+	if not token:
+		return {
+			"statusCode": 401,
+			"body": json.dumps({"message": "Unauthorized - No token provided"}),
+			"headers": {
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+
+	try:
+		user_data = validate_clerk_token(token)
+		user_id = user_data.get("sub")
+	except Exception as e:
+		return {
+			"statusCode": 401,
+			"body": json.dumps({"message": str(e)}),
+			"headers": {
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+
 	job_id = event['pathParameters']['job_id']
+
+	# Verify ownership of the parent job
+	job = get_job(job_id)
+	if not job:
+		return {
+			"statusCode": 404,
+			"body": json.dumps({"message": "Job not found"}),
+			"headers": {
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+
+	try:
+		verify_resource_ownership(job, user_id, 'job')
+	except PermissionError as e:
+		logger.warning("Unauthorized crawl access attempt", job_id=job_id, user_id=user_id)
+		return {
+			"statusCode": 403,
+			"body": json.dumps({"message": str(e)}),
+			"headers": {
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+
 	crawl_id = event['pathParameters']['crawl_id']
 	crawl = get_crawl(job_id, crawl_id)
 	if crawl:
@@ -60,120 +473,2894 @@ def get_crawl_handler(event, context):
 			"body": json.dumps(crawl),
 			"headers": {
 					'Access-Control-Allow-Credentials': True,
-					'Access-Control-Allow-Origin': '*',
+					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
 					"Content-Type": "application/json"
 				}
 		}
 	else:
 		return {
 			"statusCode": 404,
-			"body": "Crawl not found",
+			"body": json.dumps({"message": "Crawl not found"}),
 			"headers": {
 					'Access-Control-Allow-Credentials': True,
-					'Access-Control-Allow-Origin': '*',
+					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
 					"Content-Type": "application/json"
 				}
 		}
 
 # Get all crawls for a job
 def get_job_crawls_handler(event, context):
-	print(event)
+	logger.debug("Received event", event_keys=list(event.keys()))
+
+	# Authentication
+	token = extract_token_from_event(event)
+	if not token:
+		return {
+			"statusCode": 401,
+			"body": json.dumps({"message": "Unauthorized - No token provided"}),
+			"headers": {
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+
+	try:
+		user_data = validate_clerk_token(token)
+		user_id = user_data.get("sub")
+	except Exception as e:
+		return {
+			"statusCode": 401,
+			"body": json.dumps({"message": str(e)}),
+			"headers": {
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+
 	job_id = event['pathParameters']['job_id']
+
+	# Verify ownership of the parent job
+	job = get_job(job_id)
+	if not job:
+		return {
+			"statusCode": 404,
+			"body": json.dumps({"message": "Job not found"}),
+			"headers": {
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+
+	try:
+		verify_resource_ownership(job, user_id, 'job')
+	except PermissionError as e:
+		logger.warning("Unauthorized crawls access attempt", job_id=job_id, user_id=user_id)
+		return {
+			"statusCode": 403,
+			"body": json.dumps({"message": str(e)}),
+			"headers": {
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+
 	crawls = get_job_crawls(job_id)
 	return {
 		"statusCode": 200,
 		"body": json.dumps(crawls),
 			"headers": {
 					'Access-Control-Allow-Credentials': True,
-					'Access-Control-Allow-Origin': '*',
+					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
 					"Content-Type": "application/json"
 				}
 	}
 
 # Get job details
 def get_job_details_handler(event, context):
-	print(event)
-	job_id = event['pathParameters']['job_id']
-	job = get_job(job_id)
-	if job:
+	logger.debug("Received event", event_keys=list(event.keys()))
+
+	# Authentication
+	token = extract_token_from_event(event)
+	if not token:
 		return {
-			"statusCode": 200,
-			"body": json.dumps(job),
+			"statusCode": 401,
+			"body": json.dumps({"message": "Unauthorized - No token provided"}),
 			"headers": {
-					'Access-Control-Allow-Credentials': True,
-					'Access-Control-Allow-Origin': '*',
-					"Content-Type": "application/json"
-				}
-		}
-	else:
-		return {
-			"statusCode": 404,
-			"body": "Job not found",
-			"headers": {
-					'Access-Control-Allow-Credentials': True,
-					'Access-Control-Allow-Origin': '*',
-					"Content-Type": "application/json"
-				}
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
 		}
 
-# Pause a job
-def pause_job_handler(event, context):
-	print(event)
+	try:
+		user_data = validate_clerk_token(token)
+		user_id = user_data.get("sub")
+	except Exception as e:
+		return {
+			"statusCode": 401,
+			"body": json.dumps({"message": str(e)}),
+			"headers": {
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+
 	job_id = event['pathParameters']['job_id']
-	pause_job(job_id)
+
+	# Try cache first
+	cache_key = f"job:{job_id}"
+	job = cache_get(cache_key)
+	if not job:
+		job = get_job(job_id)
+		if job:
+			cache_set(cache_key, decimal_to_float(job), ttl=60)
+
+	if not job:
+		return {
+			"statusCode": 404,
+			"body": json.dumps({"message": "Job not found"}),
+			"headers": {
+				'Access-Control-Allow-Credentials': True,
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+
+	# Verify ownership
+	try:
+		verify_resource_ownership(job, user_id, 'job')
+	except PermissionError as e:
+		logger.warning("Unauthorized job access attempt", job_id=job_id, user_id=user_id)
+		return {
+			"statusCode": 403,
+			"body": json.dumps({"message": str(e)}),
+			"headers": {
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+
 	return {
 		"statusCode": 200,
-		"body": f"Job {job_id} paused successfully",
+		"body": json.dumps(job),
 		"headers": {
 				'Access-Control-Allow-Credentials': True,
-				'Access-Control-Allow-Origin': '*',
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
 				"Content-Type": "application/json"
 			}
 	}
 
+# Pause a job
+def pause_job_handler(event, context):
+	logger.debug("Received event", event_keys=list(event.keys()))
+
+	# Authentication
+	token = extract_token_from_event(event)
+	if not token:
+		return {
+			"statusCode": 401,
+			"body": json.dumps({"message": "Unauthorized - No token provided"}),
+			"headers": {
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+
+	try:
+		user_data = validate_clerk_token(token)
+		user_id = user_data.get("sub")
+	except Exception as e:
+		return {
+			"statusCode": 401,
+			"body": json.dumps({"message": str(e)}),
+			"headers": {
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+
+	job_id = event['pathParameters']['job_id']
+
+	# Verify ownership
+	job = get_job(job_id)
+	if not job:
+		return {
+			"statusCode": 404,
+			"body": json.dumps({"message": "Job not found"}),
+			"headers": {
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+
+	try:
+		verify_resource_ownership(job, user_id, 'job')
+	except PermissionError as e:
+		logger.warning("Unauthorized job pause attempt", job_id=job_id, user_id=user_id)
+		return {
+			"statusCode": 403,
+			"body": json.dumps({"message": str(e)}),
+			"headers": {
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+
+	pause_job(job_id)
+	return {
+		"statusCode": 200,
+		"body": json.dumps({"message": "Job paused successfully", "job_id": job_id}),
+		"headers": {
+				'Access-Control-Allow-Credentials': True,
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+	}
+
+# Cancel a job
+def cancel_job_handler(event, context):
+	logger.debug("Received event", event_keys=list(event.keys()))
+
+	# Authentication
+	token = extract_token_from_event(event)
+	if not token:
+		return {
+			"statusCode": 401,
+			"body": json.dumps({"message": "Unauthorized - No token provided"}),
+			"headers": {
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+
+	try:
+		user_data = validate_clerk_token(token)
+		user_id = user_data.get("sub")
+	except Exception as e:
+		return {
+			"statusCode": 401,
+			"body": json.dumps({"message": str(e)}),
+			"headers": {
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+
+	job_id = event['pathParameters']['job_id']
+
+	# Verify ownership
+	job = get_job(job_id)
+	if not job:
+		return {
+			"statusCode": 404,
+			"body": json.dumps({"message": "Job not found"}),
+			"headers": {
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+
+	try:
+		verify_resource_ownership(job, user_id, 'job')
+	except PermissionError as e:
+		logger.warning("Unauthorized job cancel attempt", job_id=job_id, user_id=user_id)
+		return {
+			"statusCode": 403,
+			"body": json.dumps({"message": str(e)}),
+			"headers": {
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+
+	result = cancel_job(job_id)
+
+	if result:
+		return {
+			"statusCode": 200,
+			"body": json.dumps({"message": "Job cancelled successfully", "job_id": job_id}),
+			"headers": {
+				'Access-Control-Allow-Credentials': True,
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+	else:
+		return {
+			"statusCode": 500,
+			"body": json.dumps({"message": "Failed to cancel job", "job_id": job_id}),
+			"headers": {
+				'Access-Control-Allow-Credentials': True,
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+
+# Process a job (Triggered by SQS)
+def process_job_handler(event, context):
+	start_time = time.time()
+	log_lambda_invocation(event, context, logger)
+
+	processed_count = 0
+	failed_count = 0
+
+	try:
+		# Process each message from SQS
+		for record in event['Records']:
+			record_start_time = time.time()
+			job_id = None
+
+			try:
+				# Parse job data
+				job_data = json.loads(record['body'])
+				job_id = job_data.get('job_id')
+
+				logger.set_context(job_id=job_id, message_id=record.get('messageId'))
+				logger.log_job_event(job_id, 'processing_started', 'processing',
+									message_id=record.get('messageId'))
+
+				# Perform job processing
+				result = process_job(job_data)
+
+				# Check if job was cancelled or timed out
+				if isinstance(result, dict):
+					result_status = result.get('status')
+					record_duration_ms = (time.time() - record_start_time) * 1000
+
+					if result_status == 'cancelled':
+						logger.log_job_event(job_id, 'cancelled', 'cancelled')
+						metrics.emit_job_processing_duration(job_id, record_duration_ms, 'cancelled')
+						processed_count += 1
+						continue
+					elif result_status == 'timeout':
+						logger.log_job_event(job_id, 'timeout', 'timeout')
+						metrics.emit_job_processing_duration(job_id, record_duration_ms, 'timeout')
+						failed_count += 1
+						continue
+					elif result_status == 'error':
+						logger.error("Job processing failed", job_id=job_id,
+									error_message=result.get('message'))
+						metrics.emit_job_processing_duration(job_id, record_duration_ms, 'error')
+						failed_count += 1
+						continue
+
+				# Store the result in S3
+				try:
+					s3_upload_start = time.time()
+					result_json = json.dumps(result)
+					s3.put_object(
+						Bucket=os.environ['S3_BUCKET'],
+						Key=f'jobs/{job_id}/result.json',
+						Body=result_json
+					)
+					s3_upload_duration = (time.time() - s3_upload_start) * 1000
+					logger.info("Results saved to S3", job_id=job_id,
+							   s3_key=f'jobs/{job_id}/result.json')
+
+					# Emit S3 upload metrics
+					try:
+						metrics.emit_s3_upload(job_id, len(result_json.encode('utf-8')), s3_upload_duration)
+					except Exception:
+						pass  # Ignore metrics errors
+				except Exception as s3_error:
+					log_exception(logger, "Failed to save results to S3", s3_error, job_id=job_id)
+					# Continue - don't fail the entire job if S3 save fails
+
+				# Update DynamoDB with job status
+				try:
+					job_table.update_item(
+						Key={'job_id': job_id},
+						UpdateExpression="SET #status = :status, #last_updated = :last_updated",
+						ExpressionAttributeNames={'#status': 'status', '#last_updated': 'last_updated'},
+						ExpressionAttributeValues={
+							':status': 'ready',
+							':last_updated': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+						}
+					)
+
+					record_duration_ms = (time.time() - record_start_time) * 1000
+					logger.log_job_event(job_id, 'completed', 'ready',
+									   duration_ms=record_duration_ms)
+
+					# Emit job completion metrics
+					try:
+						metrics.emit_job_processing_duration(job_id, record_duration_ms, 'completed')
+						# Emit URLs processed count if available in result
+						if isinstance(result, dict):
+							urls_processed = len(result.get('crawl_results', []))
+							if urls_processed > 0:
+								metrics.emit_urls_processed(job_id, urls_processed)
+					except Exception:
+						pass  # Ignore metrics errors
+
+					processed_count += 1
+
+				except Exception as db_error:
+					log_exception(logger, "Failed to update job status", db_error, job_id=job_id)
+					failed_count += 1
+
+			except json.JSONDecodeError as e:
+				log_exception(logger, "Invalid JSON in SQS message", e,
+							message_id=record.get('messageId'))
+				failed_count += 1
+
+			except Exception as e:
+				log_exception(logger, "Error processing job record", e,
+							job_id=job_id, message_id=record.get('messageId'))
+				failed_count += 1
+
+			finally:
+				# Release the distributed lock so the scheduler can re-enqueue this job next cycle
+				if job_id:
+					try:
+						job_table.update_item(
+							Key={'job_id': job_id},
+							UpdateExpression='REMOVE lock_owner, lock_expiry'
+						)
+					except Exception as unlock_error:
+						logger.warning("Failed to release lock for job",
+									  job_id=job_id, error=str(unlock_error))
+				logger.clear_context()
+
+		# Log batch processing summary
+		total_duration_ms = (time.time() - start_time) * 1000
+		logger.info("Batch processing completed",
+				   total_records=len(event['Records']),
+				   processed=processed_count,
+				   failed=failed_count,
+				   duration_ms=total_duration_ms)
+
+		return {
+			'statusCode': 200,
+			'body': json.dumps({
+				"message": "Job batch processed",
+				"processed": processed_count,
+				"failed": failed_count
+			}),
+			"headers": {
+				'Access-Control-Allow-Credentials': True,
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+
+	except Exception as e:
+		log_exception(logger, "Fatal error in process_job_handler", e)
+		return {
+			'statusCode': 500,
+			'body': json.dumps({"message": "Internal server error"}),
+			"headers": {
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+
 # Refresh a job (manual re-crawl)
 def refresh_job_handler(event, context):
-	print(event)
+	logger.debug("Received event", event_keys=list(event.keys()))
+
+	# Authentication
+	token = extract_token_from_event(event)
+	if not token:
+		return {
+			"statusCode": 401,
+			"body": json.dumps({"message": "Unauthorized - No token provided"}),
+			"headers": {
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+
+	try:
+		user_data = validate_clerk_token(token)
+		user_id = user_data.get("sub")
+	except Exception as e:
+		return {
+			"statusCode": 401,
+			"body": json.dumps({"message": str(e)}),
+			"headers": {
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+
 	job_id = event['pathParameters']['job_id']
+
+	# Verify ownership
+	job = get_job(job_id)
+	if not job:
+		return {
+			"statusCode": 404,
+			"body": json.dumps({"message": "Job not found"}),
+			"headers": {
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+
+	try:
+		verify_resource_ownership(job, user_id, 'job')
+	except PermissionError as e:
+		logger.warning("Unauthorized job refresh attempt", job_id=job_id, user_id=user_id)
+		return {
+			"statusCode": 403,
+			"body": json.dumps({"message": str(e)}),
+			"headers": {
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+
 	refresh_job(job_id)
 	return {
 		"statusCode": 200,
-		"body": f"Job {job_id} refreshed successfully",
+		"body": json.dumps({"message": "Job refreshed successfully", "job_id": job_id}),
 		"headers": {
 				'Access-Control-Allow-Credentials': True,
-				'Access-Control-Allow-Origin': '*',
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
 				"Content-Type": "application/json"
 			}
 	}
 
 # Resume a job
 def resume_job_handler(event, context):
-	print(event)
+	logger.debug("Received event", event_keys=list(event.keys()))
+
+	# Authentication
+	token = extract_token_from_event(event)
+	if not token:
+		return {
+			"statusCode": 401,
+			"body": json.dumps({"message": "Unauthorized - No token provided"}),
+			"headers": {
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+
+	try:
+		user_data = validate_clerk_token(token)
+		user_id = user_data.get("sub")
+	except Exception as e:
+		return {
+			"statusCode": 401,
+			"body": json.dumps({"message": str(e)}),
+			"headers": {
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+
 	job_id = event['pathParameters']['job_id']
+
+	# Verify ownership
+	job = get_job(job_id)
+	if not job:
+		return {
+			"statusCode": 404,
+			"body": json.dumps({"message": "Job not found"}),
+			"headers": {
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+
+	try:
+		verify_resource_ownership(job, user_id, 'job')
+	except PermissionError as e:
+		logger.warning("Unauthorized job resume attempt", job_id=job_id, user_id=user_id)
+		return {
+			"statusCode": 403,
+			"body": json.dumps({"message": str(e)}),
+			"headers": {
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+
 	resume_job(job_id)
 	return {
 		"statusCode": 200,
-		"body": f"Job {job_id} resumed successfully",
+		"body": json.dumps({"message": "Job resumed successfully", "job_id": job_id}),
 		"headers": {
 				'Access-Control-Allow-Credentials': True,
-				'Access-Control-Allow-Origin': '*',
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
 				"Content-Type": "application/json"
 			}
 	}
- 
+
+def schedule_jobs_handler(event, context):
+	"""
+	This function runs on a schedule (e.g., every hour) and finds jobs that need to be run,
+	sending them to SQS for processing.
+	"""
+	# Get current time to check jobs that need to be run
+	current_time = datetime.now(timezone.utc)
+	current_day = current_time.strftime('%A')  # E.g., 'Monday', 'Tuesday'
+	current_hour = current_time.hour  # E.g., 14 for 2 PM
+	current_minute = current_time.minute  # E.g., 45 for 45 minutes past the hour
+	logger.info("Schedule check", current_time=str(current_time), day=current_day, hour=current_hour, minute=current_minute)
+
+	# Query the ScheduleIndex GSI for active jobs whose nextRun is at or before now
+	jobs = job_table.query(
+		IndexName='ScheduleIndex',
+		KeyConditionExpression='jobStatus = :status AND nextRun <= :now',
+		ExpressionAttributeValues={
+			':status': 'active',
+			':now': current_time.strftime('%Y-%m-%dT%H:%M:%SZ')
+		}
+	).get('Items', [])
+
+	jobs_cleaned = decimal_to_float(jobs)
+
+	logger.info("Jobs to process", job_count=len(jobs_cleaned))
+	for job in jobs_cleaned:
+		scheduling = job.get('scheduling', {})
+		job_days = scheduling.get('days', [])  # E.g., ['Monday', 'Wednesday']
+		job_hours = scheduling.get('hours', [])  # E.g., [12, 14] for 12 PM and 2 PM or 24 for "Every Hour"
+		job_minutes = scheduling.get('minutes', [])  # E.g., [0, 15, 30, 45] for multiples of 5
+
+		# Check if the job has a last_run timestamp
+		last_run_str = job.get('last_run')
+		last_run = datetime.strptime(last_run_str, '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc) if last_run_str else None
+
+		# If 'Every Day' is in the job_days, it means the job should run every day
+		should_run_today = 'Every Day' in job_days or current_day in job_days
+		
+		# If '24' is in the job_hours, it means the job should run every hour
+		should_run_this_hour = 24 in job_hours or current_hour in job_hours
+  
+		# Determine if the job should run this minute (based on multiples of 5)
+		should_run_this_minute = 60 in job_minutes or current_minute in job_minutes
+		
+		logger.debug("Job schedule evaluation", job_id=job['job_id'], days=job_days, hours=job_hours, minutes=job_minutes, last_run=str(last_run), should_run_today=should_run_today, should_run_this_hour=should_run_this_hour, should_run_this_minute=should_run_this_minute)
+
+		# Check if the job should run based on its scheduling
+		if should_run_today and should_run_this_hour and should_run_this_minute:
+			# If last_run exists, check if the current time is after the next scheduled run
+			if last_run:
+				# Calculate the next scheduled minute for the job
+				next_scheduled_minute = min([minute for minute in job_minutes if minute > last_run.minute], default=job_minutes[0])
+
+				# If the next minute has already passed for the current hour, move to the next hour
+				if next_scheduled_minute <= last_run.minute:
+					next_run_time = last_run.replace(hour=(last_run.hour + 1) % 24, minute=int(next_scheduled_minute), second=0, microsecond=0)
+				else:
+					next_run_time = last_run.replace(minute=int(next_scheduled_minute), second=0, microsecond=0)
+
+				# Compare current time to the next calculated run time
+				if current_time < next_run_time:
+					logger.info("Job was already run recently, skipping", job_id=job['job_id'])
+					continue
+
+			# Acquire a distributed lock to prevent duplicate enqueuing
+			lock_owner = context.function_name + '-' + context.aws_request_id
+			try:
+				job_table.update_item(
+					Key={'job_id': job['job_id']},
+					UpdateExpression='SET lock_owner = :owner, lock_expiry = :expiry',
+					ConditionExpression='attribute_not_exists(lock_owner) OR lock_expiry < :now',
+					ExpressionAttributeValues={
+						':owner': lock_owner,
+						':now': current_time.strftime('%Y-%m-%dT%H:%M:%SZ'),
+						':expiry': (current_time + timedelta(minutes=30)).strftime('%Y-%m-%dT%H:%M:%SZ')
+					}
+				)
+			except ClientError as e:
+				if e.response['Error']['Code'] == 'ConditionalCheckFailedException':
+					logger.info("Job is already locked by another invocation, skipping", job_id=job['job_id'])
+					continue
+				raise
+
+			# Refresh the URLs based on source type (CSV or direct URL with variables)
+			# For direct_url mode, variables are resolved at execution time
+			try:
+				links = get_links_for_job(job)  # Handles both CSV and direct_url modes
+				logger.info("Refreshed links for job", job_id=job['job_id'], link_count=len(links))
+
+				# Update the URL table with the refreshed links
+				refresh_job_urls(job['job_id'], links)
+
+			except Exception as e:
+				logger.error("Failed to refresh URLs for job", job_id=job['job_id'], error=str(e))
+				# Release the lock since we failed before enqueuing
+				try:
+					job_table.update_item(
+						Key={'job_id': job['job_id']},
+						UpdateExpression='REMOVE lock_owner, lock_expiry'
+					)
+				except Exception as unlock_error:
+					logger.error("Failed to release lock for job", job_id=job['job_id'], error=str(unlock_error))
+				continue
+
+			# Send the job to the SQS queue for processing
+			logger.info("Scheduling job for processing", job_id=job['job_id'])
+			sqs.send_message(
+				QueueUrl=os.environ['SQS_JOB_QUEUE_URL'],
+				MessageBody=json.dumps(job)
+			)
+
+			# Update the job status to queued
+			job_table.update_item(
+				Key={'job_id': job['job_id']},
+				UpdateExpression="SET #status = :queued, #last_run = :last_run, #last_updated = :last_updated",
+				ExpressionAttributeNames={
+					'#status': 'status',
+					'#last_run': 'last_run',
+					'#last_updated': 'last_updated'
+				},
+				ExpressionAttributeValues={
+					':queued': 'queued',
+					':last_run': current_time.strftime('%Y-%m-%dT%H:%M:%SZ'),
+					':last_updated': current_time.strftime('%Y-%m-%dT%H:%M:%SZ')
+				}
+			)
+		else:
+			logger.debug("Job is not scheduled to run at this time", job_id=job['job_id'])
+
+
+# Report aggregated metrics to Observatory (scheduled hourly)
+def report_metrics_to_observatory_handler(event, context):
+	"""
+	Scheduled function that aggregates metrics and sends them to Observatory.
+	Runs hourly to provide business KPI visibility across the ecosystem.
+	"""
+	try:
+		logger.info("Starting metrics aggregation for Observatory")
+
+		# Define time period (last hour)
+		end_time = datetime.now(timezone.utc)
+		start_time = end_time - timedelta(hours=1)
+		start_time_str = start_time.strftime('%Y-%m-%dT%H:%M:%SZ')
+
+		# Get URL table for crawl metrics
+		url_table = get_table(os.environ['DYNAMODB_URLS_TABLE'])
+
+		# Query jobs from last hour
+		jobs_response = job_table.scan(
+			FilterExpression="last_updated >= :start_time",
+			ExpressionAttributeValues={':start_time': start_time_str}
+		)
+		jobs = decimal_to_float(jobs_response.get('Items', []))
+
+		# Calculate job metrics
+		jobs_completed = len([j for j in jobs if j.get('status') == 'ready' and j.get('last_run')])
+		jobs_failed = len([j for j in jobs if j.get('status') == 'error'])
+		jobs_cancelled = len([j for j in jobs if j.get('status') == 'cancelled'])
+		jobs_timeout = len([j for j in jobs if j.get('status') == 'timeout'])
+		total_jobs = jobs_completed + jobs_failed + jobs_cancelled + jobs_timeout
+
+		# Calculate success rate
+		if total_jobs > 0:
+			success_rate = (jobs_completed / total_jobs) * 100
+			error_rate = ((jobs_failed + jobs_timeout) / total_jobs) * 100
+		else:
+			success_rate = 100.0
+			error_rate = 0.0
+
+		# Get active jobs count
+		active_jobs_response = job_table.scan(
+			FilterExpression="#status = :processing",
+			ExpressionAttributeNames={'#status': 'status'},
+			ExpressionAttributeValues={':processing': 'processing'}
+		)
+		active_jobs = len(active_jobs_response.get('Items', []))
+
+		# Get queue depth from SQS
+		try:
+			queue_attrs = sqs.get_queue_attributes(
+				QueueUrl=os.environ['SQS_JOB_QUEUE_URL'],
+				AttributeNames=['ApproximateNumberOfMessages']
+			)
+			queue_depth = int(queue_attrs['Attributes']['ApproximateNumberOfMessages'])
+		except Exception as e:
+			logger.warning("Failed to get queue depth", error=str(e))
+			queue_depth = 0
+
+		# Query URL crawl metrics from last hour
+		urls_response = url_table.scan(
+			FilterExpression="last_updated >= :start_time",
+			ExpressionAttributeValues={':start_time': start_time_str}
+		)
+		urls = decimal_to_float(urls_response.get('Items', []))
+
+		urls_crawled = len(urls)
+		urls_successful = len([u for u in urls if u.get('state') == 'finished'])
+		urls_failed = len([u for u in urls if u.get('state') == 'error'])
+
+		# Calculate average crawl duration (if we have duration data)
+		# Note: This would require storing duration in URL records
+		# For now, we'll use a placeholder or skip it
+		avg_crawl_duration_ms = 0  # Placeholder
+
+		# Send batch metrics to Observatory
+		logger.info("Sending metrics to Observatory",
+				   jobs_processed=total_jobs,
+				   success_rate=success_rate,
+				   urls_crawled=urls_crawled)
+
+		observatory.send_batch_metrics(
+			jobs_processed=total_jobs,
+			jobs_completed=jobs_completed,
+			jobs_failed=jobs_failed + jobs_timeout,
+			success_rate=success_rate,
+			avg_crawl_duration_ms=avg_crawl_duration_ms,
+			active_jobs=active_jobs,
+			queue_depth=queue_depth,
+			urls_crawled=urls_crawled,
+			error_rate=error_rate
+		)
+
+		# Track metrics reporting event
+		observatory.track_event('metrics_reported', {
+			'period_start': start_time.isoformat(),
+			'period_end': end_time.isoformat(),
+			'jobs_processed': total_jobs,
+			'urls_crawled': urls_crawled
+		})
+
+		logger.info("Metrics successfully reported to Observatory")
+
+		return {
+			'statusCode': 200,
+			'body': json.dumps({
+				'message': 'Metrics reported successfully',
+				'metrics': {
+					'jobs_processed': total_jobs,
+					'success_rate': round(success_rate, 2),
+					'active_jobs': active_jobs,
+					'queue_depth': queue_depth,
+					'urls_crawled': urls_crawled
+				}
+			})
+		}
+
+	except Exception as e:
+		log_exception(logger, "Failed to report metrics to Observatory", e)
+		return {
+			'statusCode': 500,
+			'body': json.dumps({
+				'message': 'Failed to report metrics',
+				'error': str(e)
+			})
+		}
+
+
 # Update a job
 def update_job_handler(event, context):
-	print(event)
+	logger.debug("Received event", event_keys=list(event.keys()))
+
+	# Authentication
+	token = extract_token_from_event(event)
+	if not token:
+		return {
+			"statusCode": 401,
+			"body": json.dumps({"message": "Unauthorized - No token provided"}),
+			"headers": {
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+
+	try:
+		user_data = validate_clerk_token(token)
+		user_id = user_data.get("sub")
+	except Exception as e:
+		return {
+			"statusCode": 401,
+			"body": json.dumps({"message": str(e)}),
+			"headers": {
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+
 	job_id = event['pathParameters']['job_id']
-	job_data = event['body']
-	validate_job_data(json.loads(job_data))
+
+	# Verify ownership
+	job = get_job(job_id)
+	if not job:
+		return {
+			"statusCode": 404,
+			"body": json.dumps({"message": "Job not found"}),
+			"headers": {
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+
+	try:
+		verify_resource_ownership(job, user_id, 'job')
+	except PermissionError as e:
+		logger.warning("Unauthorized job update attempt", job_id=job_id, user_id=user_id)
+		return {
+			"statusCode": 403,
+			"body": json.dumps({"message": str(e)}),
+			"headers": {
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+
+	job_data = json.loads(event['body'])
+	validate_job_data(job_data)
 	update_job(job_id, job_data)
+	cache_delete(f"job:{job_id}")
+	cache_delete(f"jobs:{user_id}")
 	return {
 		"statusCode": 200,
-		"body": f"Job {job_id} updated successfully",
+		"body": json.dumps({"message": "Job updated successfully", "job_id": job_id}),
 		"headers": {
 				'Access-Control-Allow-Credentials': True,
-				'Access-Control-Allow-Origin': '*',
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
 				"Content-Type": "application/json"
 			}
 	}
+
+def validate_sftp_url_handler(event, context):
+	# Lazy import paramiko only when needed for SFTP validation
+	import paramiko
+
+	# Extract URL from the request body
+	body = json.loads(event.get('body', '{}'))
+	sftp_url = body.get('sftp_url')
+
+	if not sftp_url:
+		return {
+			'statusCode': 400,
+			'body': json.dumps({'error': 'Missing SFTP URL'}),
+			"headers": {
+				'Access-Control-Allow-Credentials': True,
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+
+	# Parse the SFTP URL
+	parsed_url = urlparse(sftp_url)
+
+	if parsed_url.scheme != 'sftp':
+		return {
+			'statusCode': 400,
+			'body': json.dumps({'error': 'Invalid URL scheme'}),
+			"headers": {
+				'Access-Control-Allow-Credentials': True,
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+  
+  # Extract username and password from the URL
+	username = parsed_url.username
+	password = parsed_url.password
+
+	if not username or not password:
+		return {
+			'statusCode': 400,
+			'body': json.dumps({'error': 'Missing username or password in the URL'}),
+			"headers": {
+				'Access-Control-Allow-Credentials': True,
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+
+	# Attempt to connect to the SFTP server
+	try:
+		transport = paramiko.Transport((parsed_url.hostname, parsed_url.port or 22))
+		transport.connect(username=username, password=password)
+		sftp = paramiko.SFTPClient.from_transport(transport)
+
+		# Retrieve the file content
+		with sftp.file(parsed_url.path, 'r') as file:
+			file_content = file.read().decode()  # Decode file content to string
+
+		sftp.close()
+		transport.close()
+  
+		# Detect CSV settings from the file content
+		csv_settings = detect_csv_settings(file_content)
+
+		return {
+			'statusCode': 200,
+			'body': json.dumps({
+					'message': 'SFTP URL validated successfully',
+					'delimiter': csv_settings['delimiter'],
+					'enclosure': csv_settings['enclosure'],
+					'escape': csv_settings['escape'],
+					'headers': csv_settings['headers']
+			}),
+			"headers": {
+				'Access-Control-Allow-Credentials': True,
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+
+	except Exception as e:
+		return {
+			'statusCode': 400,
+			'body': json.dumps({'error': str(e)}),
+			"headers": {
+				'Access-Control-Allow-Credentials': True,
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+
+
+def preview_url_variables_handler(event, context):
+	"""
+	Preview URL variable resolution without creating a job.
+
+	Allows users to test their URL templates with date/time variables
+	and see the resolved output before creating a job.
+
+	Request body:
+	{
+		"url_template": "https://example.com/data/{{date:Y-m-d}}.pdf",
+		"timezone": "America/New_York"  // optional, defaults to UTC
+	}
+
+	Response:
+	{
+		"valid": true,
+		"template": "https://example.com/data/{{date:Y-m-d}}.pdf",
+		"resolved": "https://example.com/data/2026-01-22.pdf",
+		"variables": [{"type": "date", "offset": null, "format": "Y-m-d"}],
+		"timezone": "America/New_York",
+		"resolved_at": "2026-01-22T15:30:00-05:00"
+	}
+	"""
+	log_lambda_invocation(event, context, logger)
+
+	try:
+		# Parse request body
+		body = json.loads(event.get('body', '{}'))
+		url_template = body.get('url_template', '')
+		timezone = body.get('timezone', 'UTC')
+
+		if not url_template:
+			return {
+				'statusCode': 400,
+				'body': json.dumps({
+					'valid': False,
+					'error': 'url_template is required'
+				}),
+				'headers': {
+					'Access-Control-Allow-Credentials': True,
+					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					'Content-Type': 'application/json'
+				}
+			}
+
+		# Preview the URL template resolution with timezone
+		preview_result = preview_url_template(url_template, tz=timezone)
+
+		logger.info("URL template preview",
+				   template=url_template,
+				   timezone=timezone,
+				   valid=preview_result.get('valid'),
+				   resolved=preview_result.get('resolved'))
+
+		return {
+			'statusCode': 200,
+			'body': json.dumps(preview_result),
+			'headers': {
+				'Access-Control-Allow-Credentials': True,
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Content-Type': 'application/json'
+			}
+		}
+
+	except json.JSONDecodeError:
+		return {
+			'statusCode': 400,
+			'body': json.dumps({
+				'valid': False,
+				'error': 'Invalid JSON in request body'
+			}),
+			'headers': {
+				'Access-Control-Allow-Credentials': True,
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Content-Type': 'application/json'
+			}
+		}
+	except Exception as e:
+		log_exception(logger, "Failed to preview URL template", e)
+		return {
+			'statusCode': 500,
+			'body': json.dumps({
+				'valid': False,
+				'error': f'Internal server error: {str(e)}'
+			}),
+			'headers': {
+				'Access-Control-Allow-Credentials': True,
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Content-Type': 'application/json'
+			}
+		}
+	finally:
+		logger.clear_context()
+
+
+# Download job results
+def download_results_handler(event, context):
+	"""
+	Generate a pre-signed S3 URL for downloading job results.
+	Supports multiple formats: JSON, CSV, XLSX, Parquet, SQL.
+	"""
+	start_time = time.time()
+	log_lambda_invocation(event, context, logger)
+
+	try:
+		# Authentication
+		token = extract_token_from_event(event)
+		if not token:
+			logger.warning("Authentication failed - No token provided")
+			return {
+				"statusCode": 401,
+				"body": json.dumps({"message": "Unauthorized - No token provided"}),
+				"headers": {
+					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					"Content-Type": "application/json"
+				}
+			}
+
+		try:
+			user_data = validate_clerk_token(token)
+			user_id = user_data.get("sub")
+			logger.info("User authenticated", user_id=user_id)
+		except Exception as e:
+			logger.warning("Token validation failed", error=str(e))
+			return {
+				"statusCode": 401,
+				"body": json.dumps({"message": str(e)}),
+				"headers": {
+					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					"Content-Type": "application/json"
+				}
+			}
+
+		# Get job ID from path
+		job_id = event['pathParameters']['job_id']
+
+		# Verify ownership
+		job = get_job(job_id)
+		if not job:
+			return {
+				"statusCode": 404,
+				"body": json.dumps({"message": "Job not found"}),
+				"headers": {
+					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					"Content-Type": "application/json"
+				}
+			}
+
+		try:
+			verify_resource_ownership(job, user_id, 'job')
+		except PermissionError as e:
+			logger.warning("Unauthorized download attempt", job_id=job_id, user_id=user_id)
+			return {
+				"statusCode": 403,
+				"body": json.dumps({"message": str(e)}),
+				"headers": {
+					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					"Content-Type": "application/json"
+				}
+			}
+
+		# Get query parameters
+		query_params = event.get('queryStringParameters') or {}
+		file_format = query_params.get('format', 'json').lower()
+		flatten = query_params.get('flatten', 'false').lower() == 'true'
+		sql_table_name = query_params.get('sql_table_name', 'scraped_data')
+
+		# Validate format
+		valid_formats = ['json', 'csv', 'xlsx', 'parquet', 'sql']
+		if file_format not in valid_formats:
+			return {
+				"statusCode": 400,
+				"body": json.dumps({
+					"message": f"Invalid format. Supported formats: {', '.join(valid_formats)}"
+				}),
+				"headers": {
+					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					"Content-Type": "application/json"
+				}
+			}
+
+		# Check if original JSON results exist
+		original_s3_key = f'jobs/{job_id}/result.json'
+		try:
+			s3.head_object(Bucket=os.environ['S3_BUCKET'], Key=original_s3_key)
+		except Exception:
+			logger.warning("Results file not found", job_id=job_id, s3_key=original_s3_key)
+			return {
+				"statusCode": 404,
+				"body": json.dumps({"message": "Results not found for this job"}),
+				"headers": {
+					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					"Content-Type": "application/json"
+				}
+			}
+
+		# Determine the S3 key for the requested format
+		if file_format == 'json':
+			# For JSON, use the original file
+			result_s3_key = original_s3_key
+		else:
+			# For other formats, construct converted file key
+			result_s3_key = f'jobs/{job_id}/result.{file_format}'
+
+			# Check if converted file already exists
+			try:
+				s3.head_object(Bucket=os.environ['S3_BUCKET'], Key=result_s3_key)
+				logger.info("Using cached converted file", job_id=job_id, format=file_format)
+			except:
+				# File doesn't exist, need to convert
+				logger.info("Converting results to format", job_id=job_id, format=file_format)
+
+				# Load original JSON results
+				response = s3.get_object(Bucket=os.environ['S3_BUCKET'], Key=original_s3_key)
+				results_data = json.loads(response['Body'].read().decode('utf-8'))
+
+				# Import FormatConverter
+				from format_converter import FormatConverter
+
+				# Create converter and convert
+				converter = FormatConverter(job_id, results_data, os.environ['S3_BUCKET'])
+				converter.prepare_dataframe(flatten=flatten)
+
+				try:
+					if file_format == 'csv':
+						converter.convert_to_csv(result_s3_key)
+					elif file_format == 'xlsx':
+						converter.convert_to_xlsx(result_s3_key)
+					elif file_format == 'parquet':
+						converter.convert_to_parquet(result_s3_key)
+					elif file_format == 'sql':
+						converter.convert_to_sql(result_s3_key, sql_table_name)
+
+					logger.info("Format conversion successful", job_id=job_id, format=file_format)
+				except Exception as conv_error:
+					logger.error("Format conversion failed", job_id=job_id, format=file_format, error=str(conv_error))
+					return {
+						"statusCode": 500,
+						"body": json.dumps({"message": f"Failed to convert to {file_format}: {str(conv_error)}"}),
+						"headers": {
+							'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+							"Content-Type": "application/json"
+						}
+					}
+
+		# Generate pre-signed URL (valid for 1 hour)
+		presigned_url = s3.generate_presigned_url(
+			'get_object',
+			Params={
+				'Bucket': os.environ['S3_BUCKET'],
+				'Key': result_s3_key,
+				'ResponseContentDisposition': f'attachment; filename="job_{job_id}_results.{file_format}"'
+			},
+			ExpiresIn=3600  # 1 hour
+		)
+
+		# Get file size
+		try:
+			file_info = s3.head_object(Bucket=os.environ['S3_BUCKET'], Key=result_s3_key)
+			file_size = file_info.get('ContentLength', 0)
+		except:
+			file_size = 0
+
+		duration_ms = (time.time() - start_time) * 1000
+		logger.info("Download URL generated", job_id=job_id, format=file_format,
+		           duration_ms=duration_ms, file_size=file_size)
+
+		return {
+			"statusCode": 200,
+			"body": json.dumps({
+				"download_url": presigned_url,
+				"expires_in": 3600,
+				"format": file_format,
+				"file_size_bytes": file_size
+			}),
+			"headers": {
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+
+	except Exception as e:
+		log_exception(logger, "Failed to generate download URL", e)
+		return {
+			"statusCode": 500,
+			"body": json.dumps({"message": "Failed to generate download URL", "error": str(e)}),
+			"headers": {
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+	finally:
+		logger.clear_context()
+
+
+# Preview job results with pagination
+def preview_results_handler(event, context):
+	"""
+	Fetch paginated job results for preview.
+	Returns a subset of results with metadata for pagination.
+	"""
+	start_time = time.time()
+	log_lambda_invocation(event, context, logger)
+
+	try:
+		# Authentication
+		token = extract_token_from_event(event)
+		if not token:
+			logger.warning("Authentication failed - No token provided")
+			return {
+				"statusCode": 401,
+				"body": json.dumps({"message": "Unauthorized - No token provided"}),
+				"headers": {
+					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					"Content-Type": "application/json"
+				}
+			}
+
+		try:
+			user_data = validate_clerk_token(token)
+			user_id = user_data.get("sub")
+			logger.info("User authenticated", user_id=user_id)
+		except Exception as e:
+			logger.warning("Token validation failed", error=str(e))
+			return {
+				"statusCode": 401,
+				"body": json.dumps({"message": str(e)}),
+				"headers": {
+					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					"Content-Type": "application/json"
+				}
+			}
+
+		# Get job ID from path
+		job_id = event['pathParameters']['job_id']
+
+		# Verify ownership
+		job = get_job(job_id)
+		if not job:
+			return {
+				"statusCode": 404,
+				"body": json.dumps({"message": "Job not found"}),
+				"headers": {
+					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					"Content-Type": "application/json"
+				}
+			}
+
+		try:
+			verify_resource_ownership(job, user_id, 'job')
+		except PermissionError as e:
+			logger.warning("Unauthorized results preview attempt", job_id=job_id, user_id=user_id)
+			return {
+				"statusCode": 403,
+				"body": json.dumps({"message": str(e)}),
+				"headers": {
+					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					"Content-Type": "application/json"
+				}
+			}
+
+		# Get pagination parameters from query
+		query_params = event.get('queryStringParameters') or {}
+		page = int(query_params.get('page', 1))
+		page_size = int(query_params.get('page_size', 50))
+
+		# Validate pagination parameters
+		if page < 1:
+			page = 1
+		if page_size < 1 or page_size > 100:
+			page_size = 50
+
+		# Construct S3 key
+		s3_key = f'jobs/{job_id}/result.json'
+
+		# Fetch results from S3
+		try:
+			response = s3.get_object(Bucket=os.environ['S3_BUCKET'], Key=s3_key)
+			results_data = json.loads(response['Body'].read().decode('utf-8'))
+		except Exception as e:
+			logger.warning("Results file not found", job_id=job_id, s3_key=s3_key, error=str(e))
+			return {
+				"statusCode": 404,
+				"body": json.dumps({"message": "Results not found for this job"}),
+				"headers": {
+					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					"Content-Type": "application/json"
+				}
+			}
+
+		# Extract results array
+		results = results_data.get('results', [])
+		total_count = len(results)
+
+		# Calculate pagination
+		start_index = (page - 1) * page_size
+		end_index = start_index + page_size
+		paginated_results = results[start_index:end_index]
+
+		# Calculate total pages
+		total_pages = (total_count + page_size - 1) // page_size
+
+		# Get column names from first result
+		columns = []
+		if len(results) > 0:
+			columns = list(results[0].keys())
+
+		duration_ms = (time.time() - start_time) * 1000
+		logger.info("Results preview fetched", job_id=job_id, page=page, page_size=page_size, total_count=total_count, duration_ms=duration_ms)
+
+		return {
+			"statusCode": 200,
+			"body": json.dumps({
+				"results": paginated_results,
+				"pagination": {
+					"page": page,
+					"page_size": page_size,
+					"total_count": total_count,
+					"total_pages": total_pages,
+					"has_next": page < total_pages,
+					"has_previous": page > 1
+				},
+				"columns": columns
+			}),
+			"headers": {
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+
+	except Exception as e:
+		log_exception(logger, "Failed to fetch results preview", e)
+		return {
+			"statusCode": 500,
+			"body": json.dumps({"message": "Failed to fetch results preview", "error": str(e)}),
+			"headers": {
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+	finally:
+		logger.clear_context()
+
+
+# Template CRUD operations
+def create_template_handler(event, context):
+	"""
+	Create a new job template from job configuration.
+	Allows users to save job configurations for reuse.
+	"""
+	start_time = time.time()
+	log_lambda_invocation(event, context, logger)
+
+	try:
+		# Authentication
+		token = extract_token_from_event(event)
+		if not token:
+			logger.warning("Authentication failed - No token provided")
+			return {
+				"statusCode": 401,
+				"body": json.dumps({"message": "Unauthorized - No token provided"}),
+				"headers": {
+					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					"Content-Type": "application/json"
+				}
+			}
+
+		try:
+			user_data = validate_clerk_token(token)
+			user_id = user_data.get("sub")
+			logger.info("User authenticated", user_id=user_id)
+		except Exception as e:
+			logger.warning("Token validation failed", error=str(e))
+			return {
+				"statusCode": 401,
+				"body": json.dumps({"message": str(e)}),
+				"headers": {
+					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					"Content-Type": "application/json"
+				}
+			}
+
+		# Parse request body
+		body = json.loads(event['body'])
+
+		# Validate required fields
+		if not body.get('name'):
+			return {
+				"statusCode": 400,
+				"body": json.dumps({"message": "Template name is required"}),
+				"headers": {
+					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					"Content-Type": "application/json"
+				}
+			}
+
+		if not body.get('config'):
+			return {
+				"statusCode": 400,
+				"body": json.dumps({"message": "Template configuration is required"}),
+				"headers": {
+					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					"Content-Type": "application/json"
+				}
+			}
+
+		# Generate template ID
+		template_id = str(uuid.uuid4())
+
+		# Create template item
+		template = {
+			'template_id': template_id,
+			'user_id': user_id,
+			'name': body['name'],
+			'description': body.get('description', ''),
+			'config': body['config'],
+			'created_at': datetime.now(timezone.utc).isoformat(),
+			'last_used': None
+		}
+
+		# Save to DynamoDB
+		template_table.put_item(Item=template)
+		cache_delete(f"templates:{user_id}")
+
+		duration_ms = (time.time() - start_time) * 1000
+		logger.info("Template created", template_id=template_id, user_id=user_id, duration_ms=duration_ms)
+
+		return {
+			"statusCode": 201,
+			"body": json.dumps({
+				"message": "Template created successfully",
+				"template_id": template_id,
+				"template": template
+			}),
+			"headers": {
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+
+	except Exception as e:
+		log_exception(logger, "Failed to create template", e)
+		return {
+			"statusCode": 500,
+			"body": json.dumps({"message": "Failed to create template", "error": str(e)}),
+			"headers": {
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+	finally:
+		logger.clear_context()
+
+
+def list_templates_handler(event, context):
+	"""
+	List all templates for the authenticated user.
+	"""
+	start_time = time.time()
+	log_lambda_invocation(event, context, logger)
+
+	try:
+		# Authentication
+		token = extract_token_from_event(event)
+		if not token:
+			logger.warning("Authentication failed - No token provided")
+			return {
+				"statusCode": 401,
+				"body": json.dumps({"message": "Unauthorized - No token provided"}),
+				"headers": {
+					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					"Content-Type": "application/json"
+				}
+			}
+
+		try:
+			user_data = validate_clerk_token(token)
+			user_id = user_data.get("sub")
+			logger.info("User authenticated", user_id=user_id)
+		except Exception as e:
+			logger.warning("Token validation failed", error=str(e))
+			return {
+				"statusCode": 401,
+				"body": json.dumps({"message": str(e)}),
+				"headers": {
+					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					"Content-Type": "application/json"
+				}
+			}
+
+		# Try cache first
+		templates_cache_key = f"templates:{user_id}"
+		templates = cache_get(templates_cache_key)
+
+		if templates is None:
+			# Query templates by user_id using GSI
+			response = template_table.query(
+				IndexName='UserIdIndex',
+				KeyConditionExpression='user_id = :user_id',
+				ExpressionAttributeValues={
+					':user_id': user_id
+				}
+			)
+
+			templates = response.get('Items', [])
+
+			# Sort by created_at descending (newest first)
+			templates.sort(key=lambda x: x.get('created_at', ''), reverse=True)
+			cache_set(templates_cache_key, decimal_to_float(templates), ttl=120)
+
+		duration_ms = (time.time() - start_time) * 1000
+		logger.info("Templates listed", user_id=user_id, count=len(templates), duration_ms=duration_ms)
+
+		return {
+			"statusCode": 200,
+			"body": json.dumps(templates),
+			"headers": {
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+
+	except Exception as e:
+		log_exception(logger, "Failed to list templates", e)
+		return {
+			"statusCode": 500,
+			"body": json.dumps({"message": "Failed to list templates", "error": str(e)}),
+			"headers": {
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+	finally:
+		logger.clear_context()
+
+
+def get_template_handler(event, context):
+	"""
+	Get a specific template by ID.
+	"""
+	start_time = time.time()
+	log_lambda_invocation(event, context, logger)
+
+	try:
+		# Authentication
+		token = extract_token_from_event(event)
+		if not token:
+			logger.warning("Authentication failed - No token provided")
+			return {
+				"statusCode": 401,
+				"body": json.dumps({"message": "Unauthorized - No token provided"}),
+				"headers": {
+					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					"Content-Type": "application/json"
+				}
+			}
+
+		try:
+			user_data = validate_clerk_token(token)
+			user_id = user_data.get("sub")
+			logger.info("User authenticated", user_id=user_id)
+		except Exception as e:
+			logger.warning("Token validation failed", error=str(e))
+			return {
+				"statusCode": 401,
+				"body": json.dumps({"message": str(e)}),
+				"headers": {
+					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					"Content-Type": "application/json"
+				}
+			}
+
+		# Get template ID from path
+		template_id = event['pathParameters']['template_id']
+
+		# Fetch template from DynamoDB
+		response = template_table.get_item(Key={'template_id': template_id})
+
+		if 'Item' not in response:
+			logger.warning("Template not found", template_id=template_id)
+			return {
+				"statusCode": 404,
+				"body": json.dumps({"message": "Template not found"}),
+				"headers": {
+					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					"Content-Type": "application/json"
+				}
+			}
+
+		template = response['Item']
+
+		# Verify user owns this template
+		if template['user_id'] != user_id:
+			logger.warning("Unauthorized access attempt", template_id=template_id, user_id=user_id)
+			return {
+				"statusCode": 403,
+				"body": json.dumps({"message": "You don't have permission to access this template"}),
+				"headers": {
+					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					"Content-Type": "application/json"
+				}
+			}
+
+		# Update last_used timestamp
+		template_table.update_item(
+			Key={'template_id': template_id},
+			UpdateExpression='SET last_used = :timestamp',
+			ExpressionAttributeValues={
+				':timestamp': datetime.now(timezone.utc).isoformat()
+			}
+		)
+
+		duration_ms = (time.time() - start_time) * 1000
+		logger.info("Template retrieved", template_id=template_id, user_id=user_id, duration_ms=duration_ms)
+
+		return {
+			"statusCode": 200,
+			"body": json.dumps(template),
+			"headers": {
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+
+	except Exception as e:
+		log_exception(logger, "Failed to get template", e)
+		return {
+			"statusCode": 500,
+			"body": json.dumps({"message": "Failed to get template", "error": str(e)}),
+			"headers": {
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+	finally:
+		logger.clear_context()
+
+
+def delete_template_handler(event, context):
+	"""
+	Delete a template by ID.
+	"""
+	start_time = time.time()
+	log_lambda_invocation(event, context, logger)
+
+	try:
+		# Authentication
+		token = extract_token_from_event(event)
+		if not token:
+			logger.warning("Authentication failed - No token provided")
+			return {
+				"statusCode": 401,
+				"body": json.dumps({"message": "Unauthorized - No token provided"}),
+				"headers": {
+					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					"Content-Type": "application/json"
+				}
+			}
+
+		try:
+			user_data = validate_clerk_token(token)
+			user_id = user_data.get("sub")
+			logger.info("User authenticated", user_id=user_id)
+		except Exception as e:
+			logger.warning("Token validation failed", error=str(e))
+			return {
+				"statusCode": 401,
+				"body": json.dumps({"message": str(e)}),
+				"headers": {
+					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					"Content-Type": "application/json"
+				}
+			}
+
+		# Get template ID from path
+		template_id = event['pathParameters']['template_id']
+
+		# Fetch template to verify ownership
+		response = template_table.get_item(Key={'template_id': template_id})
+
+		if 'Item' not in response:
+			logger.warning("Template not found", template_id=template_id)
+			return {
+				"statusCode": 404,
+				"body": json.dumps({"message": "Template not found"}),
+				"headers": {
+					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					"Content-Type": "application/json"
+				}
+			}
+
+		template = response['Item']
+
+		# Verify user owns this template
+		if template['user_id'] != user_id:
+			logger.warning("Unauthorized deletion attempt", template_id=template_id, user_id=user_id)
+			return {
+				"statusCode": 403,
+				"body": json.dumps({"message": "You don't have permission to delete this template"}),
+				"headers": {
+					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					"Content-Type": "application/json"
+				}
+			}
+
+		# Delete template
+		template_table.delete_item(Key={'template_id': template_id})
+		cache_delete(f"templates:{user_id}")
+
+		duration_ms = (time.time() - start_time) * 1000
+		logger.info("Template deleted", template_id=template_id, user_id=user_id, duration_ms=duration_ms)
+
+		return {
+			"statusCode": 200,
+			"body": json.dumps({"message": "Template deleted successfully"}),
+			"headers": {
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+
+	except Exception as e:
+		log_exception(logger, "Failed to delete template", e)
+		return {
+			"statusCode": 500,
+			"body": json.dumps({"message": "Failed to delete template", "error": str(e)}),
+			"headers": {
+				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				"Content-Type": "application/json"
+			}
+		}
+	finally:
+		logger.clear_context()
+
+
+# Automatic result cleanup handler
+def cleanup_old_results_handler(event, context):
+	"""
+	Scheduled function to clean up old job results from S3 based on retention policy.
+	Runs daily and deletes results older than the configured retention period.
+	"""
+	start_time = time.time()
+	log_lambda_invocation(event, context, logger)
+
+	try:
+		# Default retention period in days (can be overridden per job)
+		default_retention_days = 365
+
+		# Get all jobs
+		response = job_table.scan()
+		jobs = response.get('Items', [])
+
+		deleted_count = 0
+		skipped_count = 0
+		error_count = 0
+
+		for job in jobs:
+			try:
+				job_id = job['job_id']
+
+				# Check if job has custom retention setting (default to 365 days)
+				retention_days = job.get('retention_days', default_retention_days)
+
+				# Skip if retention is set to 0 (never delete)
+				if retention_days == 0:
+					logger.info("Skipping job with never-delete retention", job_id=job_id)
+					skipped_count += 1
+					continue
+
+				# Check last_run timestamp
+				last_run_str = job.get('last_run')
+				if not last_run_str:
+					# No results yet, skip
+					skipped_count += 1
+					continue
+
+				# Parse last_run timestamp
+				last_run = datetime.fromisoformat(last_run_str.replace('Z', '+00:00'))
+
+				# Calculate age in days
+				age_days = (datetime.now(timezone.utc) - last_run).days
+
+				# Delete if older than retention period
+				if age_days > retention_days:
+					s3_key = f'jobs/{job_id}/result.json'
+
+					try:
+						# Check if file exists before attempting delete
+						s3.head_object(Bucket=os.environ['S3_BUCKET'], Key=s3_key)
+
+						# Delete the result file
+						s3.delete_object(Bucket=os.environ['S3_BUCKET'], Key=s3_key)
+
+						# Clear results_s3_key from job record
+						job_table.update_item(
+							Key={'job_id': job_id},
+							UpdateExpression='REMOVE results_s3_key',
+						)
+
+						deleted_count += 1
+						logger.info("Deleted old result",
+								   job_id=job_id,
+								   age_days=age_days,
+								   retention_days=retention_days)
+					except Exception as s3_error:
+						if 'Not Found' in str(s3_error) or '404' in str(s3_error):
+							# File doesn't exist, skip
+							skipped_count += 1
+						else:
+							error_count += 1
+							logger.warning("Failed to delete result",
+										 job_id=job_id,
+										 error=str(s3_error))
+				else:
+					skipped_count += 1
+
+			except Exception as job_error:
+				error_count += 1
+				logger.warning("Error processing job for cleanup",
+							 job_id=job.get('job_id', 'unknown'),
+							 error=str(job_error))
+				continue
+
+		duration_ms = (time.time() - start_time) * 1000
+		logger.info("Cleanup completed",
+				   total_jobs=len(jobs),
+				   deleted=deleted_count,
+				   skipped=skipped_count,
+				   errors=error_count,
+				   duration_ms=duration_ms)
+
+		return {
+			"statusCode": 200,
+			"body": json.dumps({
+				"message": "Cleanup completed successfully",
+				"total_jobs": len(jobs),
+				"deleted": deleted_count,
+				"skipped": skipped_count,
+				"errors": error_count
+			})
+		}
+
+	except Exception as e:
+		log_exception(logger, "Failed to run cleanup", e)
+		return {
+			"statusCode": 500,
+			"body": json.dumps({"message": "Failed to run cleanup", "error": str(e)})
+		}
+	finally:
+		logger.clear_context()
+
+
+# ============================================
+# WEBHOOK MANAGEMENT HANDLERS
+# ============================================
+
+def create_webhook_handler(event, context):
+	"""
+	Create a new webhook for the authenticated user.
+	"""
+	log_lambda_invocation(event, context, logger)
+
+	try:
+		# Extract and validate token
+		token = extract_token_from_event(event)
+		if not token:
+			return {
+				"statusCode": 401,
+				"body": json.dumps({"message": "Unauthorized - No token provided"}),
+				"headers": {"Content-Type": "application/json"}
+			}
+
+		user_data = validate_clerk_token(token)
+		user_id = user_data.get("sub")
+
+		if not user_id:
+			return {
+				"statusCode": 401,
+				"body": json.dumps({"message": "Unauthorized"}),
+				"headers": {"Content-Type": "application/json"}
+			}
+
+		# Parse request body
+		body = json.loads(event.get('body', '{}'))
+
+		webhook_url = body.get('url')
+		events = body.get('events', [])
+		job_id = body.get('job_id')  # Optional: webhook for specific job only
+
+		# Validation
+		if not webhook_url:
+			return {
+				"statusCode": 400,
+				"body": json.dumps({"message": "Webhook URL is required"}),
+				"headers": {"Content-Type": "application/json"}
+			}
+
+		if not events or not isinstance(events, list):
+			return {
+				"statusCode": 400,
+				"body": json.dumps({"message": "Events array is required"}),
+				"headers": {"Content-Type": "application/json"}
+			}
+
+		# Validate event types
+		valid_events = ['job.created', 'job.started', 'job.completed', 'job.failed', 'job.cancelled']
+		for event_type in events:
+			if event_type not in valid_events:
+				return {
+					"statusCode": 400,
+					"body": json.dumps({
+						"message": f"Invalid event type: {event_type}",
+						"valid_events": valid_events
+					}),
+					"headers": {"Content-Type": "application/json"}
+				}
+
+		# Generate webhook ID and secret
+		webhook_id = str(uuid.uuid4())
+		webhook_secret = str(uuid.uuid4())  # Unique secret for HMAC signatures
+
+		# Create webhook item
+		webhook_item = {
+			'webhook_id': webhook_id,
+			'user_id': user_id,
+			'url': webhook_url,
+			'events': events,
+			'secret': webhook_secret,
+			'active': True,
+			'created_at': datetime.now(timezone.utc).isoformat(),
+			'total_deliveries': 0,
+			'failed_deliveries': 0
+		}
+
+		# Add job_id if specified
+		if job_id:
+			webhook_item['job_id'] = job_id
+
+		# Save to DynamoDB
+		webhook_table.put_item(Item=webhook_item)
+
+		logger.info("Webhook created", webhook_id=webhook_id, user_id=user_id, events=events)
+
+		return {
+			"statusCode": 201,
+			"body": json.dumps({
+				"message": "Webhook created successfully",
+				"webhook": {
+					'webhook_id': webhook_id,
+					'url': webhook_url,
+					'events': events,
+					'secret': webhook_secret,
+					'active': True,
+					'created_at': webhook_item['created_at']
+				}
+			}),
+			"headers": {"Content-Type": "application/json"}
+		}
+
+	except Exception as e:
+		log_exception(logger, "Failed to create webhook", e)
+		return {
+			"statusCode": 500,
+			"body": json.dumps({"message": "Failed to create webhook", "error": str(e)}),
+			"headers": {"Content-Type": "application/json"}
+		}
+	finally:
+		logger.clear_context()
+
+
+def list_webhooks_handler(event, context):
+	"""
+	List all webhooks for the authenticated user.
+	"""
+	log_lambda_invocation(event, context, logger)
+
+	try:
+		# Extract and validate token
+		token = extract_token_from_event(event)
+		if not token:
+			return {
+				"statusCode": 401,
+				"body": json.dumps({"message": "Unauthorized - No token provided"}),
+				"headers": {"Content-Type": "application/json"}
+			}
+
+		user_data = validate_clerk_token(token)
+		user_id = user_data.get("sub")
+
+		if not user_id:
+			return {
+				"statusCode": 401,
+				"body": json.dumps({"message": "Unauthorized"}),
+				"headers": {"Content-Type": "application/json"}
+			}
+
+		# Query webhooks by user_id (using GSI)
+		response = webhook_table.query(
+			IndexName='UserIdIndex',
+			KeyConditionExpression='user_id = :user_id',
+			ExpressionAttributeValues={':user_id': user_id}
+		)
+
+		webhooks = response.get('Items', [])
+
+		# Convert to JSON-serializable format
+		webhooks_list = []
+		for webhook in webhooks:
+			webhook_data = {
+				'webhook_id': webhook['webhook_id'],
+				'url': webhook['url'],
+				'events': webhook['events'],
+				'active': webhook.get('active', True),
+				'created_at': webhook['created_at'],
+				'total_deliveries': webhook.get('total_deliveries', 0),
+				'failed_deliveries': webhook.get('failed_deliveries', 0),
+				'job_id': webhook.get('job_id')
+			}
+			webhooks_list.append(webhook_data)
+
+		logger.info("Listed webhooks", user_id=user_id, count=len(webhooks_list))
+
+		return {
+			"statusCode": 200,
+			"body": json.dumps(webhooks_list),
+			"headers": {"Content-Type": "application/json"}
+		}
+
+	except Exception as e:
+		log_exception(logger, "Failed to list webhooks", e)
+		return {
+			"statusCode": 500,
+			"body": json.dumps({"message": "Failed to list webhooks", "error": str(e)}),
+			"headers": {"Content-Type": "application/json"}
+		}
+	finally:
+		logger.clear_context()
+
+
+def delete_webhook_handler(event, context):
+	"""
+	Delete a webhook by ID (soft delete by setting active=false).
+	"""
+	log_lambda_invocation(event, context, logger)
+
+	try:
+		# Extract and validate token
+		token = extract_token_from_event(event)
+		if not token:
+			return {
+				"statusCode": 401,
+				"body": json.dumps({"message": "Unauthorized - No token provided"}),
+				"headers": {"Content-Type": "application/json"}
+			}
+
+		user_data = validate_clerk_token(token)
+		user_id = user_data.get("sub")
+
+		if not user_id:
+			return {
+				"statusCode": 401,
+				"body": json.dumps({"message": "Unauthorized"}),
+				"headers": {"Content-Type": "application/json"}
+			}
+
+		# Get webhook_id from path parameters
+		webhook_id = event.get('pathParameters', {}).get('webhook_id')
+
+		if not webhook_id:
+			return {
+				"statusCode": 400,
+				"body": json.dumps({"message": "Webhook ID is required"}),
+				"headers": {"Content-Type": "application/json"}
+			}
+
+		# Get webhook to verify ownership
+		response = webhook_table.get_item(Key={'webhook_id': webhook_id})
+		webhook = response.get('Item')
+
+		if not webhook:
+			return {
+				"statusCode": 404,
+				"body": json.dumps({"message": "Webhook not found"}),
+				"headers": {"Content-Type": "application/json"}
+			}
+
+		# Verify ownership
+		if webhook.get('user_id') != user_id:
+			return {
+				"statusCode": 403,
+				"body": json.dumps({"message": "Access denied"}),
+				"headers": {"Content-Type": "application/json"}
+			}
+
+		# Soft delete: set active=false
+		webhook_table.update_item(
+			Key={'webhook_id': webhook_id},
+			UpdateExpression='SET active = :false',
+			ExpressionAttributeValues={':false': False}
+		)
+
+		logger.info("Webhook deleted", webhook_id=webhook_id, user_id=user_id)
+
+		return {
+			"statusCode": 200,
+			"body": json.dumps({"message": "Webhook deleted successfully"}),
+			"headers": {"Content-Type": "application/json"}
+		}
+
+	except Exception as e:
+		log_exception(logger, "Failed to delete webhook", e)
+		return {
+			"statusCode": 500,
+			"body": json.dumps({"message": "Failed to delete webhook", "error": str(e)}),
+			"headers": {"Content-Type": "application/json"}
+		}
+	finally:
+		logger.clear_context()
+
+
+def test_webhook_handler(event, context):
+	"""
+	Send a test event to a webhook.
+	"""
+	log_lambda_invocation(event, context, logger)
+
+	try:
+		# Extract and validate token
+		token = extract_token_from_event(event)
+		if not token:
+			return {
+				"statusCode": 401,
+				"body": json.dumps({"message": "Unauthorized - No token provided"}),
+				"headers": {"Content-Type": "application/json"}
+			}
+
+		user_data = validate_clerk_token(token)
+		user_id = user_data.get("sub")
+
+		if not user_id:
+			return {
+				"statusCode": 401,
+				"body": json.dumps({"message": "Unauthorized"}),
+				"headers": {"Content-Type": "application/json"}
+			}
+
+		# Get webhook_id from path parameters
+		webhook_id = event.get('pathParameters', {}).get('webhook_id')
+
+		if not webhook_id:
+			return {
+				"statusCode": 400,
+				"body": json.dumps({"message": "Webhook ID is required"}),
+				"headers": {"Content-Type": "application/json"}
+			}
+
+		# Get webhook to verify ownership
+		response = webhook_table.get_item(Key={'webhook_id': webhook_id})
+		webhook = response.get('Item')
+
+		if not webhook:
+			return {
+				"statusCode": 404,
+				"body": json.dumps({"message": "Webhook not found"}),
+				"headers": {"Content-Type": "application/json"}
+			}
+
+		# Verify ownership
+		if webhook.get('user_id') != user_id:
+			return {
+				"statusCode": 403,
+				"body": json.dumps({"message": "Access denied"}),
+				"headers": {"Content-Type": "application/json"}
+			}
+
+		# Create test payload
+		test_payload = {
+			'event': 'webhook.test',
+			'webhook_id': webhook_id,
+			'timestamp': datetime.now(timezone.utc).isoformat(),
+			'message': 'This is a test webhook event from SnowScrape'
+		}
+
+		# Dispatch test event
+		WebhookDispatcher.dispatch_event(
+			event_type='webhook.test',
+			job_id='test',
+			user_id=user_id,
+			payload=test_payload
+		)
+
+		logger.info("Test webhook dispatched", webhook_id=webhook_id, user_id=user_id)
+
+		return {
+			"statusCode": 200,
+			"body": json.dumps({
+				"message": "Test webhook sent successfully",
+				"payload": test_payload
+			}),
+			"headers": {"Content-Type": "application/json"}
+		}
+
+	except Exception as e:
+		log_exception(logger, "Failed to test webhook", e)
+		return {
+			"statusCode": 500,
+			"body": json.dumps({"message": "Failed to test webhook", "error": str(e)}),
+			"headers": {"Content-Type": "application/json"}
+		}
+	finally:
+		logger.clear_context()
+
+
+# ============================================
+# PROXY HEALTH CHECKER
+# ============================================
+
+def proxy_health_checker_handler(event, context):
+	"""
+	Scheduled function to check health of all proxies every 5 minutes.
+	Tests each proxy and updates status in Secrets Manager.
+	"""
+	log_lambda_invocation(event, context, logger)
+
+	try:
+		import requests
+		proxy_manager = get_proxy_manager()
+
+		# Get all proxies from pool
+		proxies = proxy_manager.get_proxy_pool()
+
+		if not proxies:
+			logger.warning("No proxies in pool to health check")
+			return {
+				"statusCode": 200,
+				"body": json.dumps({"message": "No proxies to check", "proxies_checked": 0})
+			}
+
+		healthy_count = 0
+		unhealthy_count = 0
+		results = []
+
+		for proxy in proxies:
+			proxy_url = proxy['url']
+			proxy_id = proxy_manager._get_proxy_id(proxy_url)
+
+			try:
+				# Test proxy by fetching a test URL
+				response = requests.get(
+					'https://ipinfo.io/json',
+					proxies={'http': proxy_url, 'https': proxy_url},
+					timeout=10
+				)
+
+				if response.status_code == 200:
+					proxy['status'] = 'healthy'
+					healthy_count += 1
+
+					# Log successful check
+					logger.info(
+						"Proxy health check passed",
+						proxy_id=proxy_id,
+						region=proxy.get('region')
+					)
+
+					# Reset failure counter in DynamoDB
+					proxy_manager.proxy_table.update_item(
+						Key={'proxy_id': proxy_id},
+						UpdateExpression='SET consecutive_failures = :zero',
+						ExpressionAttributeValues={':zero': 0}
+					)
+
+					results.append({
+						'proxy_id': proxy_id,
+						'status': 'healthy',
+						'http_code': response.status_code
+					})
+				else:
+					proxy['status'] = 'unhealthy'
+					unhealthy_count += 1
+
+					logger.warning(
+						"Proxy health check failed",
+						proxy_id=proxy_id,
+						http_code=response.status_code
+					)
+
+					proxy_manager.mark_proxy_failed(
+						proxy_url,
+						f"HTTP {response.status_code}"
+					)
+
+					results.append({
+						'proxy_id': proxy_id,
+						'status': 'unhealthy',
+						'http_code': response.status_code,
+						'error': f"HTTP {response.status_code}"
+					})
+
+			except requests.exceptions.Timeout:
+				proxy['status'] = 'unhealthy'
+				unhealthy_count += 1
+
+				logger.warning("Proxy health check timeout", proxy_id=proxy_id)
+				proxy_manager.mark_proxy_failed(proxy_url, "Timeout")
+
+				results.append({
+					'proxy_id': proxy_id,
+					'status': 'unhealthy',
+					'error': 'Timeout'
+				})
+
+			except Exception as e:
+				proxy['status'] = 'unhealthy'
+				unhealthy_count += 1
+
+				logger.error(
+					"Proxy health check error",
+					proxy_id=proxy_id,
+					error=str(e)
+				)
+
+				proxy_manager.mark_proxy_failed(proxy_url, str(e))
+
+				results.append({
+					'proxy_id': proxy_id,
+					'status': 'unhealthy',
+					'error': str(e)
+				})
+
+		# Update Secrets Manager with new proxy statuses
+		try:
+			secrets_client = boto3.client('secretsmanager')
+
+			# Get current secret value
+			secret = secrets_client.get_secret_value(SecretId='snowscrape/proxy-pool')
+			secret_data = json.loads(secret['SecretString'])
+
+			# Update proxy statuses
+			secret_data['proxies'] = proxies
+
+			# Update secret
+			secrets_client.update_secret(
+				SecretId='snowscrape/proxy-pool',
+				SecretString=json.dumps(secret_data)
+			)
+
+			logger.info(
+				"Updated proxy statuses in Secrets Manager",
+				healthy=healthy_count,
+				unhealthy=unhealthy_count
+			)
+
+		except Exception as e:
+			logger.error("Failed to update Secrets Manager", error=str(e))
+
+		# Emit CloudWatch metrics
+		try:
+			cloudwatch = boto3.client('cloudwatch')
+			cloudwatch.put_metric_data(
+				Namespace='SnowScrape/Proxies',
+				MetricData=[
+					{
+						'MetricName': 'HealthyProxies',
+						'Value': healthy_count,
+						'Unit': 'Count'
+					},
+					{
+						'MetricName': 'UnhealthyProxies',
+						'Value': unhealthy_count,
+						'Unit': 'Count'
+					},
+					{
+						'MetricName': 'TotalProxies',
+						'Value': len(proxies),
+						'Unit': 'Count'
+					}
+				]
+			)
+		except Exception as e:
+			logger.warning("Failed to emit CloudWatch metrics", error=str(e))
+
+		logger.info(
+			"Proxy health check completed",
+			total=len(proxies),
+			healthy=healthy_count,
+			unhealthy=unhealthy_count
+		)
+
+		return {
+			"statusCode": 200,
+			"body": json.dumps({
+				"message": "Health check completed",
+				"total_proxies": len(proxies),
+				"healthy": healthy_count,
+				"unhealthy": unhealthy_count,
+				"results": results
+			})
+		}
+
+	except Exception as e:
+		log_exception(logger, "Failed to run proxy health check", e)
+		return {
+			"statusCode": 500,
+			"body": json.dumps({"message": "Failed to run health check", "error": str(e)})
+		}
+	finally:
+		logger.clear_context()
+
+
+# ============================================
+# SCRAPER PREVIEW & TEST ENDPOINTS
+# ============================================
+
+def scraper_preview_handler(event, context):
+	"""
+	POST /scraper/preview
+	Fetches a URL and returns a simplified DOM structure for visual selection.
+	"""
+	log_lambda_invocation(event, context, logger)
+
+	# Define CORS headers to be used in all responses
+	cors_headers = {
+		"Content-Type": "application/json",
+		"Access-Control-Allow-Origin": CORS_ALLOWED_ORIGIN,
+		"Access-Control-Allow-Headers": "Content-Type,Authorization",
+		"Access-Control-Expose-Headers": "Content-Type"
+	}
+
+	try:
+		# Validate authentication
+		token = extract_token_from_event(event)
+		if not token:
+			return {
+				"statusCode": 401,
+				"headers": cors_headers,
+				"body": json.dumps({"message": "No authorization token provided"})
+			}
+
+		user_data = validate_clerk_token(token)
+		user_id = user_data.get("sub")
+		if not user_id:
+			return {
+				"statusCode": 401,
+				"headers": cors_headers,
+				"body": json.dumps({"message": "Invalid authorization token"})
+			}
+
+		# Parse request body
+		try:
+			body = json.loads(event.get('body', '{}'))
+		except json.JSONDecodeError:
+			return {
+				"statusCode": 400,
+				"headers": cors_headers,
+				"body": json.dumps({"message": "Invalid JSON in request body"})
+			}
+
+		url = body.get('url')
+		if not url:
+			return {
+				"statusCode": 400,
+				"headers": cors_headers,
+				"body": json.dumps({"message": "URL is required"})
+			}
+
+		# Validate URL format
+		parsed = urlparse(url)
+		if not parsed.scheme or not parsed.netloc:
+			return {
+				"statusCode": 400,
+				"headers": cors_headers,
+				"body": json.dumps({"message": "Invalid URL format"})
+			}
+
+		logger.info("Processing scraper preview request", user_id=user_id, url=url)
+
+		# Fetch and parse the page
+		try:
+			result = fetch_and_parse_page(url, timeout=25)
+		except Exception as e:
+			logger.error("Failed to fetch/parse page", url=url, error=str(e))
+			return {
+				"statusCode": 500,
+				"headers": cors_headers,
+				"body": json.dumps({
+					"message": "Failed to fetch or parse the page",
+					"error": str(e)
+				})
+			}
+
+		logger.info("Scraper preview completed successfully",
+				   user_id=user_id,
+				   url=url,
+				   elements_found=len(result['elements']))
+
+		return {
+			"statusCode": 200,
+			"headers": cors_headers,
+			"body": json.dumps(result)
+		}
+
+	except Exception as e:
+		log_exception(logger, "Scraper preview handler failed", e)
+		return {
+			"statusCode": 500,
+			"headers": cors_headers,
+			"body": json.dumps({"message": "Internal server error", "error": str(e)})
+		}
+	finally:
+		logger.clear_context()
+
+
+def scraper_test_handler(event, context):
+	"""
+	POST /scraper/test
+	Tests extraction with given selectors on a URL.
+	"""
+	log_lambda_invocation(event, context, logger)
+
+	# Define CORS headers to be used in all responses
+	cors_headers = {
+		"Content-Type": "application/json",
+		"Access-Control-Allow-Origin": CORS_ALLOWED_ORIGIN,
+		"Access-Control-Allow-Headers": "Content-Type,Authorization",
+		"Access-Control-Expose-Headers": "Content-Type"
+	}
+
+	try:
+		# Validate authentication
+		token = extract_token_from_event(event)
+		if not token:
+			return {
+				"statusCode": 401,
+				"headers": cors_headers,
+				"body": json.dumps({"message": "No authorization token provided"})
+			}
+
+		user_data = validate_clerk_token(token)
+		user_id = user_data.get("sub")
+		if not user_id:
+			return {
+				"statusCode": 401,
+				"headers": cors_headers,
+				"body": json.dumps({"message": "Invalid authorization token"})
+			}
+
+		# Parse request body
+		try:
+			body = json.loads(event.get('body', '{}'))
+		except json.JSONDecodeError:
+			return {
+				"statusCode": 400,
+				"headers": cors_headers,
+				"body": json.dumps({"message": "Invalid JSON in request body"})
+			}
+
+		url = body.get('url')
+		selectors = body.get('selectors', [])
+
+		if not url:
+			return {
+				"statusCode": 400,
+				"headers": cors_headers,
+				"body": json.dumps({"message": "URL is required"})
+			}
+
+		if not selectors or not isinstance(selectors, list):
+			return {
+				"statusCode": 400,
+				"headers": cors_headers,
+				"body": json.dumps({"message": "Selectors array is required"})
+			}
+
+		# Validate URL format
+		parsed = urlparse(url)
+		if not parsed.scheme or not parsed.netloc:
+			return {
+				"statusCode": 400,
+				"headers": cors_headers,
+				"body": json.dumps({"message": "Invalid URL format"})
+			}
+
+		logger.info("Processing scraper test request",
+				   user_id=user_id,
+				   url=url,
+				   selector_count=len(selectors))
+
+		# Test extraction
+		try:
+			results = test_extraction(url, selectors, timeout=25)
+		except Exception as e:
+			logger.error("Failed to test extraction", url=url, error=str(e))
+			return {
+				"statusCode": 500,
+				"headers": cors_headers,
+				"body": json.dumps({
+					"message": "Failed to test extraction",
+					"error": str(e)
+				})
+			}
+
+		logger.info("Scraper test completed successfully",
+				   user_id=user_id,
+				   url=url,
+				   results_count=len(results))
+
+		return {
+			"statusCode": 200,
+			"headers": cors_headers,
+			"body": json.dumps(results)
+		}
+
+	except Exception as e:
+		log_exception(logger, "Scraper test handler failed", e)
+		return {
+			"statusCode": 500,
+			"headers": cors_headers,
+			"body": json.dumps({"message": "Internal server error", "error": str(e)})
+		}
+	finally:
+		logger.clear_context()
+
+
+def scraper_preview_async_start_handler(event, context):
+	"""
+	POST /scraper/preview/async
+	Starts an async scrape operation and returns immediately with task_id.
+	Client should connect to WebSocket to receive progress updates.
+	"""
+	log_lambda_invocation(event, context, logger)
+
+	cors_headers = {
+		"Content-Type": "application/json",
+		"Access-Control-Allow-Origin": CORS_ALLOWED_ORIGIN,
+		"Access-Control-Allow-Headers": "Content-Type,Authorization",
+		"Access-Control-Expose-Headers": "Content-Type"
+	}
+
+	try:
+		# Validate authentication
+		token = extract_token_from_event(event)
+		if not token:
+			return {
+				"statusCode": 401,
+				"headers": cors_headers,
+				"body": json.dumps({"message": "No authorization token provided"})
+			}
+
+		decoded_token = validate_clerk_token(token)
+		user_id = decoded_token.get('sub') if isinstance(decoded_token, dict) else decoded_token
+
+		if not user_id:
+			return {
+				"statusCode": 401,
+				"headers": cors_headers,
+				"body": json.dumps({"message": "Invalid authorization token"})
+			}
+
+		# Parse request body
+		try:
+			body = json.loads(event.get('body', '{}'))
+		except json.JSONDecodeError:
+			return {
+				"statusCode": 400,
+				"headers": cors_headers,
+				"body": json.dumps({"message": "Invalid JSON in request body"})
+			}
+
+		url = body.get('url')
+		if not url:
+			return {
+				"statusCode": 400,
+				"headers": cors_headers,
+				"body": json.dumps({"message": "URL is required"})
+			}
+
+		# Validate URL format
+		parsed = urlparse(url)
+		if not parsed.scheme or not parsed.netloc:
+			return {
+				"statusCode": 400,
+				"headers": cors_headers,
+				"body": json.dumps({"message": "Invalid URL format"})
+			}
+
+		logger.info("Starting async scraper preview", user_id=user_id, url=url)
+
+		# Start async scrape
+		from scraper_preview_async import start_async_scrape
+		result = start_async_scrape(user_id=user_id, url=url)
+
+		return {
+			"statusCode": 202,  # 202 Accepted
+			"headers": cors_headers,
+			"body": json.dumps(result)
+		}
+
+	except Exception as e:
+		log_exception(logger, "Async scraper start handler failed", e)
+		return {
+			"statusCode": 500,
+			"headers": cors_headers,
+			"body": json.dumps({"message": "Internal server error", "error": str(e)})
+		}
+	finally:
+		logger.clear_context()
+
+
+def scraper_preview_async_worker_handler(event, context):
+	"""
+	Worker Lambda function that performs the actual scraping.
+	Invoked asynchronously by scraper_preview_async_start_handler.
+	Sends progress updates via WebSocket.
+	"""
+	log_lambda_invocation(event, context, logger)
+
+	try:
+		# Extract parameters from event (direct invocation, not API Gateway)
+		task_id = event.get('task_id')
+		user_id = event.get('user_id')
+		url = event.get('url')
+		min_tier = event.get('min_tier', 1)
+		max_tier = event.get('max_tier', 4)
+
+		if not all([task_id, user_id, url]):
+			logger.error("Missing required parameters in worker invocation", event=event)
+			return {
+				"statusCode": 400,
+				"body": json.dumps({"message": "Missing required parameters"})
+			}
+
+		logger.info("Starting async scraper worker", task_id=task_id, user_id=user_id, url=url)
+
+		# Perform the scrape with WebSocket updates
+		from scraper_preview_async import scrape_with_websocket_updates
+		scrape_with_websocket_updates(
+			task_id=task_id,
+			user_id=user_id,
+			url=url,
+			min_tier=min_tier,
+			max_tier=max_tier
+		)
+
+		return {
+			"statusCode": 200,
+			"body": json.dumps({"message": "Scrape completed", "task_id": task_id})
+		}
+
+	except Exception as e:
+		log_exception(logger, "Async scraper worker failed", e)
+
+		# Try to send error via WebSocket
+		try:
+			task_id = event.get('task_id')
+			user_id = event.get('user_id')
+			if task_id and user_id:
+				from websocket_handler import broadcast_to_user
+				ws_domain = os.environ.get('WS_API_DOMAIN')
+				ws_stage = os.environ.get('WS_API_STAGE', 'dev')
+				if ws_domain:
+					broadcast_to_user(ws_domain, ws_stage, user_id, {
+						'type': 'scraper:error',
+						'task_id': task_id,
+						'status': 'failed',
+						'error': str(e)
+					})
+		except:
+			pass
+
+		return {
+			"statusCode": 500,
+			"body": json.dumps({"message": "Worker failed", "error": str(e)})
+		}
+	finally:
+		logger.clear_context()
