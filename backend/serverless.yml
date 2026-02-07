@@ -1,0 +1,1395 @@
+# "org" ensures this Service is used with the correct Serverless Framework Access Key.
+org: snowforge
+# "app" enables Serverless Framework Dashboard features and sharing them with other Services.
+app: snowscrape
+# "service" is the name of this project. This will also be added to your AWS resource names.
+service: snowscrape
+
+provider:
+  name: aws
+  runtime: python3.11
+  region: us-east-2
+  stage: ${opt:stage, 'dev'} # Default to 'dev' if no stage is specified
+  tracing:
+    lambda: true  # Enable X-Ray tracing for Lambda
+    apiGateway: false  # Disabled temporarily to avoid CloudWatch role issues
+  apiGateway:
+    minimumCompressionSize: 1024  # Enable compression for responses > 1KB
+    shouldStartNameWithService: true
+    metrics: false  # Disabled temporarily to avoid CloudWatch role issues
+    throttle:
+      burstLimit: 200  # Maximum concurrent requests
+      rateLimit: 100   # Requests per second
+  logs:
+    restApi:
+      accessLogging: false  # Disabled temporarily to avoid CloudWatch role issues
+      executionLogging: false  # Disabled temporarily to avoid CloudWatch role issues
+      level: INFO
+      fullExecutionData: true
+  layers:
+    # Lambda Insights extension for enhanced monitoring
+    # Version 21 is the latest stable version for Python 3.12
+    - arn:aws:lambda:${self:provider.region}:580247275435:layer:LambdaInsightsExtension:21
+    # Python requirements layer (automatically created by serverless-python-requirements plugin)
+    - Ref: PythonRequirementsLambdaLayer
+  environment:
+    CLERK_JWT_PUBLIC_KEY: ${self:custom.clerkJwtPublicKey.${self:provider.stage}}  # Conditional key based on the stage
+    CLERK_JWT_SECRET_KEY: ${self:custom.clerkJwtSecretKey.${self:provider.stage}}  # Conditional key based on the stage
+    DYNAMODB_JOBS_TABLE: ${self:custom.dynamoDbJobsTable}
+    DYNAMODB_SESSION_TABLE: ${self:custom.dynamoDbSessionTable}
+    DYNAMODB_URLS_TABLE: ${self:custom.dynamoDbUrlsTable}
+    DYNAMODB_TEMPLATES_TABLE: ${self:custom.dynamoDbTemplatesTable}
+    DYNAMODB_WEBHOOKS_TABLE: ${self:custom.dynamoDbWebhooksTable}
+    DYNAMODB_WEBHOOK_DELIVERIES_TABLE: ${self:custom.dynamoDbWebhookDeliveriesTable}
+    DYNAMODB_PROXY_POOL_TABLE: ${self:custom.dynamoDbProxyPoolTable}
+    DYNAMODB_CONNECTIONS_TABLE: ${self:custom.dynamoDbConnectionsTable}
+    REGION: ${self:provider.region}
+    S3_BUCKET: ${self:custom.s3Bucket}
+    SQS_JOB_QUEUE: ${self:custom.sqsJobQueue}
+    SQS_JOB_QUEUE_URL: ${self:custom.sqsJobQueueUrl}
+    SQS_WEBHOOK_QUEUE: ${self:custom.sqsWebhookQueue}
+    SQS_WEBHOOK_QUEUE_URL: ${self:custom.sqsWebhookQueueUrl}
+    # WebSocket API configuration
+    WS_API_DOMAIN:
+      Fn::Join:
+        - ''
+        - - Ref: WebsocketsApi
+          - '.execute-api.'
+          - ${self:provider.region}
+          - '.amazonaws.com'
+    WS_API_STAGE: ${self:provider.stage}
+    # Observatory integration for centralized monitoring
+    SNOWGLOBE_URL: ${self:custom.snowglobeUrl}
+    SNOWGLOBE_API_KEY: ${env:SNOWGLOBE_API_KEY, ''}  # Set via environment variable (optional)
+    SNOWGLOBE_SITE_ID: ${self:custom.snowglobeSiteId}
+    # Tier 2 scraping: Residential proxy configuration (optional)
+    RESIDENTIAL_PROXY_URL: ${env:RESIDENTIAL_PROXY_URL, ''}  # Format: http://user:pass@proxy-server:port
+    CORS_ALLOWED_ORIGIN: ${self:custom.corsOrigin.${self:provider.stage}}
+    # Tier 3/4: External JS rendering service (Browserless, ScrapingBee, etc.)
+    JS_RENDERER_URL: ${env:JS_RENDERER_URL, ''}  # e.g., https://chrome.browserless.io/content
+    JS_RENDERER_API_KEY: ${env:JS_RENDERER_API_KEY, ''}
+    CAPTCHA_SOLVER_API_KEY: ${env:CAPTCHA_SOLVER_API_KEY, ''}
+  iamRoleStatements:
+    - Effect: "Allow"
+      Action:
+        - "dynamodb:*"
+      Resource:
+        - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.dynamoDbJobsTable}"
+        - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.dynamoDbJobsTable}/index/*"
+
+    - Effect: "Allow"
+      Action:
+        - "dynamodb:*"
+      Resource:
+        - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.dynamoDbSessionTable}"
+
+    - Effect: "Allow"
+      Action:
+        - "dynamodb:*"
+      Resource:
+        - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.dynamoDbUrlsTable}"
+
+    - Effect: "Allow"
+      Action:
+        - "dynamodb:*"
+      Resource:
+        - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.dynamoDbTemplatesTable}"
+        - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.dynamoDbTemplatesTable}/index/*"
+
+    - Effect: "Allow"
+      Action:
+        - "dynamodb:*"
+      Resource:
+        - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.dynamoDbWebhooksTable}"
+        - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.dynamoDbWebhooksTable}/index/*"
+
+    - Effect: "Allow"
+      Action:
+        - "dynamodb:*"
+      Resource:
+        - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.dynamoDbWebhookDeliveriesTable}"
+        - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.dynamoDbWebhookDeliveriesTable}/index/*"
+
+    - Effect: "Allow"
+      Action:
+        - "dynamodb:*"
+      Resource:
+        - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.dynamoDbProxyPoolTable}"
+
+    - Effect: "Allow"
+      Action:
+        - "dynamodb:*"
+      Resource:
+        - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.dynamoDbConnectionsTable}"
+
+    - Effect: "Allow"
+      Action:
+        - "execute-api:ManageConnections"
+      Resource:
+        - "arn:aws:execute-api:${self:provider.region}:*:*/@connections/*"
+
+    - Effect: "Allow"
+      Action:
+        - "secretsmanager:GetSecretValue"
+        - "secretsmanager:UpdateSecret"
+      Resource:
+        - "arn:aws:secretsmanager:${self:provider.region}:*:secret:snowscrape/proxy-pool-*"
+
+    - Effect: "Allow"
+      Action:
+        - "s3:*"
+      Resource:
+        - "arn:aws:s3:::${self:custom.s3Bucket}/*"
+
+    - Effect: "Allow"
+      Action:
+        - "sqs:*"
+      Resource:
+        - "arn:aws:sqs:${self:provider.region}:*:${self:custom.sqsJobQueue}"
+        - "arn:aws:sqs:${self:provider.region}:*:${self:custom.sqsJobQueue}-DLQ"
+        - "arn:aws:sqs:${self:provider.region}:*:${self:custom.sqsWebhookQueue}"
+        - "arn:aws:sqs:${self:provider.region}:*:${self:custom.sqsWebhookQueue}-DLQ"
+
+    - Effect: "Allow"
+      Action:
+        - "xray:PutTraceSegments"
+        - "xray:PutTelemetryRecords"
+      Resource: "*"
+
+    - Effect: "Allow"
+      Action:
+        - "cloudwatch:PutMetricData"
+      Resource: "*"
+
+    # Lambda Insights permissions
+    - Effect: "Allow"
+      Action:
+        - "logs:CreateLogGroup"
+        - "logs:CreateLogStream"
+        - "logs:PutLogEvents"
+      Resource: "*"
+
+    # Lambda invoke permissions (for async scraper pattern)
+    - Effect: "Allow"
+      Action:
+        - "lambda:InvokeFunction"
+        - "lambda:InvokeAsync"
+      Resource:
+        - "arn:aws:lambda:${self:provider.region}:*:function:snowscrape-scraper-preview-async-worker"
+
+package:
+  individually: false
+  patterns:
+    - '!venv/**'
+    - '!node_modules/**'
+    - '!.git/**'
+    - '!.github/**'
+    - '!tests/**'
+    - '!__pycache__/**'
+    - '!*.pyc'
+    - '!.pytest_cache/**'
+    - '!.serverless/**'
+    - '!*.md'
+    - '!deployment-log.txt'
+
+functions:
+  createJob:
+    name: snowscrape-create-job
+    handler: handler.create_job_handler
+    timeout: 30  # 30 seconds timeout
+    memorySize: 512  # 512 MB memory
+    events:
+      - http:
+          path: jobs
+          method: post
+          cors:
+            origin: ${self:custom.corsConfig.origin}
+            headers: ${self:custom.corsConfig.headers}
+            allowCredentials: ${self:custom.corsConfig.allowCredentials}
+            maxAge: ${self:custom.corsConfig.maxAge}
+          request:
+            schemas:
+              application/json: ${file(schemas/create-job-request.json)}
+    maximumRetryAttempts: 0
+
+  deleteJob:
+    name: snowscrape-delete-job
+    handler: handler.delete_job_handler
+    events:
+      - http:
+          path: jobs/{job_id}
+          method: delete
+          cors: true
+    maximumRetryAttempts: 0
+
+  getAllJobStatuses:
+    name: snowscrape-get-all-job-statuses
+    handler: handler.get_all_job_statuses_handler
+    events:
+      - http:
+          path: jobs/status
+          method: get
+          cors: true
+    maximumRetryAttempts: 0
+
+  getCrawlDetails:
+    name: snowscrape-get-crawl-details
+    handler: handler.get_crawl_handler
+    events:
+      - http:
+          path: jobs/{job_id}/crawls/{crawl_id}
+          method: get
+          cors: true
+    maximumRetryAttempts: 0
+
+  getJobCrawlStatus:
+    name: snowscrape-get-job-crawls
+    handler: handler.get_job_crawls_handler
+    events:
+      - http:
+          path: jobs/{job_id}/crawls
+          method: get
+          cors: true
+    maximumRetryAttempts: 0
+
+  getJobDetails:
+    name: snowscrape-get-job-details
+    handler: handler.get_job_details_handler
+    events:
+      - http:
+          path: jobs/{job_id}
+          method: get
+          cors: true
+    maximumRetryAttempts: 0
+
+  pauseJob:
+    name: snowscrape-pause-job
+    handler: handler.pause_job_handler
+    events:
+      - http:
+          path: jobs/{job_id}/pause
+          method: patch
+          cors: true
+    maximumRetryAttempts: 0
+
+  cancelJob:
+    name: snowscrape-cancel-job
+    handler: handler.cancel_job_handler
+    events:
+      - http:
+          path: jobs/{job_id}/cancel
+          method: patch
+          cors: true
+    maximumRetryAttempts: 0
+
+  # Job processing function (Triggered by SQS)
+  processJob:
+    name: snowscrape-process-job
+    handler: handler.process_job_handler
+    timeout: 900  # 15 minutes (max Lambda timeout)
+    memorySize: 1024  # 1GB memory
+    reservedConcurrency: ${self:custom.jobProcessorConcurrency.${self:provider.stage}}
+    events:
+      - sqs:
+          arn:
+            Fn::GetAtt:
+              - JobQueue
+              - Arn
+          batchSize: 5  # Controls how many messages are processed at once
+          # maximumBatchingWindowInSeconds: 10  # Wait up to 10s to gather batch (Serverless V4+ only)
+          functionResponseType: ReportBatchItemFailures  # Partial batch failures
+
+  refreshJob:
+    name: snowscrape-refresh-job
+    handler: handler.refresh_job_handler
+    events:
+      - http:
+          path: jobs/{job_id}/refresh
+          method: post
+          cors: true
+    maximumRetryAttempts: 0
+
+  resumeJob:
+    name: snowscrape-resume-job
+    handler: handler.resume_job_handler
+    events:
+      - http:
+          path: jobs/{job_id}/resume
+          method: patch
+          cors: true
+    maximumRetryAttempts: 0
+
+  scheduleJobs:
+    handler: handler.schedule_jobs_handler
+    events:
+      - schedule:
+          name: "RunJobsEveryFiveMinutes" # You can use rate expressions or cron jobs
+          rate: rate(5 minutes) # Runs every 5 minutes
+    maximumRetryAttempts: 0
+
+  reportMetricsToObservatory:
+    name: snowscrape-report-metrics
+    handler: handler.report_metrics_to_observatory_handler
+    timeout: 60  # 1 minute timeout
+    events:
+      - schedule:
+          name: "ReportMetricsHourly"
+          rate: rate(1 hour)  # Report metrics every hour
+    maximumRetryAttempts: 0
+
+  updateJob:
+    name: snowscrape-update-job
+    handler: handler.update_job_handler
+    events:
+      - http:
+          path: jobs/{job_id}
+          method: put
+          cors: true
+    maximumRetryAttempts: 0
+
+  validateSftpUrl:
+    handler: handler.validate_sftp_url_handler
+    events:
+      - http:
+          path: validate-sftp-url
+          method: post
+          cors: true
+    maximumRetryAttempts: 0
+
+  previewUrlVariables:
+    name: snowscrape-preview-url-variables
+    handler: handler.preview_url_variables_handler
+    events:
+      - http:
+          path: preview-url
+          method: post
+          cors: true
+    maximumRetryAttempts: 0
+
+  healthCheck:
+    name: snowscrape-health-check
+    handler: handler.health_check_handler
+    events:
+      - http:
+          path: health
+          method: get
+          cors: true
+    maximumRetryAttempts: 0
+
+  downloadResults:
+    name: snowscrape-download-results
+    handler: handler.download_results_handler
+    timeout: 30
+    events:
+      - http:
+          path: jobs/{job_id}/download
+          method: get
+          cors: true
+    maximumRetryAttempts: 0
+
+  previewResults:
+    name: snowscrape-preview-results
+    handler: handler.preview_results_handler
+    timeout: 30
+    events:
+      - http:
+          path: jobs/{job_id}/preview
+          method: get
+          cors: true
+    maximumRetryAttempts: 0
+
+  createTemplate:
+    name: snowscrape-create-template
+    handler: handler.create_template_handler
+    timeout: 10
+    events:
+      - http:
+          path: templates
+          method: post
+          cors: true
+    maximumRetryAttempts: 0
+
+  listTemplates:
+    name: snowscrape-list-templates
+    handler: handler.list_templates_handler
+    timeout: 10
+    events:
+      - http:
+          path: templates
+          method: get
+          cors: true
+    maximumRetryAttempts: 0
+
+  getTemplate:
+    name: snowscrape-get-template
+    handler: handler.get_template_handler
+    timeout: 10
+    events:
+      - http:
+          path: templates/{template_id}
+          method: get
+          cors: true
+    maximumRetryAttempts: 0
+
+  deleteTemplate:
+    name: snowscrape-delete-template
+    handler: handler.delete_template_handler
+    timeout: 10
+    events:
+      - http:
+          path: templates/{template_id}
+          method: delete
+          cors: true
+    maximumRetryAttempts: 0
+
+  cleanupOldResults:
+    name: snowscrape-cleanup-old-results
+    handler: handler.cleanup_old_results_handler
+    timeout: 300  # 5 minutes to process all jobs
+    events:
+      - schedule:
+          name: "CleanupOldResultsDaily"
+          description: "Clean up old job results based on retention policy"
+          rate: rate(1 day)
+          enabled: true
+    maximumRetryAttempts: 0
+
+  # Webhook Management Functions
+  createWebhook:
+    name: snowscrape-create-webhook
+    handler: handler.create_webhook_handler
+    timeout: 10
+    events:
+      - http:
+          path: webhooks
+          method: post
+          cors: true
+    maximumRetryAttempts: 0
+
+  listWebhooks:
+    name: snowscrape-list-webhooks
+    handler: handler.list_webhooks_handler
+    timeout: 10
+    events:
+      - http:
+          path: webhooks
+          method: get
+          cors: true
+    maximumRetryAttempts: 0
+
+  deleteWebhook:
+    name: snowscrape-delete-webhook
+    handler: handler.delete_webhook_handler
+    timeout: 10
+    events:
+      - http:
+          path: webhooks/{webhook_id}
+          method: delete
+          cors: true
+    maximumRetryAttempts: 0
+
+  testWebhook:
+    name: snowscrape-test-webhook
+    handler: handler.test_webhook_handler
+    timeout: 10
+    events:
+      - http:
+          path: webhooks/{webhook_id}/test
+          method: post
+          cors: true
+    maximumRetryAttempts: 0
+
+  # Scraper Visual Builder Endpoints
+  scraperPreview:
+    name: snowscrape-scraper-preview
+    handler: handler.scraper_preview_handler
+    timeout: 90  # Increased for multi-tier escalation and slow-loading sites
+    memorySize: 512
+    events:
+      - http:
+          path: scraper/preview
+          method: post
+          cors:
+            origin: ${self:custom.corsConfig.origin}
+            headers: ${self:custom.corsConfig.headers}
+            exposedHeaders: ${self:custom.corsConfig.exposedHeaders}
+            allowCredentials: ${self:custom.corsConfig.allowCredentials}
+            maxAge: ${self:custom.corsConfig.maxAge}
+    maximumRetryAttempts: 0
+
+  scraperTest:
+    name: snowscrape-scraper-test
+    handler: handler.scraper_test_handler
+    timeout: 90  # Increased for multi-tier escalation and slow-loading sites
+    memorySize: 512
+    events:
+      - http:
+          path: scraper/test
+          method: post
+          cors:
+            origin: ${self:custom.corsConfig.origin}
+            headers: ${self:custom.corsConfig.headers}
+            exposedHeaders: ${self:custom.corsConfig.exposedHeaders}
+            allowCredentials: ${self:custom.corsConfig.allowCredentials}
+            maxAge: ${self:custom.corsConfig.maxAge}
+    maximumRetryAttempts: 0
+
+  # Async Scraper Endpoints (for sites that exceed 30s API Gateway timeout)
+  scraperPreviewAsyncStart:
+    name: snowscrape-scraper-preview-async-start
+    handler: handler.scraper_preview_async_start_handler
+    timeout: 10  # Just starts the job, returns immediately
+    memorySize: 256
+    events:
+      - http:
+          path: scraper/preview/async
+          method: post
+          cors:
+            origin: ${self:custom.corsConfig.origin}
+            headers: ${self:custom.corsConfig.headers}
+            exposedHeaders: ${self:custom.corsConfig.exposedHeaders}
+            allowCredentials: ${self:custom.corsConfig.allowCredentials}
+            maxAge: ${self:custom.corsConfig.maxAge}
+    maximumRetryAttempts: 0
+
+  scraperPreviewAsyncWorker:
+    name: snowscrape-scraper-preview-async-worker
+    handler: handler.scraper_preview_async_worker_handler
+    timeout: 120  # 2 minutes for slow sites with tier escalation
+    memorySize: 512
+    # No HTTP event - invoked directly by scraperPreviewAsyncStart
+    maximumRetryAttempts: 0
+
+  # Webhook Delivery Handler (SQS triggered)
+  webhookDelivery:
+    name: snowscrape-webhook-delivery
+    handler: webhook_delivery_handler.webhook_delivery_handler
+    timeout: 60
+    memorySize: 512
+    events:
+      - sqs:
+          arn:
+            Fn::GetAtt:
+              - WebhookQueue
+              - Arn
+          batchSize: 10
+          # maximumBatchingWindowInSeconds: 5  # (Serverless V4+ only)
+          functionResponseType: ReportBatchItemFailures
+    maximumRetryAttempts: 0
+
+  # Proxy Health Checker (Scheduled)
+  proxyHealthChecker:
+    name: snowscrape-proxy-health-checker
+    handler: handler.proxy_health_checker_handler
+    timeout: 60
+    memorySize: 256
+    events:
+      - schedule:
+          name: "ProxyHealthCheckEvery5Minutes"
+          description: "Check health of all proxies every 5 minutes"
+          rate: rate(5 minutes)
+          enabled: true
+    maximumRetryAttempts: 0
+
+  # JavaScript Renderer (Container-based Lambda)
+  # jsRenderer:  # Temporarily commented out - deploy after building container
+  #   name: snowscrape-js-renderer
+  #   image: ${env:AWS_ACCOUNT_ID}.dkr.ecr.${self:provider.region}.amazonaws.com/snowscrape-js-renderer:latest
+  #   memorySize: 2048
+  #   timeout: 120
+  #   reservedConcurrency: 5
+  #   environment:
+  #     PLAYWRIGHT_BROWSERS_PATH: /tmp/ms-playwright
+  #   maximumRetryAttempts: 0
+
+  # WebSocket API Handlers
+  wsConnect:
+    name: snowscrape-ws-connect
+    handler: websocket_handler.ws_connect_handler
+    timeout: 10
+    memorySize: 256
+    events:
+      - websocket:
+          route: $connect
+    maximumRetryAttempts: 0
+
+  wsDisconnect:
+    name: snowscrape-ws-disconnect
+    handler: websocket_handler.ws_disconnect_handler
+    timeout: 10
+    memorySize: 256
+    events:
+      - websocket:
+          route: $disconnect
+    maximumRetryAttempts: 0
+
+  wsDefault:
+    name: snowscrape-ws-default
+    handler: websocket_handler.ws_default_handler
+    timeout: 10
+    memorySize: 256
+    events:
+      - websocket:
+          route: $default
+    maximumRetryAttempts: 0
+
+resources:
+  Resources:
+    JobsDynamoDbTable:
+      Type: "AWS::DynamoDB::Table"
+      Properties:
+        TableName: ${self:custom.dynamoDbJobsTable}
+        AttributeDefinitions:
+          - AttributeName: job_id  # Define the primary key attribute
+            AttributeType: S       # S stands for String type
+          - AttributeName: status  # (Optional) GSI to query jobs by status
+            AttributeType: S
+          - AttributeName: jobStatus  # GSI partition key for schedule queries
+            AttributeType: S
+          - AttributeName: nextRun  # GSI sort key for schedule queries (ISO timestamp)
+            AttributeType: S
+        KeySchema:
+          - AttributeName: job_id
+            KeyType: HASH          # The primary key (hash key)
+        GlobalSecondaryIndexes:    # (Optional) GSI to query by status
+          - IndexName: StatusIndex
+            KeySchema:
+              - AttributeName: status
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+          - IndexName: ScheduleIndex
+            KeySchema:
+              - AttributeName: jobStatus
+                KeyType: HASH
+              - AttributeName: nextRun
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+        BillingMode: PAY_PER_REQUEST
+        SSESpecification:
+          SSEEnabled: true
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+
+    SessionsDynamoDbTable:
+      Type: "AWS::DynamoDB::Table"
+      Properties:
+        TableName: ${self:custom.dynamoDbSessionTable}
+        AttributeDefinitions:
+          - AttributeName: job_id  # Partition key for sessions by job
+            AttributeType: S
+        KeySchema:
+          - AttributeName: job_id
+            KeyType: HASH
+        BillingMode: PAY_PER_REQUEST
+        SSESpecification:
+          SSEEnabled: true
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+
+    UrlsDynamoDbTable:
+      Type: "AWS::DynamoDB::Table"
+      Properties:
+        TableName: ${self:custom.dynamoDbUrlsTable}  # A single table for all URLs across jobs
+        AttributeDefinitions:
+          - AttributeName: job_id  # Partition Key
+            AttributeType: S       # String
+          - AttributeName: url  # Sort Key
+            AttributeType: S       # String
+          - AttributeName: status  # Attribute for the GSI
+            AttributeType: S       # String
+        KeySchema:
+          - AttributeName: job_id  # Partition Key for URLs by job
+            KeyType: HASH
+          - AttributeName: url  # Sort Key for URL under each job
+            KeyType: RANGE
+        BillingMode: PAY_PER_REQUEST
+        SSESpecification:
+          SSEEnabled: true
+        GlobalSecondaryIndexes:
+          - IndexName: StatusIndex  # Optional index to query URLs by status
+            KeySchema:
+              - AttributeName: status
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+
+    TemplatesDynamoDbTable:
+      Type: "AWS::DynamoDB::Table"
+      Properties:
+        TableName: ${self:custom.dynamoDbTemplatesTable}
+        AttributeDefinitions:
+          - AttributeName: template_id  # Primary key
+            AttributeType: S
+          - AttributeName: user_id  # GSI to query templates by user
+            AttributeType: S
+        KeySchema:
+          - AttributeName: template_id
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: UserIdIndex  # Index to query templates by user
+            KeySchema:
+              - AttributeName: user_id
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+        BillingMode: PAY_PER_REQUEST
+        SSESpecification:
+          SSEEnabled: true
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+
+    WebhooksDynamoDbTable:
+      Type: "AWS::DynamoDB::Table"
+      Properties:
+        TableName: ${self:custom.dynamoDbWebhooksTable}
+        AttributeDefinitions:
+          - AttributeName: webhook_id  # Primary key
+            AttributeType: S
+          - AttributeName: user_id  # GSI to query webhooks by user
+            AttributeType: S
+        KeySchema:
+          - AttributeName: webhook_id
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: UserIdIndex  # Index to query webhooks by user
+            KeySchema:
+              - AttributeName: user_id
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+        BillingMode: PAY_PER_REQUEST
+        SSESpecification:
+          SSEEnabled: true
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+
+    WebhookDeliveriesDynamoDbTable:
+      Type: "AWS::DynamoDB::Table"
+      Properties:
+        TableName: ${self:custom.dynamoDbWebhookDeliveriesTable}
+        AttributeDefinitions:
+          - AttributeName: delivery_id  # Primary key
+            AttributeType: S
+          - AttributeName: webhook_id  # GSI to query deliveries by webhook
+            AttributeType: S
+          - AttributeName: timestamp  # Sort key for webhook_id GSI
+            AttributeType: N
+        KeySchema:
+          - AttributeName: delivery_id
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: WebhookIdIndex  # Index to query deliveries by webhook
+            KeySchema:
+              - AttributeName: webhook_id
+                KeyType: HASH
+              - AttributeName: timestamp
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+        BillingMode: PAY_PER_REQUEST
+        SSESpecification:
+          SSEEnabled: true
+        TimeToLiveSpecification:
+          AttributeName: ttl
+          Enabled: true  # Auto-delete old delivery records after 30 days
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+
+    ProxyPoolDynamoDbTable:
+      Type: "AWS::DynamoDB::Table"
+      Properties:
+        TableName: ${self:custom.dynamoDbProxyPoolTable}
+        AttributeDefinitions:
+          - AttributeName: proxy_id  # Primary key (proxy URL)
+            AttributeType: S
+        KeySchema:
+          - AttributeName: proxy_id
+            KeyType: HASH
+        BillingMode: PAY_PER_REQUEST
+        SSESpecification:
+          SSEEnabled: true
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+
+    # WebSocket Connections Table
+    ConnectionsDynamoDbTable:
+      Type: "AWS::DynamoDB::Table"
+      Properties:
+        TableName: ${self:custom.dynamoDbConnectionsTable}
+        AttributeDefinitions:
+          - AttributeName: connection_id  # Primary key (WebSocket connection ID)
+            AttributeType: S
+        KeySchema:
+          - AttributeName: connection_id
+            KeyType: HASH
+        BillingMode: PAY_PER_REQUEST
+        SSESpecification:
+          SSEEnabled: true
+        TimeToLiveSpecification:
+          AttributeName: ttl
+          Enabled: true  # Auto-delete stale connections after 24 hours
+
+    # Dead Letter Queue for failed webhooks
+    WebhookDeadLetterQueue:
+      Type: "AWS::SQS::Queue"
+      Properties:
+        QueueName: ${self:custom.sqsWebhookQueue}-DLQ
+        MessageRetentionPeriod: 1209600  # 14 days
+        VisibilityTimeout: 60
+        KmsMasterKeyId: alias/aws/sqs
+        KmsDataKeyReusePeriodSeconds: 300
+
+    # SQS Queue for webhook delivery
+    WebhookQueue:
+      Type: "AWS::SQS::Queue"
+      Properties:
+        QueueName: ${self:custom.sqsWebhookQueue}
+        VisibilityTimeout: 60  # Matches Lambda timeout
+        MessageRetentionPeriod: 345600  # 4 days
+        ReceiveMessageWaitTimeSeconds: 20  # Long polling
+        KmsMasterKeyId: alias/aws/sqs
+        KmsDataKeyReusePeriodSeconds: 300
+        RedrivePolicy:
+          deadLetterTargetArn:
+            Fn::GetAtt:
+              - WebhookDeadLetterQueue
+              - Arn
+          maxReceiveCount: 3  # Retry up to 3 times before sending to DLQ
+
+    # Dead Letter Queue for failed jobs
+    JobDeadLetterQueue:
+      Type: "AWS::SQS::Queue"
+      Properties:
+        QueueName: ${self:custom.sqsJobQueue}-DLQ
+        MessageRetentionPeriod: 1209600  # 14 days
+        VisibilityTimeout: 300
+        KmsMasterKeyId: alias/aws/sqs
+        KmsDataKeyReusePeriodSeconds: 300
+
+    # SQS Queue for job processing
+    JobQueue:
+      Type: "AWS::SQS::Queue"
+      Properties:
+        QueueName: ${self:custom.sqsJobQueue}
+        VisibilityTimeout: 900  # 15 minutes (matches Lambda timeout)
+        MessageRetentionPeriod: 345600  # 4 days
+        ReceiveMessageWaitTimeSeconds: 20  # Long polling
+        KmsMasterKeyId: alias/aws/sqs
+        KmsDataKeyReusePeriodSeconds: 300
+        RedrivePolicy:
+          deadLetterTargetArn:
+            Fn::GetAtt:
+              - JobDeadLetterQueue
+              - Arn
+          maxReceiveCount: 3  # Retry up to 3 times before sending to DLQ
+
+    SnowscrapeResultsBucket:
+      Type: "AWS::S3::Bucket"
+      Properties:
+        BucketName: ${self:custom.s3Bucket}
+        BucketEncryption:
+          ServerSideEncryptionConfiguration:
+            - ServerSideEncryptionByDefault:
+                SSEAlgorithm: AES256
+        VersioningConfiguration:
+          Status: Enabled
+        LifecycleConfiguration:
+          Rules:
+            # Move to Glacier after 90 days
+            - Id: MoveToGlacierAfter90Days
+              Status: Enabled
+              Transitions:
+                - TransitionInDays: 90
+                  StorageClass: GLACIER
+            # Delete after 365 days
+            - Id: DeleteAfter365Days
+              Status: Enabled
+              ExpirationInDays: 365
+            # Clean up incomplete multipart uploads after 7 days
+            - Id: CleanupIncompleteMultipartUploads
+              Status: Enabled
+              AbortIncompleteMultipartUpload:
+                DaysAfterInitiation: 7
+        Tags:
+          - Key: Project
+            Value: Snowscrape
+          - Key: Environment
+            Value: ${self:provider.stage}
+          - Key: ManagedBy
+            Value: Serverless
+
+    # CloudWatch Log Groups with retention
+    ProcessJobLogGroup:
+      Type: "AWS::Logs::LogGroup"
+      Properties:
+        LogGroupName: /aws/lambda/${self:service}-${self:provider.stage}-processJob
+        RetentionInDays: 14
+
+    CreateJobLogGroup:
+      Type: "AWS::Logs::LogGroup"
+      Properties:
+        LogGroupName: /aws/lambda/${self:service}-${self:provider.stage}-createJob
+        RetentionInDays: 14
+
+#    # Metric Filter for Errors
+#    ErrorMetricFilter:
+#      Type: "AWS::Logs::MetricFilter"
+#      Properties:
+#        FilterPattern: '{ $.level = "ERROR" }'
+#        LogGroupName: /aws/lambda/${self:service}-${self:provider.stage}-processJob
+#        MetricTransformations:
+#          - MetricName: JobProcessingErrors
+#            MetricNamespace: ${self:service}/${self:provider.stage}
+#            MetricValue: "1"
+#            DefaultValue: 0
+#
+#    # Metric Filter for Job Completions
+#    JobCompletionMetricFilter:
+#      Type: "AWS::Logs::MetricFilter"
+#      Properties:
+#        FilterPattern: '{ $.job_event = "completed" }'
+#        LogGroupName: /aws/lambda/${self:service}-${self:provider.stage}-processJob
+#        MetricTransformations:
+#          - MetricName: JobCompletions
+#            MetricNamespace: ${self:service}/${self:provider.stage}
+#            MetricValue: "1"
+#            DefaultValue: 0
+#
+#    # Metric Filter for Job Cancellations
+#    JobCancellationMetricFilter:
+#      Type: "AWS::Logs::MetricFilter"
+#      Properties:
+#        FilterPattern: '{ $.job_event = "cancelled" }'
+#        LogGroupName: /aws/lambda/${self:service}-${self:provider.stage}-processJob
+#        MetricTransformations:
+#          - MetricName: JobCancellations
+#            MetricNamespace: ${self:service}/${self:provider.stage}
+#            MetricValue: "1"
+#            DefaultValue: 0
+#
+#    # Metric Filter for Job Timeouts
+#    JobTimeoutMetricFilter:
+#      Type: "AWS::Logs::MetricFilter"
+#      Properties:
+#        FilterPattern: '{ $.job_event = "timeout" }'
+#        LogGroupName: /aws/lambda/${self:service}-${self:provider.stage}-processJob
+#        MetricTransformations:
+#          - MetricName: JobTimeouts
+#            MetricNamespace: ${self:service}/${self:provider.stage}
+#            MetricValue: "1"
+#            DefaultValue: 0
+
+    # SNS Topic for Alarm Notifications
+    AlarmNotificationTopic:
+      Type: "AWS::SNS::Topic"
+      Properties:
+        TopicName: ${self:service}-${self:provider.stage}-alarms
+        DisplayName: Snowscrape Alarm Notifications
+        Subscription:
+          - Endpoint: ${self:custom.alarmEmail.${self:provider.stage}, 'admin@example.com'}
+            Protocol: email
+
+    # CloudWatch Alarm for High Error Rate
+    HighErrorRateAlarm:
+      Type: "AWS::CloudWatch::Alarm"
+      Properties:
+        AlarmName: ${self:service}-${self:provider.stage}-high-error-rate
+        AlarmDescription: Alert when error rate exceeds threshold
+        MetricName: JobProcessingErrors
+        Namespace: ${self:service}/${self:provider.stage}
+        Statistic: Sum
+        Period: 300  # 5 minutes
+        EvaluationPeriods: 1
+        Threshold: 10
+        ComparisonOperator: GreaterThanThreshold
+        TreatMissingData: notBreaching
+        AlarmActions:
+          - Ref: AlarmNotificationTopic
+        OKActions:
+          - Ref: AlarmNotificationTopic
+
+    # CloudWatch Alarm for DLQ Messages
+    DLQMessagesAlarm:
+      Type: "AWS::CloudWatch::Alarm"
+      Properties:
+        AlarmName: ${self:service}-${self:provider.stage}-dlq-messages
+        AlarmDescription: Alert when messages appear in DLQ
+        MetricName: ApproximateNumberOfMessagesVisible
+        Namespace: AWS/SQS
+        Dimensions:
+          - Name: QueueName
+            Value: ${self:custom.sqsJobQueue}-DLQ
+        Statistic: Sum
+        Period: 300  # 5 minutes
+        EvaluationPeriods: 1
+        Threshold: 1
+        ComparisonOperator: GreaterThanOrEqualToThreshold
+        TreatMissingData: notBreaching
+        AlarmActions:
+          - Ref: AlarmNotificationTopic
+        OKActions:
+          - Ref: AlarmNotificationTopic
+
+    # CloudWatch Alarm for Lambda Errors
+    LambdaErrorsAlarm:
+      Type: "AWS::CloudWatch::Alarm"
+      Properties:
+        AlarmName: ${self:service}-${self:provider.stage}-lambda-errors
+        AlarmDescription: Alert when Lambda function errors exceed threshold
+        MetricName: Errors
+        Namespace: AWS/Lambda
+        Statistic: Sum
+        Period: 300  # 5 minutes
+        EvaluationPeriods: 2
+        Threshold: 5
+        ComparisonOperator: GreaterThanThreshold
+        TreatMissingData: notBreaching
+        AlarmActions:
+          - Ref: AlarmNotificationTopic
+
+    # CloudWatch Alarm for Lambda Throttles
+    LambdaThrottlesAlarm:
+      Type: "AWS::CloudWatch::Alarm"
+      Properties:
+        AlarmName: ${self:service}-${self:provider.stage}-lambda-throttles
+        AlarmDescription: Alert when Lambda functions are being throttled
+        MetricName: Throttles
+        Namespace: AWS/Lambda
+        Statistic: Sum
+        Period: 300  # 5 minutes
+        EvaluationPeriods: 1
+        Threshold: 1
+        ComparisonOperator: GreaterThanThreshold
+        TreatMissingData: notBreaching
+        AlarmActions:
+          - Ref: AlarmNotificationTopic
+
+    # CloudWatch Alarm for API Gateway 5xx Errors
+    ApiGateway5xxAlarm:
+      Type: "AWS::CloudWatch::Alarm"
+      Properties:
+        AlarmName: ${self:service}-${self:provider.stage}-api-5xx-errors
+        AlarmDescription: Alert when API Gateway 5xx errors exceed threshold
+        MetricName: 5XXError
+        Namespace: AWS/ApiGateway
+        Statistic: Sum
+        Period: 300  # 5 minutes
+        EvaluationPeriods: 1
+        Threshold: 10
+        ComparisonOperator: GreaterThanThreshold
+        TreatMissingData: notBreaching
+        AlarmActions:
+          - Ref: AlarmNotificationTopic
+
+    # API Gateway Request Validator
+    ApiGatewayRequestValidator:
+      Type: AWS::ApiGateway::RequestValidator
+      Properties:
+        Name: ${self:service}-${self:provider.stage}-request-validator
+        RestApiId:
+          Ref: ApiGatewayRestApi
+        ValidateRequestBody: true
+        ValidateRequestParameters: true
+
+    # CloudWatch Dashboard for Operational Metrics
+#    # Commented out temporarily due to metric format validation issues
+#    # TODO: Fix CloudWatch dashboard metric format and re-enable
+#    # OperationalDashboard:
+#    #   Type: AWS::CloudWatch::Dashboard
+#    #   Properties:
+#        DashboardName: ${self:service}-${self:provider.stage}-operations
+#        DashboardBody:
+#          Fn::Sub: |
+#            {
+#              "widgets": [
+#                {
+#                  "type": "metric",
+#                  "x": 0,
+#                  "y": 0,
+#                  "width": 12,
+#                  "height": 6,
+#                  "properties": {
+#                    "title": "Lambda Invocations",
+#                    "region": "${AWS::Region}",
+#                    "metrics": [
+#                      ["AWS/Lambda", "Invocations", {"stat": "Sum", "label": "Total Invocations"}],
+#                      [".", "Errors", {"stat": "Sum", "label": "Errors"}],
+#                      [".", "Throttles", {"stat": "Sum", "label": "Throttles"}]
+#                    ],
+#                    "view": "timeSeries",
+#                    "stacked": false,
+#                    "period": 300,
+#                    "yAxis": {
+#                      "left": {"min": 0}
+#                    }
+#                  }
+#                },
+#                {
+#                  "type": "metric",
+#                  "x": 12,
+#                  "y": 0,
+#                  "width": 12,
+#                  "height": 6,
+#                  "properties": {
+#                    "title": "Lambda Duration (ms)",
+#                    "region": "${AWS::Region}",
+#                    "metrics": [
+#                      ["AWS/Lambda", "Duration", {"stat": "Average", "label": "Avg Duration"}],
+#                      ["...", {"stat": "Maximum", "label": "Max Duration"}],
+#                      ["...", {"stat": "p99", "label": "P99 Duration"}]
+#                    ],
+#                    "view": "timeSeries",
+#                    "stacked": false,
+#                    "period": 300,
+#                    "yAxis": {
+#                      "left": {"min": 0}
+#                    }
+#                  }
+#                },
+#                {
+#                  "type": "metric",
+#                  "x": 0,
+#                  "y": 6,
+#                  "width": 12,
+#                  "height": 6,
+#                  "properties": {
+#                    "title": "API Gateway Requests",
+#                    "region": "${AWS::Region}",
+#                    "metrics": [
+#                      ["AWS/ApiGateway", "Count", {"stat": "Sum", "label": "Total Requests"}],
+#                      [".", "4XXError", {"stat": "Sum", "label": "4xx Errors"}],
+#                      [".", "5XXError", {"stat": "Sum", "label": "5xx Errors"}]
+#                    ],
+#                    "view": "timeSeries",
+#                    "stacked": false,
+#                    "period": 300,
+#                    "yAxis": {
+#                      "left": {"min": 0}
+#                    }
+#                  }
+#                },
+#                {
+#                  "type": "metric",
+#                  "x": 12,
+#                  "y": 6,
+#                  "width": 12,
+#                  "height": 6,
+#                  "properties": {
+#                    "title": "API Gateway Latency (ms)",
+#                    "region": "${AWS::Region}",
+#                    "metrics": [
+#                      ["AWS/ApiGateway", "Latency", {"stat": "Average", "label": "Avg Latency"}],
+#                      ["...", {"stat": "p99", "label": "P99 Latency"}],
+#                      [".", "IntegrationLatency", {"stat": "Average", "label": "Integration Latency"}]
+#                    ],
+#                    "view": "timeSeries",
+#                    "stacked": false,
+#                    "period": 300,
+#                    "yAxis": {
+#                      "left": {"min": 0}
+#                    }
+#                  }
+#                },
+#                {
+#                  "type": "metric",
+#                  "x": 0,
+#                  "y": 12,
+#                  "width": 8,
+#                  "height": 6,
+#                  "properties": {
+#                    "title": "SQS Queue Metrics",
+#                    "region": "${AWS::Region}",
+#                    "metrics": [
+#                      ["AWS/SQS", "ApproximateNumberOfMessagesVisible", {"dimensions": {"QueueName": "${self:custom.sqsJobQueue}"}, "label": "Messages Visible"}],
+#                      [".", "ApproximateAgeOfOldestMessage", {"dimensions": {"QueueName": "${self:custom.sqsJobQueue}"}, "label": "Oldest Message Age (s)"}],
+#                      [".", "NumberOfMessagesSent", {"dimensions": {"QueueName": "${self:custom.sqsJobQueue}"}, "stat": "Sum", "label": "Messages Sent"}],
+#                      [".", "NumberOfMessagesReceived", {"dimensions": {"QueueName": "${self:custom.sqsJobQueue}"}, "stat": "Sum", "label": "Messages Received"}]
+#                    ],
+#                    "view": "timeSeries",
+#                    "stacked": false,
+#                    "period": 300,
+#                    "yAxis": {
+#                      "left": {"min": 0}
+#                    }
+#                  }
+#                },
+#                {
+#                  "type": "metric",
+#                  "x": 8,
+#                  "y": 12,
+#                  "width": 8,
+#                  "height": 6,
+#                  "properties": {
+#                    "title": "DLQ Messages",
+#                    "region": "${AWS::Region}",
+#                    "metrics": [
+#                      ["AWS/SQS", "ApproximateNumberOfMessagesVisible", {"dimensions": {"QueueName": "${self:custom.sqsJobQueue}-DLQ"}, "label": "DLQ Messages"}]
+#                    ],
+#                    "view": "timeSeries",
+#                    "stacked": false,
+#                    "period": 300,
+#                    "yAxis": {
+#                      "left": {"min": 0}
+#                    },
+#                    "annotations": {
+#                      "horizontal": [{
+#                        "label": "Alert Threshold",
+#                        "value": 1,
+#                        "fill": "above",
+#                        "color": "#d62728"
+#                      }]
+#                    }
+#                  }
+#                },
+#                {
+#                  "type": "metric",
+#                  "x": 16,
+#                  "y": 12,
+#                  "width": 8,
+#                  "height": 6,
+#                  "properties": {
+#                    "title": "DynamoDB Operations",
+#                    "region": "${AWS::Region}",
+#                    "metrics": [
+#                      ["AWS/DynamoDB", "ConsumedReadCapacityUnits", {"dimensions": {"TableName": "${self:custom.dynamoDbJobsTable}"}, "stat": "Sum", "label": "Jobs Read Units"}],
+#                      [".", "ConsumedWriteCapacityUnits", {"dimensions": {"TableName": "${self:custom.dynamoDbJobsTable}"}, "stat": "Sum", "label": "Jobs Write Units"}],
+#                      [".", "ConsumedReadCapacityUnits", {"dimensions": {"TableName": "${self:custom.dynamoDbUrlsTable}"}, "stat": "Sum", "label": "URLs Read Units"}],
+#                      [".", "ConsumedWriteCapacityUnits", {"dimensions": {"TableName": "${self:custom.dynamoDbUrlsTable}"}, "stat": "Sum", "label": "URLs Write Units"}]
+#                    ],
+#                    "view": "timeSeries",
+#                    "stacked": false,
+#                    "period": 300,
+#                    "yAxis": {
+#                      "left": {"min": 0}
+#                    }
+#                  }
+#                },
+#                {
+#                  "type": "text",
+#                  "x": 0,
+#                  "y": 18,
+#                  "width": 12,
+#                  "height": 6,
+#                  "properties": {
+#                    "markdown": "## Business Metrics\n\nFor business KPIs and cross-application metrics, visit:\n\n**[Snowglobe Observatory](https://snowglobe.alexdiaz.me/observatory)**\n\nMetrics available:\n- Jobs processed & success rate\n- URLs crawled\n- Average crawl duration\n- Error rates\n- Queue depth\n\n_Updated hourly_"
+#                  }
+#                },
+#                {
+#                  "type": "metric",
+#                  "x": 12,
+#                  "y": 18,
+#                  "width": 12,
+#                  "height": 6,
+#                  "properties": {
+#                    "title": "Lambda Concurrent Executions",
+#                    "region": "${AWS::Region}",
+#                    "metrics": [
+#                      ["AWS/Lambda", "ConcurrentExecutions", {"stat": "Maximum", "label": "Concurrent Executions"}]
+#                    ],
+#                    "view": "timeSeries",
+#                    "stacked": false,
+#                    "period": 300,
+#                    "yAxis": {
+#                      "left": {"min": 0}
+#                    },
+#                    "annotations": {
+#                      "horizontal": [{
+#                        "label": "Reserved Concurrency (processJob)",
+#                        "value": 10,
+#                        "fill": "above",
+#                        "color": "#ff7f0e"
+#                      }]
+#                    }
+#                  }
+#                },
+#                {
+#                  "type": "log",
+#                  "x": 0,
+#                  "y": 24,
+#                  "width": 24,
+#                  "height": 6,
+#                  "properties": {
+#                    "title": "Recent Errors",
+#                    "region": "${AWS::Region}",
+#                    "query": "SOURCE '/aws/lambda/${self:service}-${self:provider.stage}-processJob'\n| SOURCE '/aws/lambda/${self:service}-${self:provider.stage}-createJob'\n| fields @timestamp, @message, level, job_id, error\n| filter level = \"ERROR\"\n| sort @timestamp desc\n| limit 20"
+#                  }
+#                }
+#              ]
+#            }
+
+plugins:
+  - serverless-python-requirements
+
+custom:
+  pythonRequirements:
+    dockerizePip: true  # Ensures proper packaging of dependencies in a Docker container
+    slim: true  # Use pre-built wheels to avoid compilation issues
+    strip: false  # Don't strip binaries (can cause issues with some packages)
+    layer: true  # Use Lambda layer to avoid package size limits
+
+  # Lambda concurrency limits - relaxed in dev, enforced in prod
+  jobProcessorConcurrency:
+    dev: 50       # Relaxed for development
+    staging: 20
+    prod: 10      # Strict to prevent runaway costs
+
+  # CORS configuration - stage-specific origins
+  corsOrigin:
+    dev: 'http://localhost:3001'
+    staging: 'https://staging.snowscrape.alexdiaz.me'
+    prod: 'https://snowscrape.alexdiaz.me'
+  corsConfig:
+    origin: ${self:custom.corsOrigin.${self:provider.stage}}
+    headers:
+      - Content-Type
+      - X-Amz-Date
+      - Authorization
+      - X-Api-Key
+      - X-Amz-Security-Token
+      - X-Amz-User-Agent
+    exposedHeaders:
+      - Content-Type
+      - X-Amz-Date
+      - X-Api-Key
+      - X-Amz-Security-Token
+    allowCredentials: true
+    maxAge: 86400  # 24 hours
+
+  # Alarm email notification configuration
+  alarmEmail:
+    dev: 'dev-alerts@example.com'  # Replace with your dev team email
+    staging: 'dev-alerts@example.com'  # Same as dev for staging
+    prod: 'ops-alerts@example.com'  # Replace with your ops team email
+
+  # Observatory integration configuration
+  snowglobeUrl: 'https://snowglobe.alexdiaz.me'  # Snowglobe Observatory URL
+  snowglobeSiteId: 'snowscrape'  # Unique identifier for snowscrape in Observatory
+  # Note: SNOWGLOBE_API_KEY should be set as an environment variable for security
+
+  dynamoDbJobsTable: SnowscrapeJobs
+  dynamoDbSessionTable: SnowscrapeSessions
+  dynamoDbUrlsTable: SnowscrapeUrls
+  dynamoDbTemplatesTable: SnowscrapeTemplates
+  dynamoDbWebhooksTable: SnowscrapeWebhooks
+  dynamoDbWebhookDeliveriesTable: SnowscrapeWebhookDeliveries
+  dynamoDbProxyPoolTable: SnowscrapeProxyPool
+  dynamoDbConnectionsTable: SnowscrapeConnections
+  s3Bucket: snowscrape-results-${env:AWS_ACCOUNT_ID, '282128795857'}-${self:provider.region}
+  sqsJobQueue: SnowscrapeJobQueue
+  sqsJobQueueUrl: https://sqs.us-east-2.amazonaws.com/282128795857/SnowscrapeJobQueue
+  sqsWebhookQueue: SnowscrapeWebhookQueue
+  sqsWebhookQueueUrl: https://sqs.us-east-2.amazonaws.com/282128795857/SnowscrapeWebhookQueue
+  # Clerk keys - loaded from SSM Parameter Store (never hardcode secrets here)
+  # To set these: aws ssm put-parameter --name "/snowscrape/{stage}/clerk-jwt-public-key" --value "..." --type SecureString
+  clerkJwtPublicKey:
+    dev: ${ssm:/snowscrape/dev/clerk-jwt-public-key}
+    staging: ${ssm:/snowscrape/staging/clerk-jwt-public-key}
+    prod: ${ssm:/snowscrape/prod/clerk-jwt-public-key}
+  clerkJwtSecretKey:
+    dev: ${ssm:/snowscrape/dev/clerk-jwt-secret-key}
+    staging: ${ssm:/snowscrape/staging/clerk-jwt-secret-key}
+    prod: ${ssm:/snowscrape/prod/clerk-jwt-secret-key}

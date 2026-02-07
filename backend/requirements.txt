@@ -1,0 +1,44 @@
+# AWS SDK and utilities
+boto3==1.35.76
+botocore==1.35.76
+s3transfer==0.10.4
+
+# Web scraping and parsing
+beautifulsoup4==4.12.3
+lxml==5.3.0
+soupsieve==2.6
+
+# HTTP client
+requests==2.32.3
+urllib3==2.2.3
+certifi==2024.8.30
+charset-normalizer==3.4.0
+idna==3.10
+
+# Authentication and security
+PyJWT==2.9.0
+cryptography==44.0.0
+cffi==1.17.1
+pycparser==2.22
+
+# File transfer
+paramiko==3.5.0
+
+# Data processing (lightweight)
+python-dateutil==2.9.0
+pytz==2024.2
+tzdata==2024.2
+
+# JSON path parsing
+jsonpath-ng==1.7.0
+ply==3.11
+
+# PDF parsing
+pdfplumber==0.11.0
+
+# Caching
+redis==5.2.1
+
+# Utilities
+jmespath==1.0.1
+six==1.16.0
