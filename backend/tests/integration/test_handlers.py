@@ -15,7 +15,7 @@ class TestHandlers:
 		"""Test successful job creation via handler."""
 		from handler import create_job_handler
 
-		with patch('handler.parse_links_from_file') as mock_parse:
+		with patch('utils.parse_links_from_file') as mock_parse:
 			with patch('handler.validate_clerk_token') as mock_validate:
 				mock_parse.return_value = ['http://test1.com', 'http://test2.com']
 				mock_validate.return_value = {'sub': 'user-123'}
@@ -120,7 +120,7 @@ class TestHandlers:
 		from handler import create_job_handler, delete_job_handler
 
 		# First create a job
-		with patch('handler.parse_links_from_file') as mock_parse:
+		with patch('utils.parse_links_from_file') as mock_parse:
 			with patch('handler.validate_clerk_token') as mock_validate:
 				mock_parse.return_value = ['http://test1.com']
 				mock_validate.return_value = {'sub': 'user-123'}
@@ -148,20 +148,17 @@ class TestHandlers:
 				create_response = create_job_handler(create_event, lambda_context)
 				job_id = json.loads(create_response['body'])['job_id']
 
-				# Now delete it
-				with patch('handler.validate_clerk_token') as mock_validate_delete:
-					mock_validate_delete.return_value = 'user-123'
+				# Now delete it (outer mock_validate still active)
+				delete_event = {
+					'headers': {'Authorization': 'Bearer test-token'},
+					'pathParameters': {'job_id': job_id}
+				}
 
-					delete_event = {
-						'headers': {'Authorization': 'Bearer test-token'},
-						'pathParameters': {'job_id': job_id}
-					}
+				response = delete_job_handler(delete_event, lambda_context)
 
-					response = delete_job_handler(delete_event, lambda_context)
-
-					assert response['statusCode'] == 200
-					body = json.loads(response['body'])
-					assert body['message'] == 'Job deleted successfully'
+				assert response['statusCode'] == 200
+				body = json.loads(response['body'])
+				assert body['message'] == 'Job deleted successfully'
 
 	@mock_aws
 	def test_delete_job_handler_no_auth(self, dynamodb_client, mock_env_vars, lambda_context):
@@ -185,7 +182,7 @@ class TestHandlers:
 		from handler import create_job_handler, get_job_details_handler
 
 		# First create a job
-		with patch('handler.parse_links_from_file') as mock_parse:
+		with patch('utils.parse_links_from_file') as mock_parse:
 			with patch('handler.validate_clerk_token') as mock_validate:
 				mock_parse.return_value = ['http://test1.com']
 				mock_validate.return_value = {'sub': 'user-123'}
@@ -213,8 +210,9 @@ class TestHandlers:
 				create_response = create_job_handler(create_event, lambda_context)
 				job_id = json.loads(create_response['body'])['job_id']
 
-				# Now retrieve it
+				# Now retrieve it (outer mock_validate still active)
 				get_event = {
+					'headers': {'Authorization': 'Bearer test-token'},
 					'pathParameters': {'job_id': job_id}
 				}
 
@@ -230,15 +228,19 @@ class TestHandlers:
 		"""Test retrieving non-existent job details."""
 		from handler import get_job_details_handler
 
-		event = {
-			'pathParameters': {'job_id': 'nonexistent-job-id'}
-		}
+		with patch('handler.validate_clerk_token') as mock_validate:
+			mock_validate.return_value = {'sub': 'user-123'}
 
-		response = get_job_details_handler(event, lambda_context)
+			event = {
+				'headers': {'Authorization': 'Bearer test-token'},
+				'pathParameters': {'job_id': 'nonexistent-job-id'}
+			}
 
-		assert response['statusCode'] == 404
-		body = json.loads(response['body'])
-		assert body['message'] == 'Job not found'
+			response = get_job_details_handler(event, lambda_context)
+
+			assert response['statusCode'] == 404
+			body = json.loads(response['body'])
+			assert body['message'] == 'Job not found'
 
 	@mock_aws
 	def test_pause_job_handler_success(self, dynamodb_client, mock_env_vars, lambda_context):
@@ -246,7 +248,7 @@ class TestHandlers:
 		from handler import create_job_handler, pause_job_handler
 
 		# First create a job
-		with patch('handler.parse_links_from_file') as mock_parse:
+		with patch('utils.parse_links_from_file') as mock_parse:
 			with patch('handler.validate_clerk_token') as mock_validate:
 				mock_parse.return_value = ['http://test1.com']
 				mock_validate.return_value = {'sub': 'user-123'}
@@ -274,20 +276,17 @@ class TestHandlers:
 				create_response = create_job_handler(create_event, lambda_context)
 				job_id = json.loads(create_response['body'])['job_id']
 
-				# Now pause it
-				with patch('handler.validate_clerk_token') as mock_validate_pause:
-					mock_validate_pause.return_value = 'user-123'
+				# Now pause it (outer mock_validate still active)
+				pause_event = {
+					'headers': {'Authorization': 'Bearer test-token'},
+					'pathParameters': {'job_id': job_id}
+				}
 
-					pause_event = {
-						'headers': {'Authorization': 'Bearer test-token'},
-						'pathParameters': {'job_id': job_id}
-					}
+				response = pause_job_handler(pause_event, lambda_context)
 
-					response = pause_job_handler(pause_event, lambda_context)
-
-					assert response['statusCode'] == 200
-					body = json.loads(response['body'])
-					assert body['message'] == 'Job paused successfully'
+				assert response['statusCode'] == 200
+				body = json.loads(response['body'])
+				assert body['message'] == 'Job paused successfully'
 
 	@mock_aws
 	def test_cancel_job_handler_success(self, dynamodb_client, mock_env_vars, lambda_context):
@@ -295,7 +294,7 @@ class TestHandlers:
 		from handler import create_job_handler, cancel_job_handler
 
 		# First create a job
-		with patch('handler.parse_links_from_file') as mock_parse:
+		with patch('utils.parse_links_from_file') as mock_parse:
 			with patch('handler.validate_clerk_token') as mock_validate:
 				mock_parse.return_value = ['http://test1.com']
 				mock_validate.return_value = {'sub': 'user-123'}
@@ -323,20 +322,17 @@ class TestHandlers:
 				create_response = create_job_handler(create_event, lambda_context)
 				job_id = json.loads(create_response['body'])['job_id']
 
-				# Now cancel it
-				with patch('handler.validate_clerk_token') as mock_validate_cancel:
-					mock_validate_cancel.return_value = 'user-123'
+				# Now cancel it (outer mock_validate still active)
+				cancel_event = {
+					'headers': {'Authorization': 'Bearer test-token'},
+					'pathParameters': {'job_id': job_id}
+				}
 
-					cancel_event = {
-						'headers': {'Authorization': 'Bearer test-token'},
-						'pathParameters': {'job_id': job_id}
-					}
+				response = cancel_job_handler(cancel_event, lambda_context)
 
-					response = cancel_job_handler(cancel_event, lambda_context)
-
-					assert response['statusCode'] == 200
-					body = json.loads(response['body'])
-					assert body['message'] == 'Job cancelled successfully'
+				assert response['statusCode'] == 200
+				body = json.loads(response['body'])
+				assert body['message'] == 'Job cancelled successfully'
 
 	@mock_aws
 	def test_get_all_job_statuses_handler(self, dynamodb_client, mock_env_vars, lambda_context):
@@ -344,7 +340,7 @@ class TestHandlers:
 		from handler import create_job_handler, get_all_job_statuses_handler
 
 		# Create multiple jobs
-		with patch('handler.parse_links_from_file') as mock_parse:
+		with patch('utils.parse_links_from_file') as mock_parse:
 			with patch('handler.validate_clerk_token') as mock_validate:
 				mock_parse.return_value = ['http://test1.com']
 				mock_validate.return_value = {'sub': 'user-123'}
@@ -371,14 +367,18 @@ class TestHandlers:
 					}
 					create_job_handler(create_event, lambda_context)
 
-				# Now retrieve all jobs
-				event = {}
+				# Now retrieve all jobs (auth still mocked from outer context)
+				event = {
+					'headers': {'Authorization': 'Bearer test-token'},
+					'queryStringParameters': {}
+				}
 				response = get_all_job_statuses_handler(event, lambda_context)
 
 				assert response['statusCode'] == 200
-				jobs = json.loads(response['body'])
-				assert isinstance(jobs, list)
-				assert len(jobs) == 3
+				body = json.loads(response['body'])
+				assert isinstance(body, dict)
+				assert 'jobs' in body
+				assert len(body['jobs']) == 3
 
 	@mock_aws
 	def test_update_job_handler_success(self, dynamodb_client, mock_env_vars, lambda_context):
@@ -386,7 +386,7 @@ class TestHandlers:
 		from handler import create_job_handler, update_job_handler
 
 		# First create a job
-		with patch('handler.parse_links_from_file') as mock_parse:
+		with patch('utils.parse_links_from_file') as mock_parse:
 			with patch('handler.validate_clerk_token') as mock_validate:
 				mock_parse.return_value = ['http://test1.com']
 				mock_validate.return_value = {'sub': 'user-123'}
@@ -414,36 +414,33 @@ class TestHandlers:
 				create_response = create_job_handler(create_event, lambda_context)
 				job_id = json.loads(create_response['body'])['job_id']
 
-				# Now update it
-				with patch('handler.validate_clerk_token') as mock_validate_update:
-					mock_validate_update.return_value = 'user-123'
+				# Now update it (outer mock_validate still active)
+				update_event = {
+					'headers': {'Authorization': 'Bearer test-token'},
+					'pathParameters': {'job_id': job_id},
+					'body': json.dumps({
+						'name': 'Updated Job Name',
+						'source': 'http://example.com/urls.csv',
+						'file_mapping': {
+							'delimiter': ',',
+							'enclosure': '"',
+							'escape': '\\',
+							'url_column': 0
+						},
+						'queries': [{
+							'name': 'title',
+							'type': 'xpath',
+							'query': '//title/text()'
+						}],
+						'rate_limit': 3
+					})
+				}
 
-					update_event = {
-						'headers': {'Authorization': 'Bearer test-token'},
-						'pathParameters': {'job_id': job_id},
-						'body': json.dumps({
-							'name': 'Updated Job Name',
-							'source': 'http://example.com/urls.csv',
-							'file_mapping': {
-								'delimiter': ',',
-								'enclosure': '"',
-								'escape': '\\',
-								'url_column': 0
-							},
-							'queries': [{
-								'name': 'title',
-								'type': 'xpath',
-								'query': '//title/text()'
-							}],
-							'rate_limit': 3
-						})
-					}
+				response = update_job_handler(update_event, lambda_context)
 
-					response = update_job_handler(update_event, lambda_context)
-
-					assert response['statusCode'] == 200
-					body = json.loads(response['body'])
-					assert body['message'] == 'Job updated successfully'
+				assert response['statusCode'] == 200
+				body = json.loads(response['body'])
+				assert body['message'] == 'Job updated successfully'
 
 	@mock_aws
 	def test_update_job_handler_no_auth(self, dynamodb_client, mock_env_vars, lambda_context):

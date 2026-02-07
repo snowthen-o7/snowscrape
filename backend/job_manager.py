@@ -3,6 +3,7 @@ import json
 import os
 import requests
 import time
+from decimal import Decimal
 
 from botocore.exceptions import ClientError
 from connection_pool import get_table, get_cached_session_data, set_cached_session_data, get_http_session, close_http_session
@@ -80,7 +81,7 @@ def create_job(job_data):
 				'block_resources': [],
 				'fallback_to_standard': True
 			}),
-			'crawl_delay': job_data.get('crawl_delay', DEFAULT_MIN_DELAY),
+			'crawl_delay': Decimal(str(job_data.get('crawl_delay', DEFAULT_MIN_DELAY))),
 		}
 
 		# Add source-type specific fields

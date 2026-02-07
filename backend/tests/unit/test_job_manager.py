@@ -16,7 +16,7 @@ class TestJobManager:
 		from job_manager import create_job
 
 		# Mock the parse_links_from_file function
-		with patch('job_manager.parse_links_from_file') as mock_parse:
+		with patch('utils.parse_links_from_file') as mock_parse:
 			mock_parse.return_value = ['http://test1.com', 'http://test2.com']
 
 			job_data = {
@@ -64,7 +64,7 @@ class TestJobManager:
 		"""Test creating a job with a pre-assigned job_id."""
 		from job_manager import create_job
 
-		with patch('job_manager.parse_links_from_file') as mock_parse:
+		with patch('utils.parse_links_from_file') as mock_parse:
 			mock_parse.return_value = ['http://test1.com']
 
 			job_data = {
@@ -95,7 +95,7 @@ class TestJobManager:
 		"""Test deleting a job and its URLs."""
 		from job_manager import create_job, delete_job
 
-		with patch('job_manager.parse_links_from_file') as mock_parse:
+		with patch('utils.parse_links_from_file') as mock_parse:
 			mock_parse.return_value = ['http://test1.com', 'http://test2.com']
 
 			job_data = {
@@ -141,7 +141,7 @@ class TestJobManager:
 		"""Test retrieving a specific job."""
 		from job_manager import create_job, get_job
 
-		with patch('job_manager.parse_links_from_file') as mock_parse:
+		with patch('utils.parse_links_from_file') as mock_parse:
 			mock_parse.return_value = ['http://test1.com']
 
 			job_data = {
@@ -185,7 +185,7 @@ class TestJobManager:
 		"""Test retrieving all jobs."""
 		from job_manager import create_job, get_all_jobs
 
-		with patch('job_manager.parse_links_from_file') as mock_parse:
+		with patch('utils.parse_links_from_file') as mock_parse:
 			mock_parse.return_value = ['http://test1.com']
 
 			# Create multiple jobs
@@ -211,16 +211,17 @@ class TestJobManager:
 				create_job(job_data)
 
 			# Retrieve all jobs
-			jobs = get_all_jobs()
-			assert isinstance(jobs, list)
-			assert len(jobs) == 3
+			result = get_all_jobs()
+			assert isinstance(result, dict)
+			assert 'items' in result
+			assert len(result['items']) == 3
 
 	@mock_aws
 	def test_pause_job(self, dynamodb_client, mock_env_vars):
 		"""Test pausing a job."""
 		from job_manager import create_job, pause_job, get_job
 
-		with patch('job_manager.parse_links_from_file') as mock_parse:
+		with patch('utils.parse_links_from_file') as mock_parse:
 			mock_parse.return_value = ['http://test1.com']
 
 			job_data = {
@@ -257,7 +258,7 @@ class TestJobManager:
 		"""Test cancelling a job."""
 		from job_manager import create_job, cancel_job, get_job
 
-		with patch('job_manager.parse_links_from_file') as mock_parse:
+		with patch('utils.parse_links_from_file') as mock_parse:
 			mock_parse.return_value = ['http://test1.com']
 
 			job_data = {
@@ -295,7 +296,7 @@ class TestJobManager:
 		"""Test resuming a paused job."""
 		from job_manager import create_job, pause_job, resume_job, get_job
 
-		with patch('job_manager.parse_links_from_file') as mock_parse:
+		with patch('utils.parse_links_from_file') as mock_parse:
 			mock_parse.return_value = ['http://test1.com']
 
 			job_data = {
@@ -333,7 +334,7 @@ class TestJobManager:
 		"""Test updating job information."""
 		from job_manager import create_job, update_job, get_job
 
-		with patch('job_manager.parse_links_from_file') as mock_parse:
+		with patch('utils.parse_links_from_file') as mock_parse:
 			mock_parse.return_value = ['http://test1.com']
 
 			job_data = {
@@ -388,7 +389,7 @@ class TestJobManager:
 		"""Test updating job with invalid data."""
 		from job_manager import create_job, update_job
 
-		with patch('job_manager.parse_links_from_file') as mock_parse:
+		with patch('utils.parse_links_from_file') as mock_parse:
 			mock_parse.return_value = ['http://test1.com']
 
 			job_data = {

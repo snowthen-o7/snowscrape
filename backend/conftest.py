@@ -5,6 +5,21 @@ from datetime import datetime, timezone
 from moto import mock_aws
 
 
+@pytest.fixture(autouse=True)
+def reset_connection_pool():
+	"""Reset connection pool cached resources between tests."""
+	import connection_pool
+	connection_pool._dynamodb_resource = None
+	connection_pool._dynamodb_client = None
+	connection_pool._s3_client = None
+	connection_pool._sqs_client = None
+	yield
+	connection_pool._dynamodb_resource = None
+	connection_pool._dynamodb_client = None
+	connection_pool._s3_client = None
+	connection_pool._sqs_client = None
+
+
 @pytest.fixture(scope='function')
 def aws_credentials():
 	"""Mock AWS credentials for moto."""
@@ -21,9 +36,13 @@ def mock_env_vars():
 	os.environ['DYNAMODB_JOBS_TABLE'] = 'SnowscrapeJobs-test'
 	os.environ['DYNAMODB_SESSION_TABLE'] = 'SnowscrapeSessions-test'
 	os.environ['DYNAMODB_URLS_TABLE'] = 'SnowscrapeUrls-test'
+	os.environ['DYNAMODB_TEMPLATES_TABLE'] = 'SnowscrapeTemplates-test'
+	os.environ['DYNAMODB_WEBHOOKS_TABLE'] = 'SnowscrapeWebhooks-test'
+	os.environ['DYNAMODB_WEBHOOK_DELIVERIES_TABLE'] = 'SnowscrapeWebhookDeliveries-test'
 	os.environ['S3_BUCKET'] = 'snowscrape-results-test'
 	os.environ['SQS_JOB_QUEUE'] = 'SnowscrapeJobQueue-test'
 	os.environ['SQS_JOB_QUEUE_URL'] = 'https://sqs.us-east-2.amazonaws.com/test/SnowscrapeJobQueue-test'
+	os.environ['SQS_WEBHOOK_QUEUE_URL'] = 'https://sqs.us-east-2.amazonaws.com/test/SnowscrapeWebhookQueue-test'
 	os.environ['REGION'] = 'us-east-2'
 	os.environ['CLERK_JWT_PUBLIC_KEY'] = 'test-public-key'
 	os.environ['CLERK_JWT_SECRET_KEY'] = 'test-secret-key'
@@ -32,7 +51,10 @@ def mock_env_vars():
 
 	# Cleanup
 	for key in ['DYNAMODB_JOBS_TABLE', 'DYNAMODB_SESSION_TABLE', 'DYNAMODB_URLS_TABLE',
-				'S3_BUCKET', 'SQS_JOB_QUEUE', 'SQS_JOB_QUEUE_URL', 'REGION',
+				'DYNAMODB_TEMPLATES_TABLE', 'DYNAMODB_WEBHOOKS_TABLE',
+				'DYNAMODB_WEBHOOK_DELIVERIES_TABLE',
+				'S3_BUCKET', 'SQS_JOB_QUEUE', 'SQS_JOB_QUEUE_URL',
+				'SQS_WEBHOOK_QUEUE_URL', 'REGION',
 				'CLERK_JWT_PUBLIC_KEY', 'CLERK_JWT_SECRET_KEY']:
 		if key in os.environ:
 			del os.environ[key]
@@ -100,6 +122,42 @@ def dynamodb_client(aws_credentials, mock_env_vars):
 					],
 					'Projection': {'ProjectionType': 'ALL'}
 				}
+			],
+			BillingMode='PAY_PER_REQUEST'
+		)
+
+		# Templates table
+		dynamodb.create_table(
+			TableName='SnowscrapeTemplates-test',
+			KeySchema=[
+				{'AttributeName': 'template_id', 'KeyType': 'HASH'}
+			],
+			AttributeDefinitions=[
+				{'AttributeName': 'template_id', 'AttributeType': 'S'}
+			],
+			BillingMode='PAY_PER_REQUEST'
+		)
+
+		# Webhooks table
+		dynamodb.create_table(
+			TableName='SnowscrapeWebhooks-test',
+			KeySchema=[
+				{'AttributeName': 'webhook_id', 'KeyType': 'HASH'}
+			],
+			AttributeDefinitions=[
+				{'AttributeName': 'webhook_id', 'AttributeType': 'S'}
+			],
+			BillingMode='PAY_PER_REQUEST'
+		)
+
+		# Webhook Deliveries table
+		dynamodb.create_table(
+			TableName='SnowscrapeWebhookDeliveries-test',
+			KeySchema=[
+				{'AttributeName': 'delivery_id', 'KeyType': 'HASH'}
+			],
+			AttributeDefinitions=[
+				{'AttributeName': 'delivery_id', 'AttributeType': 'S'}
 			],
 			BillingMode='PAY_PER_REQUEST'
 		)

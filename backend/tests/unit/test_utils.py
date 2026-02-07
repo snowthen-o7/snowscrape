@@ -277,7 +277,7 @@ class TestValidateJobData:
 			'file_mapping': {'delimiter': ',', 'enclosure': '"', 'escape': '\\', 'url_column': 0},
 			'queries': [{'name': 'title', 'type': 'xpath', 'query': '//title'}]
 		}
-		with pytest.raises(ValueError, match="must have a valid 'name'"):
+		with pytest.raises(ValueError, match="must have a 'name' field"):
 			validate_job_data(job_data)
 
 	def test_invalid_name_type_raises_error(self):
@@ -289,7 +289,7 @@ class TestValidateJobData:
 			'file_mapping': {'delimiter': ',', 'enclosure': '"', 'escape': '\\', 'url_column': 0},
 			'queries': [{'name': 'title', 'type': 'xpath', 'query': '//title'}]
 		}
-		with pytest.raises(ValueError, match="must have a valid 'name'"):
+		with pytest.raises(ValueError, match="Job name must be a non-empty string"):
 			validate_job_data(job_data)
 
 	def test_missing_rate_limit_raises_error(self):
@@ -312,7 +312,7 @@ class TestValidateJobData:
 			'file_mapping': {'delimiter': ',', 'enclosure': '"', 'escape': '\\', 'url_column': 0},
 			'queries': [{'name': 'title', 'type': 'xpath', 'query': '//title'}]
 		}
-		with pytest.raises(ValueError, match="must have a 'rate_limit'"):
+		with pytest.raises(ValueError, match="Rate limit must be an integer"):
 			validate_job_data(job_data)
 
 	def test_rate_limit_out_of_range_raises_error(self):
@@ -324,7 +324,7 @@ class TestValidateJobData:
 			'file_mapping': {'delimiter': ',', 'enclosure': '"', 'escape': '\\', 'url_column': 0},
 			'queries': [{'name': 'title', 'type': 'xpath', 'query': '//title'}]
 		}
-		with pytest.raises(ValueError, match="must have a 'rate_limit'"):
+		with pytest.raises(ValueError, match="Rate limit must be between 1 and 8"):
 			validate_job_data(job_data)
 
 	def test_missing_source_raises_error(self):
@@ -335,7 +335,7 @@ class TestValidateJobData:
 			'file_mapping': {'delimiter': ',', 'enclosure': '"', 'escape': '\\', 'url_column': 0},
 			'queries': [{'name': 'title', 'type': 'xpath', 'query': '//title'}]
 		}
-		with pytest.raises(ValueError, match="must have a valid 'source'"):
+		with pytest.raises(ValueError, match="must have a 'source' field"):
 			validate_job_data(job_data)
 
 	def test_missing_file_mapping_raises_error(self):
@@ -346,7 +346,7 @@ class TestValidateJobData:
 			'source': 'https://example.com/urls.csv',
 			'queries': [{'name': 'title', 'type': 'xpath', 'query': '//title'}]
 		}
-		with pytest.raises(ValueError, match="must have a valid 'file_mapping'"):
+		with pytest.raises(ValueError, match="must have a 'file_mapping' field"):
 			validate_job_data(job_data)
 
 	def test_file_mapping_missing_delimiter(self):
@@ -370,7 +370,7 @@ class TestValidateJobData:
 			'file_mapping': {'delimiter': ':', 'enclosure': '"', 'escape': '\\', 'url_column': 0},
 			'queries': [{'name': 'title', 'type': 'xpath', 'query': '//title'}]
 		}
-		with pytest.raises(ValueError, match="Invalid 'delimiter'"):
+		with pytest.raises(ValueError, match="Invalid delimiter"):
 			validate_job_data(job_data)
 
 	def test_file_mapping_invalid_enclosure(self):
@@ -382,7 +382,7 @@ class TestValidateJobData:
 			'file_mapping': {'delimiter': ',', 'enclosure': '`', 'escape': '\\', 'url_column': 0},
 			'queries': [{'name': 'title', 'type': 'xpath', 'query': '//title'}]
 		}
-		with pytest.raises(ValueError, match="Invalid 'enclosure'"):
+		with pytest.raises(ValueError, match="Invalid enclosure"):
 			validate_job_data(job_data)
 
 	def test_file_mapping_invalid_escape(self):
@@ -394,7 +394,7 @@ class TestValidateJobData:
 			'file_mapping': {'delimiter': ',', 'enclosure': '"', 'escape': '~', 'url_column': 0},
 			'queries': [{'name': 'title', 'type': 'xpath', 'query': '//title'}]
 		}
-		with pytest.raises(ValueError, match="Invalid 'escape'"):
+		with pytest.raises(ValueError, match="Invalid escape"):
 			validate_job_data(job_data)
 
 	def test_missing_queries_raises_error(self):
@@ -417,7 +417,7 @@ class TestValidateJobData:
 			'file_mapping': {'delimiter': ',', 'enclosure': '"', 'escape': '\\', 'url_column': 0},
 			'queries': [{'type': 'xpath', 'query': '//title'}]
 		}
-		with pytest.raises(ValueError, match="must have a valid 'name'"):
+		with pytest.raises(ValueError, match="Query must have a 'name' field"):
 			validate_job_data(job_data)
 
 	def test_query_invalid_type(self):
@@ -429,7 +429,7 @@ class TestValidateJobData:
 			'file_mapping': {'delimiter': ',', 'enclosure': '"', 'escape': '\\', 'url_column': 0},
 			'queries': [{'name': 'title', 'type': 'css', 'query': 'title'}]
 		}
-		with pytest.raises(ValueError, match="must have a valid 'type'"):
+		with pytest.raises(ValueError, match="Query type must be one of"):
 			validate_job_data(job_data)
 
 	def test_query_missing_query_field(self):
@@ -441,7 +441,7 @@ class TestValidateJobData:
 			'file_mapping': {'delimiter': ',', 'enclosure': '"', 'escape': '\\', 'url_column': 0},
 			'queries': [{'name': 'title', 'type': 'xpath'}]
 		}
-		with pytest.raises(ValueError, match="must have a valid 'query'"):
+		with pytest.raises(ValueError, match="must have a 'selector' or 'query' field"):
 			validate_job_data(job_data)
 
 	def test_valid_scheduling(self):
