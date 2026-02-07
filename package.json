@@ -1,0 +1,21 @@
+{
+  "name": "snowscrape",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm --filter frontend dev",
+    "build": "pnpm --filter frontend build",
+    "lint": "pnpm --filter frontend lint",
+    "test": "pnpm --filter frontend test",
+    "test:e2e": "pnpm --filter frontend test:e2e",
+    "sst:dev": "sst dev",
+    "sst:deploy": "sst deploy --stage dev",
+    "sst:deploy:prod": "sst deploy --stage prod",
+    "sst:remove": "sst remove"
+  },
+  "devDependencies": {
+    "sst": "^3.3.57",
+    "typescript": "^5.7.3",
+    "@types/node": "^22.0.0"
+  }
+}

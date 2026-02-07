@@ -1,0 +1,75 @@
+version: '3.8'
+
+services:
+  # DynamoDB Local for development
+  dynamodb-local:
+    image: amazon/dynamodb-local:latest
+    container_name: snowscrape-dynamodb
+    ports:
+      - "8000:8000"
+    command: ["-jar", "DynamoDBLocal.jar", "-sharedDb", "-inMemory"]
+    volumes:
+      - dynamodb-data:/home/dynamodblocal/data
+
+  # LocalStack for S3 and SQS emulation
+  localstack:
+    image: localstack/localstack:latest
+    container_name: snowscrape-localstack
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=s3,sqs
+      - DEFAULT_REGION=us-east-2
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    volumes:
+      - localstack-data:/var/lib/localstack
+
+  # Redis for caching (when implemented)
+  redis:
+    image: redis:7-alpine
+    container_name: snowscrape-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+
+  # Backend - Python Lambda handlers (local invocation)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: snowscrape-backend
+    ports:
+      - "8080:8080"
+    environment:
+      - AWS_DEFAULT_REGION=us-east-2
+      - AWS_ACCESS_KEY_ID=local
+      - AWS_SECRET_ACCESS_KEY=local
+      - DYNAMODB_ENDPOINT=http://dynamodb-local:8000
+      - S3_ENDPOINT=http://localstack:4566
+      - SQS_ENDPOINT=http://localstack:4566
+      - DYNAMODB_JOBS_TABLE=SnowscrapeJobs
+      - DYNAMODB_URLS_TABLE=SnowscrapeURLs
+      - DYNAMODB_SESSION_TABLE=SnowscrapeSessions
+      - DYNAMODB_TEMPLATES_TABLE=SnowscrapeTemplates
+      - DYNAMODB_WEBHOOKS_TABLE=SnowscrapeWebhooks
+      - DYNAMODB_WEBHOOK_DELIVERIES_TABLE=SnowscrapeWebhookDeliveries
+      - DYNAMODB_PROXY_POOL_TABLE=SnowscrapeProxyPool
+      - DYNAMODB_CONNECTIONS_TABLE=SnowscrapeConnections
+      - S3_BUCKET=snowscrape-results-local
+      - SQS_JOB_QUEUE=SnowscrapeJobQueue
+      - SQS_WEBHOOK_QUEUE=SnowscrapeWebhookQueue
+      - CORS_ALLOWED_ORIGIN=http://localhost:3001
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - dynamodb-local
+      - localstack
+      - redis
+    volumes:
+      - ./backend:/app
+    command: ["python", "-m", "uvicorn", "local_server:app", "--host", "0.0.0.0", "--port", "8080", "--reload"]
+
+volumes:
+  dynamodb-data:
+  localstack-data:
+  redis-data:

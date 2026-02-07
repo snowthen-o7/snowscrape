@@ -1,0 +1,39 @@
+# SST
+.sst/
+sst-env.d.ts
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.uv/
+
+# Node
+node_modules/
+.next/
+.vercel/
+
+# Environment
+.env
+.env.local
+.env*.local
+
+# IDE
+.vscode/
+.idea/
+
+# Build artifacts
+*.log
+dist/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Serverless (legacy)
+.serverless/
+
+# Test artifacts
+coverage/
+playwright-report/
+test-results/

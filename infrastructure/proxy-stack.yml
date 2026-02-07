@@ -1,0 +1,406 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: SnowScrape Proxy Pool - EC2 instances with Squid proxy for web scraping
+
+Parameters:
+  ProxyUsername:
+    Type: String
+    Default: snowscrape-proxy
+    Description: Username for proxy authentication
+
+  ProxyPassword:
+    Type: String
+    NoEcho: true
+    Description: Password for proxy authentication
+    MinLength: 12
+
+  InstanceType:
+    Type: String
+    Default: t3.micro
+    AllowedValues:
+      - t3.micro
+      - t3.small
+      - t3.medium
+    Description: EC2 instance type for proxy server
+
+  KeyName:
+    Type: String
+    Description: EC2 Key Pair for SSH access (leave empty to disable SSH)
+    Default: ''
+
+Conditions:
+  HasKeyName: !Not [!Equals [!Ref KeyName, '']]
+
+Mappings:
+  # Amazon Linux 2 AMI IDs per region (as of 2024)
+  RegionMap:
+    us-east-1:
+      AMI: ami-0440d3b780d96b29d
+    us-west-2:
+      AMI: ami-0c2ab3b8efb09f272
+    eu-west-1:
+      AMI: ami-0d71ea30463e0ff8d
+    ap-southeast-1:
+      AMI: ami-0dc2d3e4c0f9ebd18
+
+Resources:
+  # IAM Role for CloudWatch agent
+  ProxyInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+      Policies:
+        - PolicyName: ProxyMetricsPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cloudwatch:PutMetricData
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - logs:DescribeLogStreams
+                Resource: '*'
+
+  ProxyInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref ProxyInstanceRole
+
+  # Security Group for proxy server
+  ProxySecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for SnowScrape proxy servers
+      SecurityGroupIngress:
+        # Squid proxy port
+        - IpProtocol: tcp
+          FromPort: 3128
+          ToPort: 3128
+          CidrIp: 0.0.0.0/0
+          Description: Squid proxy access
+        # SSH access (conditional)
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+          Description: SSH access for management
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+          Description: Allow all outbound traffic
+      Tags:
+        - Key: Name
+          Value: snowscrape-proxy-sg
+        - Key: Project
+          Value: SnowScrape
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  # EC2 Instance for proxy
+  ProxyInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', AMI]
+      IamInstanceProfile: !Ref ProxyInstanceProfile
+      SecurityGroupIds:
+        - !Ref ProxySecurityGroup
+      KeyName: !If [HasKeyName, !Ref KeyName, !Ref 'AWS::NoValue']
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -e
+
+          # Update system
+          yum update -y
+
+          # Install Squid proxy
+          yum install -y squid httpd-tools
+
+          # Backup original config
+          cp /etc/squid/squid.conf /etc/squid/squid.conf.backup
+
+          # Configure Squid with authentication
+          cat > /etc/squid/squid.conf <<'EOF'
+          # Authentication
+          auth_param basic program /usr/lib64/squid/basic_ncsa_auth /etc/squid/passwords
+          auth_param basic realm SnowScrape Proxy
+          auth_param basic credentialsttl 24 hours
+
+          acl authenticated proxy_auth REQUIRED
+          http_access allow authenticated
+          http_access deny all
+
+          # Proxy port
+          http_port 3128
+
+          # Visible hostname
+          visible_hostname snowscrape-proxy
+
+          # Cache settings
+          cache_mem 128 MB
+          maximum_object_size 4096 KB
+          cache_dir ufs /var/spool/squid 1000 16 256
+
+          # Logging
+          access_log daemon:/var/log/squid/access.log squid
+          cache_log /var/log/squid/cache.log
+
+          # Forwarded headers (anonymize)
+          forwarded_for on
+          request_header_access Via deny all
+          request_header_access X-Forwarded-For deny all
+
+          # Performance tuning
+          dns_nameservers 8.8.8.8 8.8.4.4
+
+          # ACLs for common ports
+          acl SSL_ports port 443
+          acl Safe_ports port 80
+          acl Safe_ports port 443
+          acl Safe_ports port 8080
+          acl CONNECT method CONNECT
+
+          http_access deny !Safe_ports
+          http_access deny CONNECT !SSL_ports
+          EOF
+
+          # Create proxy user with password
+          htpasswd -cb /etc/squid/passwords "${ProxyUsername}" "${ProxyPassword}"
+          chmod 640 /etc/squid/passwords
+          chown squid:squid /etc/squid/passwords
+
+          # Initialize cache directories
+          squid -z
+
+          # Enable and start Squid
+          systemctl enable squid
+          systemctl start squid
+
+          # Install CloudWatch agent
+          wget https://s3.amazonaws.com/amazoncloudwatch-agent/amazon_linux/amd64/latest/amazon-cloudwatch-agent.rpm
+          rpm -U ./amazon-cloudwatch-agent.rpm
+
+          # Configure CloudWatch agent
+          cat > /opt/aws/amazon-cloudwatch-agent/etc/config.json <<'CWEOF'
+          {
+            "metrics": {
+              "namespace": "SnowScrape/Proxies",
+              "metrics_collected": {
+                "cpu": {
+                  "measurement": [
+                    {"name": "cpu_usage_idle", "rename": "CPU_IDLE", "unit": "Percent"},
+                    {"name": "cpu_usage_iowait", "rename": "CPU_IOWAIT", "unit": "Percent"}
+                  ],
+                  "totalcpu": true
+                },
+                "disk": {
+                  "measurement": [
+                    {"name": "used_percent", "rename": "DISK_USED", "unit": "Percent"}
+                  ],
+                  "resources": ["/"]
+                },
+                "mem": {
+                  "measurement": [
+                    {"name": "mem_used_percent", "rename": "MEM_USED", "unit": "Percent"}
+                  ]
+                },
+                "net": {
+                  "measurement": [
+                    {"name": "bytes_sent", "rename": "NET_BYTES_SENT", "unit": "Bytes"},
+                    {"name": "bytes_recv", "rename": "NET_BYTES_RECV", "unit": "Bytes"}
+                  ]
+                }
+              }
+            },
+            "logs": {
+              "logs_collected": {
+                "files": {
+                  "collect_list": [
+                    {
+                      "file_path": "/var/log/squid/access.log",
+                      "log_group_name": "/aws/ec2/snowscrape-proxy",
+                      "log_stream_name": "{instance_id}/access.log",
+                      "timezone": "UTC"
+                    },
+                    {
+                      "file_path": "/var/log/squid/cache.log",
+                      "log_group_name": "/aws/ec2/snowscrape-proxy",
+                      "log_stream_name": "{instance_id}/cache.log",
+                      "timezone": "UTC"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+          CWEOF
+
+          # Start CloudWatch agent
+          /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
+            -a fetch-config \
+            -m ec2 \
+            -s \
+            -c file:/opt/aws/amazon-cloudwatch-agent/etc/config.json
+
+          # Create health check script
+          cat > /usr/local/bin/proxy-health-check.sh <<'HEALTHEOF'
+          #!/bin/bash
+          # Test proxy by making a request through it
+          http_code=$(curl -x localhost:3128 \
+            -U "${ProxyUsername}:${ProxyPassword}" \
+            --silent --output /dev/null --write-out "%{http_code}" \
+            --max-time 10 \
+            https://ipinfo.io/json)
+
+          if [ "$http_code" -eq 200 ]; then
+            echo "Proxy is healthy"
+            exit 0
+          else
+            echo "Proxy health check failed with HTTP code: $http_code"
+            exit 1
+          fi
+          HEALTHEOF
+
+          chmod +x /usr/local/bin/proxy-health-check.sh
+
+          # Set up cron for periodic health check and logging
+          echo "*/5 * * * * /usr/local/bin/proxy-health-check.sh >> /var/log/proxy-health.log 2>&1" | crontab -
+
+          # Signal CloudFormation that setup is complete
+          yum install -y aws-cfn-bootstrap
+          /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource ProxyInstance --region ${AWS::Region}
+      Tags:
+        - Key: Name
+          Value: snowscrape-proxy
+        - Key: Project
+          Value: SnowScrape
+        - Key: ManagedBy
+          Value: CloudFormation
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT15M
+
+  # Elastic IP for consistent proxy address
+  ProxyEIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      InstanceId: !Ref ProxyInstance
+      Tags:
+        - Key: Name
+          Value: snowscrape-proxy-eip
+        - Key: Project
+          Value: SnowScrape
+
+  # CloudWatch Log Group for proxy logs
+  ProxyLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/ec2/snowscrape-proxy
+      RetentionInDays: 14
+
+  # CloudWatch Alarm for high CPU usage
+  HighCPUAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${AWS::StackName}-high-cpu'
+      AlarmDescription: Alert when proxy CPU usage is high
+      MetricName: CPU_IDLE
+      Namespace: SnowScrape/Proxies
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 10
+      ComparisonOperator: LessThanThreshold
+      TreatMissingData: notBreaching
+      Dimensions:
+        - Name: InstanceId
+          Value: !Ref ProxyInstance
+
+  # CloudWatch Alarm for high memory usage
+  HighMemoryAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${AWS::StackName}-high-memory'
+      AlarmDescription: Alert when proxy memory usage is high
+      MetricName: MEM_USED
+      Namespace: SnowScrape/Proxies
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 90
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      Dimensions:
+        - Name: InstanceId
+          Value: !Ref ProxyInstance
+
+  # CloudWatch Alarm for instance status check
+  InstanceStatusAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${AWS::StackName}-instance-status'
+      AlarmDescription: Alert when instance status check fails
+      MetricName: StatusCheckFailed_Instance
+      Namespace: AWS/EC2
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 2
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: InstanceId
+          Value: !Ref ProxyInstance
+
+Outputs:
+  ProxyIP:
+    Description: Elastic IP address of the proxy server
+    Value: !Ref ProxyEIP
+    Export:
+      Name: !Sub '${AWS::StackName}-ProxyIP'
+
+  ProxyURL:
+    Description: Full proxy URL with authentication
+    Value: !Sub 'http://${ProxyUsername}:${ProxyPassword}@${ProxyEIP}:3128'
+    Export:
+      Name: !Sub '${AWS::StackName}-ProxyURL'
+
+  ProxyURLNoAuth:
+    Description: Proxy URL without credentials (for display purposes)
+    Value: !Sub 'http://${ProxyEIP}:3128'
+    Export:
+      Name: !Sub '${AWS::StackName}-ProxyURLNoAuth'
+
+  InstanceId:
+    Description: EC2 Instance ID
+    Value: !Ref ProxyInstance
+    Export:
+      Name: !Sub '${AWS::StackName}-InstanceId'
+
+  Region:
+    Description: AWS Region where proxy is deployed
+    Value: !Ref 'AWS::Region'
+    Export:
+      Name: !Sub '${AWS::StackName}-Region'
+
+  SecurityGroupId:
+    Description: Security Group ID for the proxy
+    Value: !Ref ProxySecurityGroup
+    Export:
+      Name: !Sub '${AWS::StackName}-SecurityGroupId'
+
+  LogGroupName:
+    Description: CloudWatch Log Group for proxy logs
+    Value: !Ref ProxyLogGroup
+    Export:
+      Name: !Sub '${AWS::StackName}-LogGroupName'

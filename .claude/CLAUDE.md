@@ -12,10 +12,10 @@
 
 ## Tech Stack
 
-### Frontend (frontend/snowscrape)
+### Frontend (frontend/)
 - **Framework:** Next.js (App Router)
 - **Language:** TypeScript
-- **Styling:** Tailwind CSS 3.x
+- **Styling:** Tailwind CSS v4.x
 - **UI Components:** Radix UI (accordion, checkbox, dialog, dropdown-menu, icons, label, popover, progress, select, separator, slot, switch, tabs, toast, tooltip)
 - **State:** TanStack React Query
 - **Forms:** React Hook Form + Zod
@@ -24,27 +24,45 @@
 - **Monitoring:** Sentry
 - **Testing:** Vitest, Playwright, Lighthouse
 
-### Backend (backend)
-- **Framework:** Python (AWS Lambda handlers, not FastAPI)
-- **Database:** DynamoDB (7 tables, PAY_PER_REQUEST billing)
-- **Caching:** In-memory per Lambda container (Redis planned, not yet implemented)
+### Backend (backend/)
+- **Framework:** Python (AWS Lambda handlers)
+- **Database:** DynamoDB (8 tables, PAY_PER_REQUEST billing)
+- **Caching:** In-memory per Lambda container (Redis planned)
 - **Task Scheduling:** CloudWatch Events (5-min interval) + SQS job queue
 - **Notifications:** Webhooks (SQS-based delivery with DLQ)
-- **Deployment:** Serverless Framework (AWS Lambda + API Gateway)
+- **Deployment:** SST Ion (TypeScript IaC, Pulumi engine)
+- **Python Deps:** uv + pyproject.toml
 - **Monitoring:** CloudWatch, X-Ray tracing, SnowGlobe Observatory
 
 ### Infrastructure
+- **IaC:** SST Ion v3 (`sst.config.ts`) — replaces Serverless Framework
 - **Frontend Hosting:** Vercel (region: iad1)
-- **Backend Hosting:** AWS Lambda (29 functions) + API Gateway (us-east-2)
+- **Backend Hosting:** AWS Lambda + API Gateway V2 (us-east-2)
 - **Storage:** AWS S3 (results bucket with Glacier lifecycle)
 - **Queues:** SQS (job queue + webhook queue, each with DLQ)
-- **Secrets:** AWS SSM Parameter Store (Clerk keys, proxy credentials)
+- **Secrets:** SST Secrets (linked to SSM Parameter Store)
 
 ---
 
 ## Commands
 
-### Frontend (from frontend/snowscrape)
+### Root (monorepo)
+```bash
+pnpm install              # Install all workspace dependencies
+pnpm dev                  # Start frontend dev server (port 3001)
+pnpm build                # Build frontend
+pnpm lint                 # Lint frontend
+pnpm test                 # Run frontend unit tests
+pnpm test:e2e             # Run frontend E2E tests
+
+# SST Ion (Infrastructure)
+pnpm sst:dev              # Live dev mode (hot reload Lambdas)
+pnpm sst:deploy           # Deploy to dev stage
+pnpm sst:deploy:prod      # Deploy to prod stage
+pnpm sst:remove           # Tear down dev stage
+```
+
+### Frontend (from frontend/)
 ```bash
 pnpm dev              # Start dev server (port 3001)
 pnpm build            # Production build
@@ -58,22 +76,16 @@ pnpm test:e2e:ui      # Playwright UI
 pnpm lighthouse       # Run Lighthouse CI
 ```
 
-### Backend (from backend)
+### Backend (from root)
 ```bash
-# Python environment
-pip install -r requirements.txt
+# Python environment (using uv)
+uv sync                   # Install Python dependencies
+uv run pytest backend/tests/ -v  # Run backend tests
 
-# Local development (requires AWS credentials)
-sls invoke local -f healthCheck
-
-# Deploy
-sls deploy --stage dev
-
-# Deploy single function
-sls deploy function -f createJob --stage dev
-
-# View logs
-sls logs -f createJob --stage dev --tail
+# SST deployment
+npx sst deploy --stage dev       # Deploy backend to dev
+npx sst deploy --stage prod      # Deploy backend to prod
+npx sst dev                      # Live dev mode
 ```
 
 ---
@@ -81,32 +93,51 @@ sls logs -f createJob --stage dev --tail
 ## Project Structure
 
 ```
-SnowScrape/
-├── frontend/
-│   └── snowscrape/       # Next.js frontend
-│       ├── app/          # App Router pages
-│       │   ├── (application)/  # Protected dashboard routes
-│       │   └── (marketing)/    # Public marketing pages
-│       ├── components/
-│       │   ├── layout/   # SnowScrapeLayout, AppSidebar, AppTopNav
-│       │   ├── ui/       # Radix-based UI components
-│       │   ├── charts/   # Recharts visualizations
-│       │   └── marketing/# Landing page components
-│       └── lib/          # Utilities, hooks, API client
-├── backend/
-│   ├── handler.py        # Lambda function handlers (~2800 lines)
-│   ├── serverless.yml    # Serverless Framework config (AWS resources)
-│   ├── job_manager.py    # Job CRUD operations
-│   ├── crawl_manager.py  # URL crawling and query execution
-│   ├── tiered_scraper.py # 4-tier scraping system
-│   ├── validators.py     # Input validation (XPath, regex, URLs)
-│   ├── proxy_manager.py  # Proxy rotation logic
-│   ├── webhook_dispatcher.py     # Webhook event dispatching
-│   ├── webhook_delivery_handler.py # SQS-triggered webhook delivery
-│   ├── connection_pool.py # DynamoDB/S3/SQS connection reuse
-│   ├── logger.py         # Structured JSON logging
-│   └── tests/            # pytest + moto tests
-└── docs/                 # Architecture and deployment docs
+snowscrape/                          # Root = SST Ion project + monorepo
+├── sst.config.ts                    # Infrastructure-as-code (TypeScript)
+├── package.json                     # Root: SST deps + pnpm workspace scripts
+├── pnpm-workspace.yaml              # pnpm workspace config
+├── pyproject.toml                   # uv workspace root (for Python Lambda)
+├── tsconfig.json                    # For sst.config.ts compilation
+├── .gitignore
+├── frontend/                        # Next.js app
+│   ├── app/                         # App Router pages
+│   │   ├── (application)/           # Protected dashboard routes
+│   │   └── (marketing)/             # Public marketing pages
+│   ├── components/
+│   │   ├── layout/                  # AppLayout, AppSidebar, AppTopNav
+│   │   ├── ui/                      # Radix-based UI components
+│   │   ├── charts/                  # Recharts visualizations
+│   │   └── marketing/               # Landing page components
+│   ├── lib/                         # Utilities, hooks, API client
+│   └── package.json
+├── backend/                         # Python Lambda handlers
+│   ├── pyproject.toml               # uv workspace member
+│   ├── handler.py                   # Main handler (~2800 lines, 26 functions)
+│   ├── websocket_handler.py         # WebSocket handlers
+│   ├── webhook_delivery_handler.py  # SQS webhook delivery
+│   ├── job_manager.py               # Job CRUD operations
+│   ├── crawl_manager.py             # URL crawling and query execution
+│   ├── tiered_scraper.py            # 4-tier scraping system
+│   ├── validators.py                # Input validation (XPath, regex, URLs)
+│   ├── proxy_manager.py             # Proxy rotation logic
+│   ├── connection_pool.py           # DynamoDB/S3/SQS connection reuse
+│   ├── logger.py                    # Structured JSON logging
+│   ├── openapi.yml                  # API spec
+│   └── tests/                       # pytest + moto tests
+├── infrastructure/                  # CloudFormation proxy stack
+│   ├── proxy-stack.yml
+│   └── deploy-proxies.sh
+├── docs/
+│   └── INFRASTRUCTURE.md
+├── .github/
+│   └── workflows/
+│       ├── frontend.yml             # Frontend CI (lint, test, build)
+│       └── backend.yml              # Backend CI + SST deploy
+├── .claude/
+│   └── CLAUDE.md
+├── docker-compose.yml
+└── README.md
 ```
 
 ---
@@ -156,19 +187,20 @@ All sister apps (SnowPipe, SnowGen, SnowGlobe) should adopt:
 
 ## Critical Rules
 
-- ALWAYS use pnpm for frontend, pip for backend
+- ALWAYS use pnpm for frontend, uv for backend Python
 - Clerk for authentication
 - TanStack Query for API state management
 - React Hook Form + Zod for form validation
 - Radix UI for accessible components
 - Recharts for data visualization
+- SST Ion for infrastructure-as-code (never Serverless Framework)
 - Maintain backward compatibility with AWS Lambda backend
 
 ## Styling Guidelines
 
 **CRITICAL: Always use semantic CSS variable-based classes for proper dark mode support**
 
-### ❌ NEVER use hardcoded Tailwind colors:
+### NEVER use hardcoded Tailwind colors:
 ```tsx
 // WRONG - These won't adapt to dark mode
 <div className="bg-white text-gray-900 border-gray-200">
@@ -176,7 +208,7 @@ All sister apps (SnowPipe, SnowGen, SnowGlobe) should adopt:
 <button className="bg-blue-600 text-white">Click</button>
 ```
 
-### ✅ ALWAYS use semantic color classes:
+### ALWAYS use semantic color classes:
 ```tsx
 // CORRECT - These automatically adapt to dark mode
 <div className="bg-card text-card-foreground border-border">
@@ -229,14 +261,13 @@ The infrastructure documentation (`docs/INFRASTRUCTURE.md`) is the single source
 5. **Monthly Review**: Review and update the document monthly
 
 **What requires documentation updates:**
-- ✅ New AWS resources
-- ✅ Changes to existing resources
-- ✅ New third-party services or API integrations
-- ✅ Environment variable additions/changes
-- ✅ Deployment architecture changes
-- ✅ Security policy updates
-- ✅ Cost optimization strategies
-- ✅ Backup and disaster recovery procedures
+- New AWS resources
+- Changes to existing resources
+- New third-party services or API integrations
+- Environment variable additions/changes
+- Deployment architecture changes
+- Security policy updates
+- Cost optimization strategies
+- Backup and disaster recovery procedures
 
 This ensures the entire team has accurate, up-to-date information about the infrastructure.
-
