@@ -275,6 +275,7 @@ export default $config({
     // ─── Shared Environment Variables ─────────────────────────────────
 
     const sharedEnv = {
+      PYTHONPATH: "/var/task/backend:/var/task:/var/runtime",
       DYNAMODB_JOBS_TABLE: jobsTable.name,
       DYNAMODB_SESSION_TABLE: sessionsTable.name,
       DYNAMODB_URLS_TABLE: urlsTable.name,
@@ -312,7 +313,7 @@ export default $config({
     // ─── Default Python Lambda Config ─────────────────────────────────
 
     const pythonDefaults = {
-      runtime: "python3.11" as const,
+      runtime: "python3.12" as const,
       memory: "512 MB" as const,
       timeout: "30 seconds" as const,
       environment: sharedEnv,

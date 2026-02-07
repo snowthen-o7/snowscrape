@@ -34,6 +34,9 @@ class Resource:
     class Results:
         name: str
         type: str
+    class ScraperPreviewAsyncWorker:
+        name: str
+        type: str
     class Sessions:
         name: str
         type: str
