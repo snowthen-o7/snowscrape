@@ -29,7 +29,3 @@ dependencies = [
   "jmespath==1.0.1",
   "six==1.16.0",
 ]
-
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.backends"
