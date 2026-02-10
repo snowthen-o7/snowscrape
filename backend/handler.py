@@ -25,8 +25,19 @@ logger = get_logger(__name__)
 metrics = get_metrics_emitter()
 observatory = get_observatory_client()
 
-# CORS origin from environment - never use wildcard in production
-CORS_ALLOWED_ORIGIN = os.environ.get('CORS_ALLOWED_ORIGIN', 'http://localhost:3001')
+# CORS origins from environment (comma-separated) - never use wildcard in production
+_CORS_ALLOWED_ORIGINS = set(
+    o.strip() for o in os.environ.get('CORS_ALLOWED_ORIGIN', 'http://localhost:3001').split(',') if o.strip()
+)
+
+def get_cors_origin(event=None):
+    """Return the matching CORS origin for the request, or the first allowed origin."""
+    if event:
+        headers = event.get('headers', {}) or {}
+        origin = headers.get('origin') or headers.get('Origin', '')
+        if origin in _CORS_ALLOWED_ORIGINS:
+            return origin
+    return next(iter(_CORS_ALLOWED_ORIGINS))
 
 # Use connection pool for AWS services
 job_table = get_table(os.environ['DYNAMODB_JOBS_TABLE'])
@@ -107,7 +118,7 @@ def health_check_handler(event, context):
 			'statusCode': status_code,
 			'body': json.dumps(health_status),
 			'headers': {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				'Content-Type': 'application/json',
 				'Cache-Control': 'no-cache, no-store, must-revalidate'
 			}
@@ -131,7 +142,7 @@ def health_check_handler(event, context):
 				'error': str(e)
 			}),
 			'headers': {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				'Content-Type': 'application/json'
 			}
 		}
@@ -152,7 +163,7 @@ def create_job_handler(event, context):
 				"statusCode": 401,
 				"body": json.dumps({"message": "Unauthorized - No token provided"}),
 				"headers": {
-					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					'Access-Control-Allow-Origin': get_cors_origin(event),
 					"Content-Type": "application/json"
 				}
 			}
@@ -168,7 +179,7 @@ def create_job_handler(event, context):
 				"statusCode": 401,
 				"body": json.dumps({"message": str(e)}),
 				"headers": {
-					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					'Access-Control-Allow-Origin': get_cors_origin(event),
 					"Content-Type": "application/json"
 				}
 			}
@@ -203,7 +214,7 @@ def create_job_handler(event, context):
 				"body": json.dumps({"message": "Job created successfully", "job_id": job_id}),
 				"headers": {
 					'Access-Control-Allow-Credentials': True,
-					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					'Access-Control-Allow-Origin': get_cors_origin(event),
 					"Content-Type": "application/json"
 				}
 			}
@@ -216,7 +227,7 @@ def create_job_handler(event, context):
 				"statusCode": 500,
 				"body": json.dumps({"message": "Failed to create job"}),
 				"headers": {
-					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					'Access-Control-Allow-Origin': get_cors_origin(event),
 					"Content-Type": "application/json"
 				}
 			}
@@ -230,7 +241,7 @@ def create_job_handler(event, context):
 			"statusCode": 400,
 			"body": json.dumps({"message": f"Validation error: {str(e)}"}),
 			"headers": {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -244,7 +255,7 @@ def create_job_handler(event, context):
 			"statusCode": 500,
 			"body": json.dumps({"message": "Internal server error"}),
 			"headers": {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -262,7 +273,7 @@ def delete_job_handler(event, context):
 			"statusCode": 401,
 			"body": json.dumps({"message": "Unauthorized - No token provided"}),
 			"headers": {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -275,7 +286,7 @@ def delete_job_handler(event, context):
 			"statusCode": 401,
 			"body": json.dumps({"message": str(e)}),
 			"headers": {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -289,7 +300,7 @@ def delete_job_handler(event, context):
 			"statusCode": 404,
 			"body": json.dumps({"message": "Job not found"}),
 			"headers": {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -302,7 +313,7 @@ def delete_job_handler(event, context):
 			"statusCode": 403,
 			"body": json.dumps({"message": str(e)}),
 			"headers": {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -315,7 +326,7 @@ def delete_job_handler(event, context):
 		"body": json.dumps({"message": "Job deleted successfully", "job_id": job_id}),
 		"headers": {
 				'Access-Control-Allow-Credentials': True,
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 	}
@@ -338,7 +349,7 @@ def get_all_job_statuses_handler(event, context):
 				"statusCode": 401,
 				"body": json.dumps({"message": "Unauthorized - No token provided"}),
 				"headers": {
-					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					'Access-Control-Allow-Origin': get_cors_origin(event),
 					"Content-Type": "application/json"
 				}
 			}
@@ -351,7 +362,7 @@ def get_all_job_statuses_handler(event, context):
 				"statusCode": 401,
 				"body": json.dumps({"message": str(e)}),
 				"headers": {
-					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					'Access-Control-Allow-Origin': get_cors_origin(event),
 					"Content-Type": "application/json"
 				}
 			}
@@ -394,7 +405,7 @@ def get_all_job_statuses_handler(event, context):
 			"body": json.dumps(response_body),
 			"headers": {
 				'Access-Control-Allow-Credentials': True,
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -404,7 +415,7 @@ def get_all_job_statuses_handler(event, context):
 			"statusCode": 500,
 			"body": json.dumps({"message": "Internal server error"}),
 			"headers": {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -420,7 +431,7 @@ def get_crawl_handler(event, context):
 			"statusCode": 401,
 			"body": json.dumps({"message": "Unauthorized - No token provided"}),
 			"headers": {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -433,7 +444,7 @@ def get_crawl_handler(event, context):
 			"statusCode": 401,
 			"body": json.dumps({"message": str(e)}),
 			"headers": {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -447,7 +458,7 @@ def get_crawl_handler(event, context):
 			"statusCode": 404,
 			"body": json.dumps({"message": "Job not found"}),
 			"headers": {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -460,7 +471,7 @@ def get_crawl_handler(event, context):
 			"statusCode": 403,
 			"body": json.dumps({"message": str(e)}),
 			"headers": {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -473,7 +484,7 @@ def get_crawl_handler(event, context):
 			"body": json.dumps(crawl),
 			"headers": {
 					'Access-Control-Allow-Credentials': True,
-					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					'Access-Control-Allow-Origin': get_cors_origin(event),
 					"Content-Type": "application/json"
 				}
 		}
@@ -483,7 +494,7 @@ def get_crawl_handler(event, context):
 			"body": json.dumps({"message": "Crawl not found"}),
 			"headers": {
 					'Access-Control-Allow-Credentials': True,
-					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					'Access-Control-Allow-Origin': get_cors_origin(event),
 					"Content-Type": "application/json"
 				}
 		}
@@ -499,7 +510,7 @@ def get_job_crawls_handler(event, context):
 			"statusCode": 401,
 			"body": json.dumps({"message": "Unauthorized - No token provided"}),
 			"headers": {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -512,7 +523,7 @@ def get_job_crawls_handler(event, context):
 			"statusCode": 401,
 			"body": json.dumps({"message": str(e)}),
 			"headers": {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -526,7 +537,7 @@ def get_job_crawls_handler(event, context):
 			"statusCode": 404,
 			"body": json.dumps({"message": "Job not found"}),
 			"headers": {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -539,7 +550,7 @@ def get_job_crawls_handler(event, context):
 			"statusCode": 403,
 			"body": json.dumps({"message": str(e)}),
 			"headers": {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -550,7 +561,7 @@ def get_job_crawls_handler(event, context):
 		"body": json.dumps(crawls),
 			"headers": {
 					'Access-Control-Allow-Credentials': True,
-					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					'Access-Control-Allow-Origin': get_cors_origin(event),
 					"Content-Type": "application/json"
 				}
 	}
@@ -566,7 +577,7 @@ def get_job_details_handler(event, context):
 			"statusCode": 401,
 			"body": json.dumps({"message": "Unauthorized - No token provided"}),
 			"headers": {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -579,7 +590,7 @@ def get_job_details_handler(event, context):
 			"statusCode": 401,
 			"body": json.dumps({"message": str(e)}),
 			"headers": {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -600,7 +611,7 @@ def get_job_details_handler(event, context):
 			"body": json.dumps({"message": "Job not found"}),
 			"headers": {
 				'Access-Control-Allow-Credentials': True,
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -614,7 +625,7 @@ def get_job_details_handler(event, context):
 			"statusCode": 403,
 			"body": json.dumps({"message": str(e)}),
 			"headers": {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -624,7 +635,7 @@ def get_job_details_handler(event, context):
 		"body": json.dumps(job),
 		"headers": {
 				'Access-Control-Allow-Credentials': True,
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 	}
@@ -640,7 +651,7 @@ def pause_job_handler(event, context):
 			"statusCode": 401,
 			"body": json.dumps({"message": "Unauthorized - No token provided"}),
 			"headers": {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -653,7 +664,7 @@ def pause_job_handler(event, context):
 			"statusCode": 401,
 			"body": json.dumps({"message": str(e)}),
 			"headers": {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -667,7 +678,7 @@ def pause_job_handler(event, context):
 			"statusCode": 404,
 			"body": json.dumps({"message": "Job not found"}),
 			"headers": {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -680,7 +691,7 @@ def pause_job_handler(event, context):
 			"statusCode": 403,
 			"body": json.dumps({"message": str(e)}),
 			"headers": {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -691,7 +702,7 @@ def pause_job_handler(event, context):
 		"body": json.dumps({"message": "Job paused successfully", "job_id": job_id}),
 		"headers": {
 				'Access-Control-Allow-Credentials': True,
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 	}
@@ -707,7 +718,7 @@ def cancel_job_handler(event, context):
 			"statusCode": 401,
 			"body": json.dumps({"message": "Unauthorized - No token provided"}),
 			"headers": {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -720,7 +731,7 @@ def cancel_job_handler(event, context):
 			"statusCode": 401,
 			"body": json.dumps({"message": str(e)}),
 			"headers": {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -734,7 +745,7 @@ def cancel_job_handler(event, context):
 			"statusCode": 404,
 			"body": json.dumps({"message": "Job not found"}),
 			"headers": {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -747,7 +758,7 @@ def cancel_job_handler(event, context):
 			"statusCode": 403,
 			"body": json.dumps({"message": str(e)}),
 			"headers": {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -760,7 +771,7 @@ def cancel_job_handler(event, context):
 			"body": json.dumps({"message": "Job cancelled successfully", "job_id": job_id}),
 			"headers": {
 				'Access-Control-Allow-Credentials': True,
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -770,7 +781,7 @@ def cancel_job_handler(event, context):
 			"body": json.dumps({"message": "Failed to cancel job", "job_id": job_id}),
 			"headers": {
 				'Access-Control-Allow-Credentials': True,
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -918,7 +929,7 @@ def process_job_handler(event, context):
 			}),
 			"headers": {
 				'Access-Control-Allow-Credentials': True,
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -929,7 +940,7 @@ def process_job_handler(event, context):
 			'statusCode': 500,
 			'body': json.dumps({"message": "Internal server error"}),
 			"headers": {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -945,7 +956,7 @@ def refresh_job_handler(event, context):
 			"statusCode": 401,
 			"body": json.dumps({"message": "Unauthorized - No token provided"}),
 			"headers": {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -958,7 +969,7 @@ def refresh_job_handler(event, context):
 			"statusCode": 401,
 			"body": json.dumps({"message": str(e)}),
 			"headers": {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -972,7 +983,7 @@ def refresh_job_handler(event, context):
 			"statusCode": 404,
 			"body": json.dumps({"message": "Job not found"}),
 			"headers": {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -985,7 +996,7 @@ def refresh_job_handler(event, context):
 			"statusCode": 403,
 			"body": json.dumps({"message": str(e)}),
 			"headers": {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -996,7 +1007,7 @@ def refresh_job_handler(event, context):
 		"body": json.dumps({"message": "Job refreshed successfully", "job_id": job_id}),
 		"headers": {
 				'Access-Control-Allow-Credentials': True,
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 	}
@@ -1012,7 +1023,7 @@ def resume_job_handler(event, context):
 			"statusCode": 401,
 			"body": json.dumps({"message": "Unauthorized - No token provided"}),
 			"headers": {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -1025,7 +1036,7 @@ def resume_job_handler(event, context):
 			"statusCode": 401,
 			"body": json.dumps({"message": str(e)}),
 			"headers": {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -1039,7 +1050,7 @@ def resume_job_handler(event, context):
 			"statusCode": 404,
 			"body": json.dumps({"message": "Job not found"}),
 			"headers": {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -1052,7 +1063,7 @@ def resume_job_handler(event, context):
 			"statusCode": 403,
 			"body": json.dumps({"message": str(e)}),
 			"headers": {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -1063,7 +1074,7 @@ def resume_job_handler(event, context):
 		"body": json.dumps({"message": "Job resumed successfully", "job_id": job_id}),
 		"headers": {
 				'Access-Control-Allow-Credentials': True,
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 	}
@@ -1336,7 +1347,7 @@ def update_job_handler(event, context):
 			"statusCode": 401,
 			"body": json.dumps({"message": "Unauthorized - No token provided"}),
 			"headers": {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -1349,7 +1360,7 @@ def update_job_handler(event, context):
 			"statusCode": 401,
 			"body": json.dumps({"message": str(e)}),
 			"headers": {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -1363,7 +1374,7 @@ def update_job_handler(event, context):
 			"statusCode": 404,
 			"body": json.dumps({"message": "Job not found"}),
 			"headers": {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -1376,7 +1387,7 @@ def update_job_handler(event, context):
 			"statusCode": 403,
 			"body": json.dumps({"message": str(e)}),
 			"headers": {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -1391,7 +1402,7 @@ def update_job_handler(event, context):
 		"body": json.dumps({"message": "Job updated successfully", "job_id": job_id}),
 		"headers": {
 				'Access-Control-Allow-Credentials': True,
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 	}
@@ -1410,7 +1421,7 @@ def validate_sftp_url_handler(event, context):
 			'body': json.dumps({'error': 'Missing SFTP URL'}),
 			"headers": {
 				'Access-Control-Allow-Credentials': True,
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -1424,7 +1435,7 @@ def validate_sftp_url_handler(event, context):
 			'body': json.dumps({'error': 'Invalid URL scheme'}),
 			"headers": {
 				'Access-Control-Allow-Credentials': True,
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -1439,7 +1450,7 @@ def validate_sftp_url_handler(event, context):
 			'body': json.dumps({'error': 'Missing username or password in the URL'}),
 			"headers": {
 				'Access-Control-Allow-Credentials': True,
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -1471,7 +1482,7 @@ def validate_sftp_url_handler(event, context):
 			}),
 			"headers": {
 				'Access-Control-Allow-Credentials': True,
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -1482,7 +1493,7 @@ def validate_sftp_url_handler(event, context):
 			'body': json.dumps({'error': str(e)}),
 			"headers": {
 				'Access-Control-Allow-Credentials': True,
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -1528,7 +1539,7 @@ def preview_url_variables_handler(event, context):
 				}),
 				'headers': {
 					'Access-Control-Allow-Credentials': True,
-					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					'Access-Control-Allow-Origin': get_cors_origin(event),
 					'Content-Type': 'application/json'
 				}
 			}
@@ -1547,7 +1558,7 @@ def preview_url_variables_handler(event, context):
 			'body': json.dumps(preview_result),
 			'headers': {
 				'Access-Control-Allow-Credentials': True,
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				'Content-Type': 'application/json'
 			}
 		}
@@ -1561,7 +1572,7 @@ def preview_url_variables_handler(event, context):
 			}),
 			'headers': {
 				'Access-Control-Allow-Credentials': True,
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				'Content-Type': 'application/json'
 			}
 		}
@@ -1575,7 +1586,7 @@ def preview_url_variables_handler(event, context):
 			}),
 			'headers': {
 				'Access-Control-Allow-Credentials': True,
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				'Content-Type': 'application/json'
 			}
 		}
@@ -1601,7 +1612,7 @@ def download_results_handler(event, context):
 				"statusCode": 401,
 				"body": json.dumps({"message": "Unauthorized - No token provided"}),
 				"headers": {
-					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					'Access-Control-Allow-Origin': get_cors_origin(event),
 					"Content-Type": "application/json"
 				}
 			}
@@ -1616,7 +1627,7 @@ def download_results_handler(event, context):
 				"statusCode": 401,
 				"body": json.dumps({"message": str(e)}),
 				"headers": {
-					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					'Access-Control-Allow-Origin': get_cors_origin(event),
 					"Content-Type": "application/json"
 				}
 			}
@@ -1631,7 +1642,7 @@ def download_results_handler(event, context):
 				"statusCode": 404,
 				"body": json.dumps({"message": "Job not found"}),
 				"headers": {
-					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					'Access-Control-Allow-Origin': get_cors_origin(event),
 					"Content-Type": "application/json"
 				}
 			}
@@ -1644,7 +1655,7 @@ def download_results_handler(event, context):
 				"statusCode": 403,
 				"body": json.dumps({"message": str(e)}),
 				"headers": {
-					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					'Access-Control-Allow-Origin': get_cors_origin(event),
 					"Content-Type": "application/json"
 				}
 			}
@@ -1664,7 +1675,7 @@ def download_results_handler(event, context):
 					"message": f"Invalid format. Supported formats: {', '.join(valid_formats)}"
 				}),
 				"headers": {
-					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					'Access-Control-Allow-Origin': get_cors_origin(event),
 					"Content-Type": "application/json"
 				}
 			}
@@ -1679,7 +1690,7 @@ def download_results_handler(event, context):
 				"statusCode": 404,
 				"body": json.dumps({"message": "Results not found for this job"}),
 				"headers": {
-					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					'Access-Control-Allow-Origin': get_cors_origin(event),
 					"Content-Type": "application/json"
 				}
 			}
@@ -1728,7 +1739,7 @@ def download_results_handler(event, context):
 						"statusCode": 500,
 						"body": json.dumps({"message": f"Failed to convert to {file_format}: {str(conv_error)}"}),
 						"headers": {
-							'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+							'Access-Control-Allow-Origin': get_cors_origin(event),
 							"Content-Type": "application/json"
 						}
 					}
@@ -1764,7 +1775,7 @@ def download_results_handler(event, context):
 				"file_size_bytes": file_size
 			}),
 			"headers": {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -1775,7 +1786,7 @@ def download_results_handler(event, context):
 			"statusCode": 500,
 			"body": json.dumps({"message": "Failed to generate download URL", "error": str(e)}),
 			"headers": {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -1801,7 +1812,7 @@ def preview_results_handler(event, context):
 				"statusCode": 401,
 				"body": json.dumps({"message": "Unauthorized - No token provided"}),
 				"headers": {
-					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					'Access-Control-Allow-Origin': get_cors_origin(event),
 					"Content-Type": "application/json"
 				}
 			}
@@ -1816,7 +1827,7 @@ def preview_results_handler(event, context):
 				"statusCode": 401,
 				"body": json.dumps({"message": str(e)}),
 				"headers": {
-					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					'Access-Control-Allow-Origin': get_cors_origin(event),
 					"Content-Type": "application/json"
 				}
 			}
@@ -1831,7 +1842,7 @@ def preview_results_handler(event, context):
 				"statusCode": 404,
 				"body": json.dumps({"message": "Job not found"}),
 				"headers": {
-					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					'Access-Control-Allow-Origin': get_cors_origin(event),
 					"Content-Type": "application/json"
 				}
 			}
@@ -1844,7 +1855,7 @@ def preview_results_handler(event, context):
 				"statusCode": 403,
 				"body": json.dumps({"message": str(e)}),
 				"headers": {
-					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					'Access-Control-Allow-Origin': get_cors_origin(event),
 					"Content-Type": "application/json"
 				}
 			}
@@ -1873,7 +1884,7 @@ def preview_results_handler(event, context):
 				"statusCode": 404,
 				"body": json.dumps({"message": "Results not found for this job"}),
 				"headers": {
-					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					'Access-Control-Allow-Origin': get_cors_origin(event),
 					"Content-Type": "application/json"
 				}
 			}
@@ -1913,7 +1924,7 @@ def preview_results_handler(event, context):
 				"columns": columns
 			}),
 			"headers": {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -1924,7 +1935,7 @@ def preview_results_handler(event, context):
 			"statusCode": 500,
 			"body": json.dumps({"message": "Failed to fetch results preview", "error": str(e)}),
 			"headers": {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -1950,7 +1961,7 @@ def create_template_handler(event, context):
 				"statusCode": 401,
 				"body": json.dumps({"message": "Unauthorized - No token provided"}),
 				"headers": {
-					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					'Access-Control-Allow-Origin': get_cors_origin(event),
 					"Content-Type": "application/json"
 				}
 			}
@@ -1965,7 +1976,7 @@ def create_template_handler(event, context):
 				"statusCode": 401,
 				"body": json.dumps({"message": str(e)}),
 				"headers": {
-					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					'Access-Control-Allow-Origin': get_cors_origin(event),
 					"Content-Type": "application/json"
 				}
 			}
@@ -1979,7 +1990,7 @@ def create_template_handler(event, context):
 				"statusCode": 400,
 				"body": json.dumps({"message": "Template name is required"}),
 				"headers": {
-					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					'Access-Control-Allow-Origin': get_cors_origin(event),
 					"Content-Type": "application/json"
 				}
 			}
@@ -1989,7 +2000,7 @@ def create_template_handler(event, context):
 				"statusCode": 400,
 				"body": json.dumps({"message": "Template configuration is required"}),
 				"headers": {
-					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					'Access-Control-Allow-Origin': get_cors_origin(event),
 					"Content-Type": "application/json"
 				}
 			}
@@ -2023,7 +2034,7 @@ def create_template_handler(event, context):
 				"template": template
 			}),
 			"headers": {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -2034,7 +2045,7 @@ def create_template_handler(event, context):
 			"statusCode": 500,
 			"body": json.dumps({"message": "Failed to create template", "error": str(e)}),
 			"headers": {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -2058,7 +2069,7 @@ def list_templates_handler(event, context):
 				"statusCode": 401,
 				"body": json.dumps({"message": "Unauthorized - No token provided"}),
 				"headers": {
-					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					'Access-Control-Allow-Origin': get_cors_origin(event),
 					"Content-Type": "application/json"
 				}
 			}
@@ -2073,7 +2084,7 @@ def list_templates_handler(event, context):
 				"statusCode": 401,
 				"body": json.dumps({"message": str(e)}),
 				"headers": {
-					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					'Access-Control-Allow-Origin': get_cors_origin(event),
 					"Content-Type": "application/json"
 				}
 			}
@@ -2105,7 +2116,7 @@ def list_templates_handler(event, context):
 			"statusCode": 200,
 			"body": json.dumps(templates),
 			"headers": {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -2116,7 +2127,7 @@ def list_templates_handler(event, context):
 			"statusCode": 500,
 			"body": json.dumps({"message": "Failed to list templates", "error": str(e)}),
 			"headers": {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -2140,7 +2151,7 @@ def get_template_handler(event, context):
 				"statusCode": 401,
 				"body": json.dumps({"message": "Unauthorized - No token provided"}),
 				"headers": {
-					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					'Access-Control-Allow-Origin': get_cors_origin(event),
 					"Content-Type": "application/json"
 				}
 			}
@@ -2155,7 +2166,7 @@ def get_template_handler(event, context):
 				"statusCode": 401,
 				"body": json.dumps({"message": str(e)}),
 				"headers": {
-					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					'Access-Control-Allow-Origin': get_cors_origin(event),
 					"Content-Type": "application/json"
 				}
 			}
@@ -2172,7 +2183,7 @@ def get_template_handler(event, context):
 				"statusCode": 404,
 				"body": json.dumps({"message": "Template not found"}),
 				"headers": {
-					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					'Access-Control-Allow-Origin': get_cors_origin(event),
 					"Content-Type": "application/json"
 				}
 			}
@@ -2186,7 +2197,7 @@ def get_template_handler(event, context):
 				"statusCode": 403,
 				"body": json.dumps({"message": "You don't have permission to access this template"}),
 				"headers": {
-					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					'Access-Control-Allow-Origin': get_cors_origin(event),
 					"Content-Type": "application/json"
 				}
 			}
@@ -2207,7 +2218,7 @@ def get_template_handler(event, context):
 			"statusCode": 200,
 			"body": json.dumps(template),
 			"headers": {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -2218,7 +2229,7 @@ def get_template_handler(event, context):
 			"statusCode": 500,
 			"body": json.dumps({"message": "Failed to get template", "error": str(e)}),
 			"headers": {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -2242,7 +2253,7 @@ def delete_template_handler(event, context):
 				"statusCode": 401,
 				"body": json.dumps({"message": "Unauthorized - No token provided"}),
 				"headers": {
-					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					'Access-Control-Allow-Origin': get_cors_origin(event),
 					"Content-Type": "application/json"
 				}
 			}
@@ -2257,7 +2268,7 @@ def delete_template_handler(event, context):
 				"statusCode": 401,
 				"body": json.dumps({"message": str(e)}),
 				"headers": {
-					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					'Access-Control-Allow-Origin': get_cors_origin(event),
 					"Content-Type": "application/json"
 				}
 			}
@@ -2274,7 +2285,7 @@ def delete_template_handler(event, context):
 				"statusCode": 404,
 				"body": json.dumps({"message": "Template not found"}),
 				"headers": {
-					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					'Access-Control-Allow-Origin': get_cors_origin(event),
 					"Content-Type": "application/json"
 				}
 			}
@@ -2288,7 +2299,7 @@ def delete_template_handler(event, context):
 				"statusCode": 403,
 				"body": json.dumps({"message": "You don't have permission to delete this template"}),
 				"headers": {
-					'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+					'Access-Control-Allow-Origin': get_cors_origin(event),
 					"Content-Type": "application/json"
 				}
 			}
@@ -2304,7 +2315,7 @@ def delete_template_handler(event, context):
 			"statusCode": 200,
 			"body": json.dumps({"message": "Template deleted successfully"}),
 			"headers": {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -2315,7 +2326,7 @@ def delete_template_handler(event, context):
 			"statusCode": 500,
 			"body": json.dumps({"message": "Failed to delete template", "error": str(e)}),
 			"headers": {
-				'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
+				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
 			}
 		}
@@ -3012,7 +3023,7 @@ def scraper_preview_handler(event, context):
 	# Define CORS headers to be used in all responses
 	cors_headers = {
 		"Content-Type": "application/json",
-		"Access-Control-Allow-Origin": CORS_ALLOWED_ORIGIN,
+		"Access-Control-Allow-Origin": get_cors_origin(event),
 		"Access-Control-Allow-Headers": "Content-Type,Authorization",
 		"Access-Control-Expose-Headers": "Content-Type"
 	}
@@ -3111,7 +3122,7 @@ def scraper_test_handler(event, context):
 	# Define CORS headers to be used in all responses
 	cors_headers = {
 		"Content-Type": "application/json",
-		"Access-Control-Allow-Origin": CORS_ALLOWED_ORIGIN,
+		"Access-Control-Allow-Origin": get_cors_origin(event),
 		"Access-Control-Allow-Headers": "Content-Type,Authorization",
 		"Access-Control-Expose-Headers": "Content-Type"
 	}
@@ -3222,7 +3233,7 @@ def scraper_preview_async_start_handler(event, context):
 
 	cors_headers = {
 		"Content-Type": "application/json",
-		"Access-Control-Allow-Origin": CORS_ALLOWED_ORIGIN,
+		"Access-Control-Allow-Origin": get_cors_origin(event),
 		"Access-Control-Allow-Headers": "Content-Type,Authorization",
 		"Access-Control-Expose-Headers": "Content-Type"
 	}

@@ -1,4 +1,7 @@
+'use client';
+
 import React from 'react';
+import { useAuth } from '@clerk/nextjs';
 import { MarketingHeader, MarketingFooter, cn } from '@snowforge/ui';
 
 interface MarketingLayoutProps {
@@ -7,6 +10,8 @@ interface MarketingLayoutProps {
 }
 
 export function MarketingLayout({ children, className }: MarketingLayoutProps) {
+  const { isSignedIn } = useAuth();
+
   return (
     <div className="flex min-h-screen flex-col">
       <MarketingHeader
@@ -18,8 +23,9 @@ export function MarketingLayout({ children, className }: MarketingLayoutProps) {
           { name: 'Docs', href: '/docs' },
           { name: 'Blog', href: '/blog' },
         ]}
-        primaryCtaText="Start Free Trial"
-        primaryCtaHref="/sign-up"
+        showAuth={!isSignedIn}
+        primaryCtaText={isSignedIn ? 'Dashboard' : 'Start Free Trial'}
+        primaryCtaHref={isSignedIn ? '/dashboard' : '/sign-up'}
       />
       <main className={cn('flex-1', className)}>
         {children}

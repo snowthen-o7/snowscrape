@@ -19,10 +19,10 @@ export default $config({
 
     // ─── Stage-Specific Configuration ─────────────────────────────────
 
-    const corsOrigin: Record<string, string> = {
-      dev: "http://localhost:3001",
-      staging: "https://staging.snowscrape.alexdiaz.me",
-      prod: "https://snowscrape.alexdiaz.me",
+    const corsOrigins: Record<string, string[]> = {
+      dev: ["http://localhost:3001", "https://scrape.snowforge.dev"],
+      staging: ["https://staging.snowscrape.alexdiaz.me"],
+      prod: ["https://scrape.snowforge.dev"],
     };
 
     const alarmEmail: Record<string, string> = {
@@ -290,7 +290,7 @@ export default $config({
       SQS_JOB_QUEUE_URL: jobQueue.url,
       SQS_WEBHOOK_QUEUE: webhookQueue.url,
       SQS_WEBHOOK_QUEUE_URL: webhookQueue.url,
-      CORS_ALLOWED_ORIGIN: corsOrigin[stage] ?? corsOrigin.dev,
+      CORS_ALLOWED_ORIGIN: (corsOrigins[stage] ?? corsOrigins.dev).join(","),
       CLERK_JWT_PUBLIC_KEY: clerkJwtPublicKey.value,
       CLERK_JWT_SECRET_KEY: clerkJwtSecretKey.value,
       SNOWGLOBE_URL: "https://snowglobe.alexdiaz.me",
@@ -324,7 +324,7 @@ export default $config({
 
     const api = new sst.aws.ApiGatewayV2("Api", {
       cors: {
-        allowOrigins: [corsOrigin[stage] ?? corsOrigin.dev],
+        allowOrigins: corsOrigins[stage] ?? corsOrigins.dev,
         allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allowHeaders: [
           "Content-Type",
