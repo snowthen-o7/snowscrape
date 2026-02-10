@@ -1,7 +1,7 @@
 {
   "buildCommand": "pnpm build",
   "devCommand": "pnpm dev",
-  "installCommand": "node scripts/setup-git-auth.js && pnpm install --no-frozen-lockfile",
+  "installCommand": "node scripts/setup-git-auth.cjs && pnpm install --no-frozen-lockfile",
   "framework": "nextjs",
   "regions": ["iad1"],
   "git": {
