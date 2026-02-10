@@ -68,7 +68,7 @@ const notificationConfigSchema = z.object({
 
 const baseJobFields = {
   name: z.string().min(1, 'Job name is required'),
-  rate_limit: z.coerce.number().min(1, 'Min rate limit is 1').max(8, 'Max rate limit is 8'),
+  rate_limit: z.number().min(1, 'Min rate limit is 1').max(8, 'Max rate limit is 8'),
   timezone: z.string(),
   scheduling: schedulingSchema,
   queries: z.array(querySchema).min(1, 'At least one query is required'),
@@ -81,7 +81,7 @@ const baseJobFields = {
 const csvJobSchema = z.object({
   source_type: z.literal('csv'),
   source: z.string().min(1, 'Source URL is required'),
-  url_template: z.string().optional().default(''),
+  url_template: z.string(),
   file_mapping: fileMappingSchema.refine(data => data.url_column.length > 0, {
     message: 'URL column is required',
     path: ['url_column'],
@@ -91,7 +91,7 @@ const csvJobSchema = z.object({
 
 const directUrlJobSchema = z.object({
   source_type: z.literal('direct_url'),
-  source: z.string().optional().default(''),
+  source: z.string(),
   url_template: z.string().min(1, 'URL template is required'),
   file_mapping: fileMappingSchema,
   ...baseJobFields,

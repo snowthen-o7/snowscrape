@@ -109,13 +109,15 @@ const sentryWebpackPluginOptions = {
   disableServerWebpackPlugin: process.env.NODE_ENV !== 'production',
   disableClientWebpackPlugin: process.env.NODE_ENV !== 'production',
 
-  // Automatically annotate React components for better error messages
-  reactComponentAnnotation: {
-    enabled: true,
-  },
-
   // Hide source code from Sentry
   hideSourceMaps: true,
+
+  // Automatically annotate React components for better error messages
+  webpack: {
+    reactComponentAnnotation: {
+      enabled: true,
+    },
+  },
 };
 
 // Export config wrapped with Sentry

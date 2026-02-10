@@ -16,7 +16,7 @@ const isPublicRoute = createRouteMatcher([
 	'/terms-conditions',
 ]);
 
-export default clerkMiddleware(async (auth, request) => {
+export const proxy = clerkMiddleware(async (auth, request) => {
 	const authObject = await auth();
 
 	if (!isPublicRoute(request) && !authObject.userId) {
