@@ -267,7 +267,8 @@ def detect_url_column(headers):
 
 def extract_token_from_event(event):
 	headers = event.get("headers", {})
-	authorization_header = headers.get("Authorization", "")
+	# API Gateway V2 lowercases all header names
+	authorization_header = headers.get("authorization") or headers.get("Authorization") or ""
 	if authorization_header.startswith("Bearer "):
 		return authorization_header[len("Bearer "):]
 	return None
