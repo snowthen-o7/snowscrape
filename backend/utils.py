@@ -631,9 +631,12 @@ def send_job_to_queue(job_id, job_data):
 
 def validate_clerk_token(token):
 	try:
-		# Validate the token using the Clerk public key from environment
-		decoded_token = jwt.decode(token, os.getenv('CLERK_JWT_PUBLIC_KEY'), algorithms=["RS256"])
-		return decoded_token  # Return the decoded token if valid
+		public_key = os.getenv('CLERK_JWT_PUBLIC_KEY', '')
+		# SST/Lambda may store PEM keys with literal \n instead of actual newlines
+		if '\\n' in public_key:
+			public_key = public_key.replace('\\n', '\n')
+		decoded_token = jwt.decode(token, public_key, algorithms=["RS256"])
+		return decoded_token
 	except jwt.ExpiredSignatureError:
 		raise Exception("Token expired.")
 	except jwt.InvalidTokenError:
