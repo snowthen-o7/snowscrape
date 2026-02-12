@@ -19,10 +19,6 @@ export class APIClient {
 
   constructor() {
     this.baseURL = process.env.NEXT_PUBLIC_API_BASE_URL || '';
-
-    if (!this.baseURL) {
-      console.warn('NEXT_PUBLIC_API_BASE_URL is not set');
-    }
   }
 
   /**
@@ -36,6 +32,10 @@ export class APIClient {
     try {
       if (!token) {
         throw new APIError(401, 'Not authenticated');
+      }
+
+      if (!this.baseURL) {
+        throw new APIError(0, 'API URL is not configured. Set NEXT_PUBLIC_API_BASE_URL in your .env.local file.');
       }
 
       const url = `${this.baseURL}${endpoint}`;
@@ -52,14 +52,17 @@ export class APIClient {
       if (!response.ok) {
         const errorText = await response.text();
         let errorMessage = `Request failed: ${response.status}`;
+        let errorData: any;
 
         try {
-          const errorData = JSON.parse(errorText);
-          errorMessage = errorData.message || errorMessage;
-          throw new APIError(response.status, errorMessage, errorData);
-        } catch (parseError) {
-          throw new APIError(response.status, errorMessage, errorText);
+          errorData = JSON.parse(errorText);
+          // Prefer detailed "error" field, fall back to "message" summary
+          errorMessage = errorData.error || errorData.message || errorMessage;
+        } catch {
+          // Response was not JSON
         }
+
+        throw new APIError(response.status, errorMessage, errorData ?? errorText);
       }
 
       const contentType = response.headers.get('content-type');

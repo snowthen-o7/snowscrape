@@ -173,6 +173,19 @@ export class JobsAPI {
   }
 
   /**
+   * Start an async preview scrape (returns task_id for WebSocket updates)
+   */
+  async previewAsync(
+    url: string,
+    token: string
+  ): Promise<{ task_id: string; status: string; websocket_channel: string; websocket_url: string }> {
+    return this.client.request('/scraper/preview/async', token, {
+      method: 'POST',
+      body: JSON.stringify({ url }),
+    });
+  }
+
+  /**
    * Test extraction with given selectors on a URL
    */
   async testExtraction(

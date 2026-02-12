@@ -117,7 +117,9 @@ export default function VisualBuilderPage() {
           setIsAsyncLoading(false);
           setAsyncTaskId(null);
           clearMessages();
-          toast.error(`Failed to load page: ${message.error}`);
+          toast.error('Failed to load page', {
+            description: message.error,
+          });
           break;
       }
     }
@@ -198,27 +200,10 @@ export default function VisualBuilderPage() {
       } catch (syncError) {
         // Sync scraper failed - fall back to async scraper
         console.log('[Visual Builder] Sync scraper failed, trying async...', syncError);
+        const syncErrorDetail = syncError instanceof Error ? syncError.message : 'Unknown error';
 
         try {
-          // Call async scraper endpoint
-          const asyncResponse = await fetch(
-            `${process.env.NEXT_PUBLIC_API_BASE_URL}/scraper/preview/async`,
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${token}`,
-              },
-              body: JSON.stringify({ url: targetUrl }),
-            }
-          );
-
-          if (!asyncResponse.ok) {
-            const errorText = await asyncResponse.text().catch(() => asyncResponse.statusText);
-            throw new Error(`Async scraper failed (${asyncResponse.status}): ${errorText || 'Unknown error'}`);
-          }
-
-          const asyncResult = await asyncResponse.json();
+          const asyncResult = await jobsAPI.previewAsync(targetUrl, token);
           console.log('[Visual Builder] Async scraper started:', asyncResult);
 
           // Set async task state
@@ -238,20 +223,18 @@ export default function VisualBuilderPage() {
           setAsyncTaskId(null);
           clearMessages();
 
-          toast.error(
-            asyncError instanceof Error
-              ? asyncError.message
-              : 'Failed to load page. Please check the URL and try again.'
-          );
+          // Prefer the sync error since it explains WHY scraping failed
+          // The async error is usually a generic fallback failure
+          toast.error('Failed to load page', {
+            description: syncErrorDetail,
+          });
         }
       }
     } catch (error) {
       console.error('[Visual Builder] Error in handleLoadPage:', error);
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : 'An unexpected error occurred'
-      );
+      toast.error('Failed to load page', {
+        description: error instanceof Error ? error.message : 'An unexpected error occurred',
+      });
     } finally {
       setIsLoading(false);
     }
@@ -338,11 +321,9 @@ export default function VisualBuilderPage() {
       toast.success('Extraction test completed successfully');
     } catch (error) {
       console.error('Error testing extraction', error);
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : 'Failed to test extraction'
-      );
+      toast.error('Failed to test extraction', {
+        description: error instanceof Error ? error.message : 'An unknown error occurred',
+      });
     } finally {
       setIsTesting(false);
     }
@@ -402,11 +383,9 @@ export default function VisualBuilderPage() {
       router.push(`/dashboard/jobs/${job.job_id}`);
     } catch (error) {
       console.error('Error creating job', error);
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : 'Failed to create job'
-      );
+      toast.error('Failed to create job', {
+        description: error instanceof Error ? error.message : 'An unknown error occurred',
+      });
     } finally {
       setIsSaving(false);
     }

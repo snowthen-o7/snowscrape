@@ -219,13 +219,9 @@ def invoke_scraper_async(
         min_tier: Minimum tier to start with
         max_tier: Maximum tier to allow
     """
-    function_name = os.environ.get('AWS_LAMBDA_FUNCTION_NAME', 'snowscrape-scraper-preview-async-worker')
-
-    # Replace 'start' with 'worker' if present in function name
-    if 'start' in function_name:
-        function_name = function_name.replace('start', 'worker')
-    elif function_name == 'snowscrape-scraper-preview':
-        function_name = 'snowscrape-scraper-preview-async-worker'
+    function_name = os.environ.get('ASYNC_WORKER_FUNCTION_NAME')
+    if not function_name:
+        raise RuntimeError("ASYNC_WORKER_FUNCTION_NAME environment variable is not set")
 
     payload = {
         'task_id': task_id,
