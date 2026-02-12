@@ -36,6 +36,10 @@ export default $config({
     const clerkJwtPublicKey = new sst.Secret("ClerkJwtPublicKey");
     const clerkJwtSecretKey = new sst.Secret("ClerkJwtSecretKey");
 
+    // ─── Proxy Service ──────────────────────────────────────────────────
+
+    const residentialProxyUrl = new sst.Secret("ResidentialProxyUrl");
+
     // ─── DynamoDB Tables ──────────────────────────────────────────────
 
     const jobsTable = new sst.aws.Dynamo("Jobs", {
@@ -272,6 +276,10 @@ export default $config({
       ],
     });
 
+    // ─── WebSocket API (created early so env vars are available) ───────
+
+    const wsApi = new sst.aws.ApiGatewayWebSocket("WsApi");
+
     // ─── Shared Environment Variables ─────────────────────────────────
 
     const sharedEnv = {
@@ -295,6 +303,9 @@ export default $config({
       CLERK_JWT_SECRET_KEY: clerkJwtSecretKey.value,
       SNOWGLOBE_URL: "https://snowglobe.alexdiaz.me",
       SNOWGLOBE_SITE_ID: "snowscrape",
+      RESIDENTIAL_PROXY_URL: residentialProxyUrl.value,
+      WS_API_DOMAIN: wsApi.url.apply((url) => new URL(url).host),
+      WS_API_STAGE: wsApi.url.apply((url) => new URL(url).pathname.slice(1)),
     };
 
     // ─── Shared Lambda Permissions ────────────────────────────────────
@@ -495,6 +506,7 @@ export default $config({
       handler: "backend/handler.scraper_preview_async_worker_handler",
       memory: "512 MB",
       timeout: "120 seconds",
+      link: [...pythonDefaults.link, wsApi],
     });
 
     // Async Scraper (needs invoke permission for worker)
@@ -515,15 +527,14 @@ export default $config({
       ],
     });
 
-    // ─── WebSocket API ────────────────────────────────────────────────
-
-    const wsApi = new sst.aws.ApiGatewayWebSocket("WsApi");
+    // ─── WebSocket API Routes ───────────────────────────────────────
 
     wsApi.route("$connect", {
       ...pythonDefaults,
       handler: "backend/websocket_handler.ws_connect_handler",
       memory: "256 MB",
       timeout: "10 seconds",
+      link: [...pythonDefaults.link, wsApi],
     });
 
     wsApi.route("$disconnect", {
@@ -531,6 +542,7 @@ export default $config({
       handler: "backend/websocket_handler.ws_disconnect_handler",
       memory: "256 MB",
       timeout: "10 seconds",
+      link: [...pythonDefaults.link, wsApi],
     });
 
     wsApi.route("$default", {
@@ -538,6 +550,7 @@ export default $config({
       handler: "backend/websocket_handler.ws_default_handler",
       memory: "256 MB",
       timeout: "10 seconds",
+      link: [...pythonDefaults.link, wsApi],
     });
 
     // ─── SQS Subscribers ──────────────────────────────────────────────
@@ -548,6 +561,7 @@ export default $config({
         handler: "backend/handler.process_job_handler",
         memory: "1024 MB",
         timeout: "900 seconds",
+        link: [...pythonDefaults.link, wsApi],
       },
       {
         batch: {

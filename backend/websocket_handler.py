@@ -195,7 +195,8 @@ def handle_authenticate(connection_id, body, event):
         table = get_connections_table()
         table.update_item(
             Key={'connection_id': connection_id},
-            UpdateExpression='SET user_id = :uid, authenticated = :auth, ttl = :ttl',
+            UpdateExpression='SET user_id = :uid, authenticated = :auth, #ttl = :ttl',
+            ExpressionAttributeNames={'#ttl': 'ttl'},
             ExpressionAttributeValues={
                 ':uid': user_id,
                 ':auth': True,
@@ -235,7 +236,8 @@ def handle_auth(connection_id, body, event):
         table = get_connections_table()
         table.update_item(
             Key={'connection_id': connection_id},
-            UpdateExpression='SET user_id = :uid, ttl = :ttl',
+            UpdateExpression='SET user_id = :uid, #ttl = :ttl',
+            ExpressionAttributeNames={'#ttl': 'ttl'},
             ExpressionAttributeValues={
                 ':uid': user_id,
                 ':ttl': int(time.time()) + 86400

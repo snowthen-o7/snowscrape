@@ -639,8 +639,8 @@ def validate_clerk_token(token):
 		return decoded_token
 	except jwt.ExpiredSignatureError:
 		raise Exception("Token expired.")
-	except jwt.InvalidTokenError:
-		raise Exception("Invalid token.")
+	except jwt.InvalidTokenError as e:
+		raise Exception(f"Invalid token: {type(e).__name__}")
 
 
 def verify_resource_ownership(resource: dict, user_id: str, resource_type: str = 'resource') -> None:

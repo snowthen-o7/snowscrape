@@ -31,6 +31,9 @@ class Resource:
     class ProxyPool:
         name: str
         type: str
+    class ResidentialProxyUrl:
+        type: str
+        value: str
     class Results:
         name: str
         type: str

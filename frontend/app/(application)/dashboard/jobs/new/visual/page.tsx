@@ -63,8 +63,8 @@ export default function VisualBuilderPage() {
   const [asyncTaskId, setAsyncTaskId] = useState<string | null>(null);
   const [isAsyncLoading, setIsAsyncLoading] = useState(false);
 
-  // WebSocket connection (only connect when we have an async task)
-  const { isConnected, messages, subscribe, clearMessages } = useWebSocket(!!asyncTaskId);
+  // WebSocket connection (connect eagerly so it's ready for async fallback)
+  const { isConnected, messages, subscribe, clearMessages } = useWebSocket(true);
 
   // Handle WebSocket messages for async scraper
   useEffect(() => {
