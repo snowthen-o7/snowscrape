@@ -37,16 +37,16 @@ TIER_INFO = {
         'avg_time_seconds': 4,
     },
     3: {
-        'name': 'Browser Mode',
-        'description': 'Full headless browser with stealth',
-        'cost_per_page': 0.08,
-        'avg_time_seconds': 12,
+        'name': 'Firecrawl Scrape',
+        'description': 'Firecrawl JS rendering + markdown extraction',
+        'cost_per_page': 0.01,
+        'avg_time_seconds': 8,
     },
     4: {
-        'name': 'CAPTCHA Solving',
-        'description': 'Browser + automatic CAPTCHA solving',
-        'cost_per_page': 0.15,
-        'avg_time_seconds': 25,
+        'name': 'Firecrawl Anti-Bot',
+        'description': 'Firecrawl with wait actions for protected pages',
+        'cost_per_page': 0.05,
+        'avg_time_seconds': 15,
     },
 }
 
@@ -113,6 +113,19 @@ def detect_blocking(response: requests.Response, content: Optional[str] = None) 
             # Specific bot protection services (in challenge pages, not just scripts)
             ('perimeterpx', 'perimeterx_challenge'),
             ('datadome', 'datadome_challenge'),
+
+            # Chrome/browser native error pages (from headless browser rendering)
+            ('this site can\u2019t be reached', 'browser_connection_error'),
+            ("this site can't be reached", 'browser_connection_error'),
+            ('err_http2_protocol_error', 'browser_connection_error'),
+            ('err_connection_refused', 'browser_connection_error'),
+            ('err_connection_timed_out', 'browser_connection_error'),
+            ('err_name_not_resolved', 'browser_connection_error'),
+            ('err_ssl_protocol_error', 'browser_connection_error'),
+            ('err_connection_reset', 'browser_connection_error'),
+            ('net::err_', 'browser_connection_error'),
+            ('class="neterror"', 'browser_error_page'),
+            ('id="main-frame-error"', 'browser_error_page'),
         ]
 
         for pattern, indicator_name in blocking_patterns:
@@ -344,34 +357,226 @@ def scrape_tier_2(url: str, proxy_config: Optional[Dict[str, str]] = None, timeo
         raise
 
 
-def scrape_tier_3(url: str, proxy_config: Optional[Dict[str, str]] = None, timeout: int = 45) -> Dict[str, Any]:
+def _firecrawl_scrape(url: str, timeout: int, tier: int, actions: Optional[List[Dict]] = None, wait_for: Optional[int] = None) -> Dict[str, Any]:
     """
-    Tier 3: Browser-based scraping via external rendering service.
-
-    Uses a headless browser API (Browserless, ScrapingBee, or similar)
-    to render JavaScript-heavy pages. This avoids GLIBC incompatibility
-    issues with running Playwright directly on AWS Lambda.
-
-    Configure via environment variables:
-        JS_RENDERER_URL: API endpoint (e.g., https://chrome.browserless.io/content)
-        JS_RENDERER_API_KEY: API key for the service
+    Internal helper: call Firecrawl /v1/scrape API.
 
     Args:
         url: Target URL to scrape
-        proxy_config: Proxy configuration for browser
         timeout: Request timeout in seconds
+        tier: Tier number (3 or 4) for metadata
+        actions: Optional Firecrawl actions (e.g., wait, click)
+        wait_for: Optional waitFor in ms for heavier pages
 
     Returns:
-        Dictionary with page data and metadata
-
-    Raises:
-        BlockingDetectionError: If blocking is detected
-        RuntimeError: If JS rendering service is not configured
+        Dictionary with page data and metadata including markdown
     """
     import os
     import time as _time
 
-    logger.info("Attempting Tier 3 (Browser Mode) scraping", url=url)
+    api_key = os.environ.get('FIRECRAWL_API_KEY', '')
+
+    if not api_key:
+        # Fallback to old Browserless tier if Firecrawl not configured
+        logger.warning("FIRECRAWL_API_KEY not set, falling back to legacy Browserless")
+        return _legacy_browserless_scrape(url, timeout, tier)
+
+    start_time = _time.time()
+
+    payload: Dict[str, Any] = {
+        'url': url,
+        'formats': ['markdown', 'html'],
+        'onlyMainContent': True,
+    }
+
+    if actions:
+        payload['actions'] = actions
+    if wait_for:
+        payload['waitFor'] = wait_for
+
+    headers = {
+        'Content-Type': 'application/json',
+        'Authorization': f'Bearer {api_key}',
+    }
+
+    try:
+        response = requests.post(
+            'https://api.firecrawl.dev/v1/scrape',
+            json=payload,
+            headers=headers,
+            timeout=timeout,
+        )
+        response.raise_for_status()
+        result_data = response.json()
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Tier {tier} Firecrawl request failed", url=url, error=str(e))
+        raise
+
+    elapsed = _time.time() - start_time
+
+    if not result_data.get('success'):
+        error_msg = result_data.get('error', 'Unknown Firecrawl error')
+        logger.error(f"Tier {tier} Firecrawl returned failure", url=url, error=error_msg)
+        raise RuntimeError(f"Firecrawl scrape failed: {error_msg}")
+
+    data = result_data.get('data', {})
+    rendered_html = data.get('html', '')
+    markdown = data.get('markdown', '')
+    firecrawl_metadata = data.get('metadata', {})
+
+    if not rendered_html and not markdown:
+        raise BlockingDetectionError(
+            f"Tier {tier} Firecrawl returned empty content",
+            tier_used=tier,
+            indicators=['empty_firecrawl_response'],
+        )
+
+    # Parse the rendered HTML
+    soup = BeautifulSoup(rendered_html, 'html.parser') if rendered_html else BeautifulSoup('', 'html.parser')
+
+    # Blocking detection on rendered content
+    is_blocked, indicators = detect_blocking(response, rendered_html or markdown)
+    if is_blocked:
+        raise BlockingDetectionError(
+            f"Blocking detected on Firecrawl content: {', '.join(indicators)}",
+            tier_used=tier,
+            indicators=indicators,
+        )
+
+    # Content quality check
+    if rendered_html:
+        title_tag = soup.find('title')
+        meaningful_tags = soup.find_all(['h1', 'h2', 'h3', 'p', 'article', 'main', 'table'])
+        if not title_tag and len(meaningful_tags) < 2 and len(rendered_html) < 1000:
+            raise BlockingDetectionError(
+                f"Tier {tier} Firecrawl returned minimal content ({len(rendered_html)} bytes, "
+                f"{len(meaningful_tags)} meaningful elements)",
+                tier_used=tier,
+                indicators=['minimal_rendered_content'],
+            )
+
+    logger.info(f"Tier {tier} Firecrawl scraping successful",
+                url=url, elapsed_seconds=round(elapsed, 2),
+                content_length=len(rendered_html),
+                markdown_length=len(markdown))
+
+    return {
+        'html': rendered_html,
+        'content': rendered_html.encode('utf-8') if rendered_html else b'',
+        'text': rendered_html,
+        'soup': soup,
+        'title': soup.title.string if soup.title else firecrawl_metadata.get('title', ''),
+        'status_code': firecrawl_metadata.get('statusCode', 200),
+        'headers': {},
+        'url': firecrawl_metadata.get('sourceURL', url),
+        'tier_used': tier,
+        'tier_name': TIER_INFO[tier]['name'],
+        'cost': TIER_INFO[tier]['cost_per_page'],
+        'js_rendered': True,
+        'markdown': markdown,
+        'firecrawl_metadata': firecrawl_metadata,
+    }
+
+
+def _legacy_browserless_scrape(url: str, timeout: int, tier: int) -> Dict[str, Any]:
+    """Fallback to old Browserless-based rendering when Firecrawl is not configured."""
+    import os
+    import time as _time
+
+    renderer_url = os.environ.get('JS_RENDERER_URL', '')
+    renderer_api_key = os.environ.get('JS_RENDERER_API_KEY', '')
+
+    if not renderer_url:
+        raise RuntimeError(
+            f"Tier {tier} requires either FIRECRAWL_API_KEY or JS_RENDERER_URL. "
+            "Set FIRECRAWL_API_KEY for Firecrawl or JS_RENDERER_URL for Browserless."
+        )
+
+    start_time = _time.time()
+
+    render_payload = {
+        'url': url,
+        'gotoOptions': {
+            'waitUntil': 'networkidle2',
+            'timeout': timeout * 1000,
+        },
+        'waitForSelector': {
+            'selector': 'body',
+            'timeout': timeout * 1000,
+        },
+        'bestAttempt': True,
+        'rejectResourceTypes': ['image', 'font', 'media'],
+    }
+
+    headers = {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache',
+    }
+
+    params = {}
+    if renderer_api_key:
+        params['token'] = renderer_api_key
+    params['stealth'] = 'true'
+    params['blockAds'] = 'true'
+
+    response = requests.post(
+        renderer_url,
+        json=render_payload,
+        headers=headers,
+        params=params,
+        timeout=timeout,
+    )
+    response.raise_for_status()
+    rendered_html = response.text
+
+    elapsed = _time.time() - start_time
+    soup = BeautifulSoup(rendered_html, 'html.parser')
+
+    is_blocked, indicators = detect_blocking(response, rendered_html)
+    if is_blocked:
+        raise BlockingDetectionError(
+            f"Blocking detected on rendered page: {', '.join(indicators)}",
+            tier_used=tier,
+            indicators=indicators,
+        )
+
+    return {
+        'html': rendered_html,
+        'content': rendered_html.encode('utf-8'),
+        'text': rendered_html,
+        'soup': soup,
+        'title': soup.title.string if soup.title else '',
+        'status_code': response.status_code,
+        'headers': dict(response.headers),
+        'url': url,
+        'tier_used': tier,
+        'tier_name': TIER_INFO[tier]['name'],
+        'cost': TIER_INFO[tier]['cost_per_page'],
+        'js_rendered': True,
+    }
+
+
+def scrape_tier_3(url: str, proxy_config: Optional[Dict[str, str]] = None, timeout: int = 45) -> Dict[str, Any]:
+    """
+    Tier 3: Firecrawl Scrape — JS rendering + markdown extraction.
+
+    Uses Firecrawl API for reliable JavaScript rendering and returns both
+    HTML and markdown content. Falls back to legacy Browserless if
+    FIRECRAWL_API_KEY is not set.
+
+    Args:
+        url: Target URL to scrape
+        proxy_config: Proxy configuration (unused with Firecrawl, kept for API compat)
+        timeout: Request timeout in seconds
+
+    Returns:
+        Dictionary with page data, markdown, and metadata
+
+    Raises:
+        BlockingDetectionError: If blocking is detected
+        RuntimeError: If no rendering service is configured
+    """
+    logger.info("Attempting Tier 3 (Firecrawl Scrape)", url=url)
 
     # SSRF protection
     try:
@@ -381,117 +586,46 @@ def scrape_tier_3(url: str, proxy_config: Optional[Dict[str, str]] = None, timeo
             f"URL validation failed (SSRF protection): {str(e)}"
         )
 
-    renderer_url = os.environ.get('JS_RENDERER_URL', '')
-    renderer_api_key = os.environ.get('JS_RENDERER_API_KEY', '')
-
-    if not renderer_url:
-        raise RuntimeError(
-            "Tier 3 (Browser) requires JS_RENDERER_URL environment variable. "
-            "Set it to a Browserless, ScrapingBee, or similar service endpoint."
-        )
-
-    start_time = _time.time()
-
-    # Build request for the rendering service
-    # Supports Browserless-style API (POST with JSON body)
-    render_payload = {
-        'url': url,
-        'waitForSelector': 'body',
-        'timeout': timeout * 1000,  # ms
-        'blockAds': True,
-    }
-
-    headers = {
-        'Content-Type': 'application/json',
-        'Cache-Control': 'no-cache',
-    }
-
-    # Add API key as query param or header depending on service
-    params = {}
-    if renderer_api_key:
-        params['token'] = renderer_api_key
-
-    try:
-        response = requests.post(
-            renderer_url,
-            json=render_payload,
-            headers=headers,
-            params=params,
-            timeout=timeout,
-        )
-        response.raise_for_status()
-        rendered_html = response.text
-    except requests.exceptions.RequestException as e:
-        logger.error("Tier 3 rendering service failed", url=url, error=str(e))
-        raise
-
-    elapsed = _time.time() - start_time
-
-    # Parse the rendered HTML
-    soup = BeautifulSoup(rendered_html, 'html.parser')
-
-    # Blocking detection on rendered content
-    is_blocked, indicators = detect_blocking(response, rendered_html)
-    if is_blocked:
-        raise BlockingDetectionError(
-            f"Blocking detected on rendered page: {', '.join(indicators)}",
-            tier_used=3,
-            indicators=indicators,
-        )
-
-    logger.info("Tier 3 scraping successful",
-                url=url, elapsed_seconds=round(elapsed, 2),
-                content_length=len(rendered_html))
-
-    return {
-        'html': rendered_html,
-        'text': soup.get_text(separator=' ', strip=True),
-        'title': soup.title.string if soup.title else '',
-        'status_code': response.status_code,
-        'headers': dict(response.headers),
-        'tier_used': 3,
-        'tier_name': TIER_INFO[3]['name'],
-        'cost': TIER_INFO[3]['cost_per_page'],
-        'js_rendered': True,
-    }
+    return _firecrawl_scrape(url, timeout=timeout, tier=3)
 
 
 def scrape_tier_4(url: str, proxy_config: Optional[Dict[str, str]] = None, timeout: int = 60) -> Dict[str, Any]:
     """
-    Tier 4: Browser + CAPTCHA solving via external service.
+    Tier 4: Firecrawl Anti-Bot — heavier scraping with wait actions for protected pages.
 
-    Uses the same rendering service as Tier 3 but with CAPTCHA solving enabled.
-    Requires a service that supports CAPTCHA solving (e.g., ScrapingBee premium,
-    2Captcha integration).
-
-    Configure via environment variables:
-        JS_RENDERER_URL: API endpoint
-        JS_RENDERER_API_KEY: API key
-        CAPTCHA_SOLVER_API_KEY: 2Captcha or similar service key (optional)
+    Uses Firecrawl API with additional wait actions and longer timeouts
+    for pages with heavy bot protection. Falls back to legacy Browserless
+    /unblock endpoint if FIRECRAWL_API_KEY is not set.
 
     Args:
         url: Target URL to scrape
-        proxy_config: Proxy configuration for browser
+        proxy_config: Proxy configuration (unused with Firecrawl, kept for API compat)
         timeout: Request timeout in seconds
 
     Returns:
-        Dictionary with page data and metadata
+        Dictionary with page data, markdown, and metadata
+
+    Raises:
+        BlockingDetectionError: If blocking persists
+        RuntimeError: If no rendering service is configured
     """
-    import os
+    logger.info("Attempting Tier 4 (Firecrawl Anti-Bot)", url=url)
 
-    logger.info("Attempting Tier 4 (CAPTCHA Solving) scraping", url=url)
+    # SSRF protection
+    try:
+        validate_scrape_url(url)
+    except ScrapeValidationError as e:
+        raise requests.exceptions.URLRequired(
+            f"URL validation failed (SSRF protection): {str(e)}"
+        )
 
-    # Tier 4 delegates to Tier 3 with extended timeout and CAPTCHA flag
-    # If using ScrapingBee: add solve_captchas=True
-    # If using Browserless + 2Captcha: would need separate integration
-    result = scrape_tier_3(url, proxy_config=proxy_config, timeout=timeout)
-
-    # Override tier metadata
-    result['tier_used'] = 4
-    result['tier_name'] = TIER_INFO[4]['name']
-    result['cost'] = TIER_INFO[4]['cost_per_page']
-
-    return result
+    return _firecrawl_scrape(
+        url,
+        timeout=timeout,
+        tier=4,
+        actions=[{'type': 'wait', 'milliseconds': 3000}],
+        wait_for=5000,
+    )
 
 
 async def smart_scrape(

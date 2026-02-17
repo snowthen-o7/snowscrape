@@ -108,7 +108,8 @@ def get_crawl(job_id, crawl_id):
 def process_queries(
 	page_content: bytes,
 	queries: List[Dict[str, Any]],
-	content_type: Optional[str] = None
+	content_type: Optional[str] = None,
+	markdown_content: Optional[str] = None
 ) -> Dict[str, Any]:
 	"""
 	Process the queries on the given page content and return the extracted data.
@@ -117,6 +118,7 @@ def process_queries(
 	- page_content (bytes): The content of the page (HTML, JSON, or PDF).
 	- queries (list): A list of queries to run on the page content.
 	- content_type (str): Optional Content-Type header to help detect content format.
+	- markdown_content (str): Optional markdown content from Firecrawl (used for AI queries).
 
 	Returns:
 	- dict: A dictionary of extracted data for each query.
@@ -192,6 +194,27 @@ def process_queries(
 				result = process_pdf_query(page_content, query)
 				extracted_data[query_name] = result
 				continue  # Skip the join logic below, PDF handler handles it
+
+			elif query_type == 'ai':
+				# AI-powered extraction using natural language description
+				try:
+					from ai_extractor import extract_with_ai
+
+					# Prefer markdown content (from Firecrawl), fall back to HTML
+					if markdown_content:
+						ai_content = markdown_content
+						ai_content_type = 'markdown'
+					else:
+						ai_content = page_content.decode('utf-8', errors='ignore') if isinstance(page_content, bytes) else str(page_content)
+						ai_content_type = 'html'
+
+					# The query expression IS the natural language description
+					ai_result = extract_with_ai(ai_content, query_expression, content_type=ai_content_type)
+					extracted_data[query_name] = ai_result.get('fields')
+				except Exception as e:
+					logger.error("AI extraction failed for query", query_name=query_name, error=str(e))
+					extracted_data[query_name] = None
+				continue  # Skip the join logic below, AI returns structured data
 
 			else:
 				logger.warning("Unknown query type", query_type=query_type)

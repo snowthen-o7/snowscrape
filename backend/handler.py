@@ -3375,3 +3375,227 @@ def scraper_preview_async_worker_handler(event, context):
 		}
 	finally:
 		logger.clear_context()
+
+
+def ai_extract_handler(event, context):
+	"""
+	POST /ai/extract
+	Fetches a URL and extracts structured data using AI (natural language description).
+	"""
+	log_lambda_invocation(event, context, logger)
+
+	cors_headers = {
+		"Content-Type": "application/json",
+		"Access-Control-Allow-Origin": get_cors_origin(event),
+		"Access-Control-Allow-Headers": "Content-Type,Authorization",
+		"Access-Control-Expose-Headers": "Content-Type"
+	}
+
+	try:
+		# Validate authentication
+		token = extract_token_from_event(event)
+		if not token:
+			return {
+				"statusCode": 401,
+				"headers": cors_headers,
+				"body": json.dumps({"message": "No authorization token provided"})
+			}
+
+		user_data = validate_clerk_token(token)
+		user_id = user_data.get("sub")
+		if not user_id:
+			return {
+				"statusCode": 401,
+				"headers": cors_headers,
+				"body": json.dumps({"message": "Invalid authorization token"})
+			}
+
+		# Parse request body
+		try:
+			body = json.loads(event.get('body', '{}'))
+		except json.JSONDecodeError:
+			return {
+				"statusCode": 400,
+				"headers": cors_headers,
+				"body": json.dumps({"message": "Invalid JSON in request body"})
+			}
+
+		url = body.get('url')
+		description = body.get('description')
+		if not url or not description:
+			return {
+				"statusCode": 400,
+				"headers": cors_headers,
+				"body": json.dumps({"message": "Both 'url' and 'description' are required"})
+			}
+
+		# Validate URL format
+		parsed = urlparse(url)
+		if not parsed.scheme or not parsed.netloc:
+			return {
+				"statusCode": 400,
+				"headers": cors_headers,
+				"body": json.dumps({"message": "Invalid URL format"})
+			}
+
+		min_tier = body.get('min_tier', 1)
+		max_tier = body.get('max_tier', 4)
+
+		logger.info("Processing AI extract request", user_id=user_id, url=url, description=description[:100])
+
+		# Fetch page via smart_scrape
+		import asyncio
+		from tiered_scraper import smart_scrape, TIER_INFO
+
+		loop = asyncio.new_event_loop()
+		asyncio.set_event_loop(loop)
+		result, tier_used, escalation_log = loop.run_until_complete(
+			smart_scrape(url=url, min_tier=min_tier, max_tier=max_tier, auto_escalate=True, timeout=40)
+		)
+		loop.close()
+
+		# Prefer markdown (from Firecrawl), fall back to HTML
+		from ai_extractor import extract_with_ai
+
+		markdown = result.get('markdown')
+		if markdown:
+			ai_result = extract_with_ai(markdown, description, content_type='markdown')
+		else:
+			html_content = result.get('text', '')
+			ai_result = extract_with_ai(html_content, description, content_type='html')
+
+		response_data = {
+			'url': url,
+			'description': description,
+			'result': ai_result['fields'],
+			'model': ai_result['model'],
+			'usage': ai_result['usage'],
+			'tier_info': {
+				'tier_used': tier_used,
+				'tier_name': TIER_INFO[tier_used]['name'],
+				'cost_per_page': TIER_INFO[tier_used]['cost_per_page'],
+				'escalation_log': escalation_log,
+			}
+		}
+
+		return {
+			"statusCode": 200,
+			"headers": cors_headers,
+			"body": json.dumps(response_data)
+		}
+
+	except Exception as e:
+		log_exception(logger, "AI extract handler failed", e)
+		return {
+			"statusCode": 500,
+			"headers": cors_headers,
+			"body": json.dumps({"message": "AI extraction failed", "error": str(e)})
+		}
+	finally:
+		logger.clear_context()
+
+
+def ai_suggest_queries_handler(event, context):
+	"""
+	POST /ai/suggest-queries
+	Fetches a URL and suggests XPath/CSS/regex selectors using AI.
+	"""
+	log_lambda_invocation(event, context, logger)
+
+	cors_headers = {
+		"Content-Type": "application/json",
+		"Access-Control-Allow-Origin": get_cors_origin(event),
+		"Access-Control-Allow-Headers": "Content-Type,Authorization",
+		"Access-Control-Expose-Headers": "Content-Type"
+	}
+
+	try:
+		# Validate authentication
+		token = extract_token_from_event(event)
+		if not token:
+			return {
+				"statusCode": 401,
+				"headers": cors_headers,
+				"body": json.dumps({"message": "No authorization token provided"})
+			}
+
+		user_data = validate_clerk_token(token)
+		user_id = user_data.get("sub")
+		if not user_id:
+			return {
+				"statusCode": 401,
+				"headers": cors_headers,
+				"body": json.dumps({"message": "Invalid authorization token"})
+			}
+
+		# Parse request body
+		try:
+			body = json.loads(event.get('body', '{}'))
+		except json.JSONDecodeError:
+			return {
+				"statusCode": 400,
+				"headers": cors_headers,
+				"body": json.dumps({"message": "Invalid JSON in request body"})
+			}
+
+		url = body.get('url')
+		description = body.get('description')
+		if not url or not description:
+			return {
+				"statusCode": 400,
+				"headers": cors_headers,
+				"body": json.dumps({"message": "Both 'url' and 'description' are required"})
+			}
+
+		# Validate URL format
+		parsed = urlparse(url)
+		if not parsed.scheme or not parsed.netloc:
+			return {
+				"statusCode": 400,
+				"headers": cors_headers,
+				"body": json.dumps({"message": "Invalid URL format"})
+			}
+
+		logger.info("Processing AI suggest-queries request", user_id=user_id, url=url, description=description[:100])
+
+		# Fetch page via smart_scrape
+		import asyncio
+		from tiered_scraper import smart_scrape
+
+		loop = asyncio.new_event_loop()
+		asyncio.set_event_loop(loop)
+		result, tier_used, escalation_log = loop.run_until_complete(
+			smart_scrape(url=url, min_tier=1, max_tier=4, auto_escalate=True, timeout=40)
+		)
+		loop.close()
+
+		# Generate suggestions
+		from ai_extractor import suggest_queries
+
+		markdown = result.get('markdown')
+		if markdown:
+			suggestions = suggest_queries(markdown, description, content_type='markdown')
+		else:
+			html_content = result.get('text', '')
+			suggestions = suggest_queries(html_content, description, content_type='html')
+
+		response_data = {
+			'url': url,
+			'suggestions': suggestions,
+		}
+
+		return {
+			"statusCode": 200,
+			"headers": cors_headers,
+			"body": json.dumps(response_data)
+		}
+
+	except Exception as e:
+		log_exception(logger, "AI suggest-queries handler failed", e)
+		return {
+			"statusCode": 500,
+			"headers": cors_headers,
+			"body": json.dumps({"message": "Query suggestion failed", "error": str(e)})
+		}
+	finally:
+		logger.clear_context()

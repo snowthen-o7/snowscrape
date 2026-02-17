@@ -394,7 +394,8 @@ def process_job(job_data: Dict[str, Any]) -> Dict[str, Any]:
 					# Process the page content
 					page_content = response['content']
 					content_type = response.get('content_type', '')
-					url_results = process_queries(page_content, queries, content_type=content_type)
+					markdown_content = response.get('markdown')
+					url_results = process_queries(page_content, queries, content_type=content_type, markdown_content=markdown_content)
 
 					# Store the results for this URL
 					results[url] = {

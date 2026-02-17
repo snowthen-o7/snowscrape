@@ -40,6 +40,16 @@ export default $config({
 
     const residentialProxyUrl = new sst.Secret("ResidentialProxyUrl");
 
+    // ─── JS Renderer (Browserless) ──────────────────────────────────────
+
+    const jsRendererUrl = new sst.Secret("JsRendererUrl");
+    const jsRendererApiKey = new sst.Secret("JsRendererApiKey");
+
+    // ─── Firecrawl + Anthropic AI ─────────────────────────────────────
+
+    const firecrawlApiKey = new sst.Secret("FirecrawlApiKey");
+    const anthropicApiKey = new sst.Secret("AnthropicApiKey");
+
     // ─── DynamoDB Tables ──────────────────────────────────────────────
 
     const jobsTable = new sst.aws.Dynamo("Jobs", {
@@ -304,6 +314,10 @@ export default $config({
       SNOWGLOBE_URL: "https://snowglobe.alexdiaz.me",
       SNOWGLOBE_SITE_ID: "snowscrape",
       RESIDENTIAL_PROXY_URL: residentialProxyUrl.value,
+      JS_RENDERER_URL: jsRendererUrl.value,
+      JS_RENDERER_API_KEY: jsRendererApiKey.value,
+      FIRECRAWL_API_KEY: firecrawlApiKey.value,
+      ANTHROPIC_API_KEY: anthropicApiKey.value,
       WS_API_DOMAIN: wsApi.url.apply((url) => new URL(url).host),
       WS_API_STAGE: wsApi.url.apply((url) => new URL(url).pathname.slice(1)),
     };
@@ -498,6 +512,19 @@ export default $config({
       ...pythonDefaults,
       handler: "backend/handler.scraper_test_handler",
       timeout: "90 seconds",
+    });
+
+    // AI-Powered Extraction
+    api.route("POST /ai/extract", {
+      ...pythonDefaults,
+      handler: "backend/handler.ai_extract_handler",
+      timeout: "120 seconds",
+    });
+
+    api.route("POST /ai/suggest-queries", {
+      ...pythonDefaults,
+      handler: "backend/handler.ai_suggest_queries_handler",
+      timeout: "120 seconds",
     });
 
     // Async worker (no HTTP event — invoked directly by async start)

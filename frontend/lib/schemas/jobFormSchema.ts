@@ -15,7 +15,7 @@ const pdfConfigSchema = z.object({
 
 const querySchema = z.object({
   name: z.string().min(1, 'Field name is required'),
-  type: z.enum(['xpath', 'regex', 'jsonpath', 'pdf_text', 'pdf_table', 'pdf_metadata']),
+  type: z.enum(['xpath', 'regex', 'jsonpath', 'pdf_text', 'pdf_table', 'pdf_metadata', 'ai']),
   query: z.string(),
   join: z.boolean(),
   pdf_config: pdfConfigSchema.optional(),

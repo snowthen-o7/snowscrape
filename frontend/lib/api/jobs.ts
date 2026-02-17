@@ -198,6 +198,35 @@ export class JobsAPI {
       body: JSON.stringify({ url, selectors }),
     });
   }
+
+  /**
+   * AI-powered data extraction from a URL
+   */
+  async aiExtract(
+    url: string,
+    description: string,
+    token: string,
+    options?: { min_tier?: number; max_tier?: number }
+  ): Promise<AIExtractResponse> {
+    return this.client.request<AIExtractResponse>('/ai/extract', token, {
+      method: 'POST',
+      body: JSON.stringify({ url, description, ...options }),
+    });
+  }
+
+  /**
+   * AI-suggested selectors for a URL
+   */
+  async aiSuggestQueries(
+    url: string,
+    description: string,
+    token: string
+  ): Promise<AISuggestResponse> {
+    return this.client.request<AISuggestResponse>('/ai/suggest-queries', token, {
+      method: 'POST',
+      body: JSON.stringify({ url, description }),
+    });
+  }
 }
 
 export interface PagePreviewResponse {
@@ -217,6 +246,31 @@ export interface PagePreviewResponse {
     cost_per_page: number;
     escalation_log: string[];
   };
+}
+
+export interface AIExtractResponse {
+  url: string;
+  description: string;
+  result: Record<string, unknown>;
+  model: string;
+  usage: { input_tokens: number; output_tokens: number };
+  tier_info?: {
+    tier_used: number;
+    tier_name: string;
+    cost_per_page: number;
+    escalation_log: string[];
+  };
+}
+
+export interface AISuggestResponse {
+  url: string;
+  suggestions: Array<{
+    name: string;
+    type: 'xpath' | 'css' | 'regex' | 'ai';
+    query: string;
+    description: string;
+    sample_value: string;
+  }>;
 }
 
 // Export singleton instance

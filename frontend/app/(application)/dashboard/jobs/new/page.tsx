@@ -28,6 +28,15 @@ const creationMethods = [
     recommended: true,
   },
   {
+    id: 'ai',
+    title: 'AI-Assisted',
+    description: 'Describe what you need and let AI set up the job',
+    icon: Sparkles,
+    href: '/dashboard/jobs/new/ai',
+    features: ['Natural language input', 'Auto-suggest selectors', 'AI-powered extraction'],
+    recommended: false,
+  },
+  {
     id: 'visual',
     title: 'Visual Builder',
     description: 'Point and click to select elements on any webpage',
@@ -83,7 +92,7 @@ export default function NewJobPage() {
         </div>
 
         {/* Creation Methods */}
-        <div className="grid gap-6 md:grid-cols-3">
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
           {creationMethods.map((method) => {
             const Icon = method.icon;
             return (

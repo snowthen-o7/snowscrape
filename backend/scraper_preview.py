@@ -61,9 +61,9 @@ def fetch_and_parse_page(url: str, timeout: int = 35, min_tier: int = 1, max_tie
             f"Try enabling advanced scraping options or use manual configuration."
         )
 
-    # Extract soup from result
+    # Extract soup from result (check 'html' for Tier 3 compatibility)
     soup = result.get('soup')
-    content = result.get('content') or result.get('text', '')
+    content = result.get('html') or result.get('content') or result.get('text', '')
 
     if not soup:
         # If soup not in result, parse content
@@ -144,7 +144,7 @@ def fetch_and_parse_page(url: str, timeout: int = 35, min_tier: int = 1, max_tie
 
     logger.info("Page parsed successfully", url=url, element_count=len(elements), tier_used=tier_used)
 
-    return {
+    response_data = {
         'url': url,
         'title': title,
         'elements': elements,
@@ -155,6 +155,12 @@ def fetch_and_parse_page(url: str, timeout: int = 35, min_tier: int = 1, max_tie
             'escalation_log': escalation_log,
         }
     }
+
+    # Pass through markdown from Firecrawl tiers
+    if result.get('markdown'):
+        response_data['markdown'] = result['markdown']
+
+    return response_data
 
 
 def generate_xpath(tree: lxml_html.HtmlElement, soup_tag: Any) -> str:
@@ -274,9 +280,9 @@ def test_extraction(url: str, selectors: List[Dict[str, str]], timeout: int = 35
             f"This site may have strong bot protection."
         )
 
-    # Extract soup and tree from result
+    # Extract soup and tree from result (check 'html' for Tier 3 compatibility)
     soup = result.get('soup')
-    content = result.get('content') or result.get('text', '')
+    content = result.get('html') or result.get('content') or result.get('text', '')
 
     if not soup:
         soup = BeautifulSoup(content, 'html.parser')

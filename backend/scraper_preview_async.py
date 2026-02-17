@@ -88,9 +88,9 @@ def scrape_with_websocket_updates(
                 'escalation_log': escalation_log
             })
 
-        # Extract soup from result
+        # Extract soup from result (check 'html' for Tier 3 compatibility)
         soup = result.get('soup')
-        content = result.get('content') or result.get('text', '')
+        content = result.get('html') or result.get('content') or result.get('text', '')
 
         if not soup:
             soup = BeautifulSoup(content, 'html.parser')
@@ -177,6 +177,10 @@ def scrape_with_websocket_updates(
                 'escalation_log': escalation_log,
             }
         }
+
+        # Pass through markdown from Firecrawl tiers
+        if result.get('markdown'):
+            response_data['markdown'] = result['markdown']
 
         logger.info("Async scrape completed", task_id=task_id, element_count=len(elements), tier_used=tier_used)
 

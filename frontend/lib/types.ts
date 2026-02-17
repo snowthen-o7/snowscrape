@@ -54,7 +54,7 @@ export interface JobDetailsModalProps {
   token: string; // Assuming `token` is a string
 }
 
-export type QueryType = 'xpath' | 'regex' | 'jsonpath' | 'pdf_text' | 'pdf_table' | 'pdf_metadata';
+export type QueryType = 'xpath' | 'regex' | 'jsonpath' | 'pdf_text' | 'pdf_table' | 'pdf_metadata' | 'ai';
 
 export interface PdfConfig {
   page_range?: [number, number];  // [start, end] page indices (0-based)

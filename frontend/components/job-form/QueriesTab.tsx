@@ -91,6 +91,7 @@ export function QueriesTab({ queryErrors }: QueriesTabProps) {
                         <SelectItem value="pdf_table">PDF Table</SelectItem>
                         <SelectItem value="pdf_text">PDF Text</SelectItem>
                         <SelectItem value="pdf_metadata">PDF Metadata</SelectItem>
+                        <SelectItem value="ai">AI Extract (Natural Language)</SelectItem>
                       </SelectContent>
                     </Select>
                   )}
@@ -98,7 +99,8 @@ export function QueriesTab({ queryErrors }: QueriesTabProps) {
               </div>
               <div className="md:col-span-2 space-y-2">
                 <Label htmlFor={`queryExpression-${index}`}>
-                  {watch(`queries.${index}.type`)?.startsWith('pdf_') ? 'Expression (Optional)' : 'Expression'}
+                  {watch(`queries.${index}.type`) === 'ai' ? 'Description (What to extract)' :
+                   watch(`queries.${index}.type`)?.startsWith('pdf_') ? 'Expression (Optional)' : 'Expression'}
                 </Label>
                 <Input
                   id={`queryExpression-${index}`}
@@ -108,6 +110,7 @@ export function QueriesTab({ queryErrors }: QueriesTabProps) {
                     watch(`queries.${index}.type`) === 'jsonpath' ? '$.data.price' :
                     watch(`queries.${index}.type`) === 'pdf_table' ? 'Column name to extract (optional)' :
                     watch(`queries.${index}.type`) === 'pdf_text' ? 'Regex pattern to apply (optional)' :
+                    watch(`queries.${index}.type`) === 'ai' ? 'e.g., Extract the product name, price, and rating' :
                     ''
                   }
                   {...register(`queries.${index}.query`)}
@@ -125,6 +128,12 @@ export function QueriesTab({ queryErrors }: QueriesTabProps) {
                 {watch(`queries.${index}.type`) === 'pdf_metadata' && (
                   <p className="text-xs text-muted-foreground">
                     Extracts PDF metadata (title, author, page count, etc.)
+                  </p>
+                )}
+                {watch(`queries.${index}.type`) === 'ai' && (
+                  <p className="text-xs text-muted-foreground">
+                    Describe what you want to extract in plain English. AI will return structured JSON data.
+                    Uses Claude AI (additional cost per page).
                   </p>
                 )}
                 {queryErrors[index] && <p className="text-sm text-destructive">{queryErrors[index]}</p>}
