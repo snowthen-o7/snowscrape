@@ -31,24 +31,8 @@ export default $config({
       prod: "ops-alerts@example.com",
     };
 
-    // ─── Clerk Keys from SSM Parameter Store ──────────────────────────
-
-    const clerkJwtPublicKey = new sst.Secret("ClerkJwtPublicKey");
-    const clerkJwtSecretKey = new sst.Secret("ClerkJwtSecretKey");
-
-    // ─── Proxy Service ──────────────────────────────────────────────────
-
-    const residentialProxyUrl = new sst.Secret("ResidentialProxyUrl");
-
-    // ─── JS Renderer (Browserless) ──────────────────────────────────────
-
-    const jsRendererUrl = new sst.Secret("JsRendererUrl");
-    const jsRendererApiKey = new sst.Secret("JsRendererApiKey");
-
-    // ─── Firecrawl + Anthropic AI ─────────────────────────────────────
-
-    const firecrawlApiKey = new sst.Secret("FirecrawlApiKey");
-    const anthropicApiKey = new sst.Secret("AnthropicApiKey");
+    // ─── Secrets (sourced from Doppler via `doppler run`) ──────────────
+    // Deploy with: doppler run --project sf-snowscrape --config dev -- npx sst deploy --stage dev
 
     // ─── DynamoDB Tables ──────────────────────────────────────────────
 
@@ -68,6 +52,7 @@ export default $config({
         table: {
           pointInTimeRecovery: { enabled: true },
           serverSideEncryption: { enabled: true },
+          ttl: { attributeName: "ttl", enabled: true },
         },
       },
     });
@@ -81,6 +66,7 @@ export default $config({
         table: {
           pointInTimeRecovery: { enabled: true },
           serverSideEncryption: { enabled: true },
+          ttl: { attributeName: "ttl", enabled: true },
         },
       },
     });
@@ -99,6 +85,7 @@ export default $config({
         table: {
           pointInTimeRecovery: { enabled: true },
           serverSideEncryption: { enabled: true },
+          ttl: { attributeName: "ttl", enabled: true },
         },
       },
     });
@@ -179,6 +166,43 @@ export default $config({
       primaryIndex: { hashKey: "connection_id" },
       transform: {
         table: {
+          serverSideEncryption: { enabled: true },
+          ttl: { attributeName: "ttl", enabled: true },
+        },
+      },
+    });
+
+    const subscriptionsTable = new sst.aws.Dynamo("Subscriptions", {
+      fields: {
+        user_id: "string",
+        stripe_customer_id: "string",
+      },
+      primaryIndex: { hashKey: "user_id" },
+      globalIndexes: {
+        StripeCustomerIndex: { hashKey: "stripe_customer_id" },
+      },
+      transform: {
+        table: {
+          pointInTimeRecovery: { enabled: true },
+          serverSideEncryption: { enabled: true },
+        },
+      },
+    });
+
+    const apiKeysTable = new sst.aws.Dynamo("ApiKeys", {
+      fields: {
+        api_key_id: "string",
+        user_id: "string",
+        key_hash: "string",
+      },
+      primaryIndex: { hashKey: "api_key_id" },
+      globalIndexes: {
+        UserIdIndex: { hashKey: "user_id" },
+        KeyHashIndex: { hashKey: "key_hash" },
+      },
+      transform: {
+        table: {
+          pointInTimeRecovery: { enabled: true },
           serverSideEncryption: { enabled: true },
           ttl: { attributeName: "ttl", enabled: true },
         },
@@ -294,6 +318,7 @@ export default $config({
 
     const sharedEnv = {
       PYTHONPATH: "/var/task/backend:/var/task:/var/runtime",
+      // DynamoDB tables
       DYNAMODB_JOBS_TABLE: jobsTable.name,
       DYNAMODB_SESSION_TABLE: sessionsTable.name,
       DYNAMODB_URLS_TABLE: urlsTable.name,
@@ -302,6 +327,9 @@ export default $config({
       DYNAMODB_WEBHOOK_DELIVERIES_TABLE: webhookDeliveriesTable.name,
       DYNAMODB_PROXY_POOL_TABLE: proxyPoolTable.name,
       DYNAMODB_CONNECTIONS_TABLE: connectionsTable.name,
+      DYNAMODB_SUBSCRIPTIONS_TABLE: subscriptionsTable.name,
+      DYNAMODB_API_KEYS_TABLE: apiKeysTable.name,
+      // AWS
       REGION: "us-east-2",
       S3_BUCKET: resultsBucket.name,
       SQS_JOB_QUEUE: jobQueue.url,
@@ -309,15 +337,27 @@ export default $config({
       SQS_WEBHOOK_QUEUE: webhookQueue.url,
       SQS_WEBHOOK_QUEUE_URL: webhookQueue.url,
       CORS_ALLOWED_ORIGIN: (corsOrigins[stage] ?? corsOrigins.dev).join(","),
-      CLERK_JWT_PUBLIC_KEY: clerkJwtPublicKey.value,
-      CLERK_JWT_SECRET_KEY: clerkJwtSecretKey.value,
-      SNOWGLOBE_URL: "https://snowglobe.alexdiaz.me",
-      SNOWGLOBE_SITE_ID: "snowscrape",
-      RESIDENTIAL_PROXY_URL: residentialProxyUrl.value,
-      JS_RENDERER_URL: jsRendererUrl.value,
-      JS_RENDERER_API_KEY: jsRendererApiKey.value,
-      FIRECRAWL_API_KEY: firecrawlApiKey.value,
-      ANTHROPIC_API_KEY: anthropicApiKey.value,
+      // Auth (from Doppler)
+      CLERK_JWT_PUBLIC_KEY: process.env.CLERK_JWT_PUBLIC_KEY ?? "",
+      CLERK_JWT_SECRET_KEY: process.env.CLERK_JWT_SECRET_KEY ?? "",
+      // Scraping services (from Doppler)
+      RESIDENTIAL_PROXY_URL: process.env.RESIDENTIAL_PROXY_URL ?? "",
+      JS_RENDERER_URL: process.env.JS_RENDERER_URL ?? "",
+      JS_RENDERER_API_KEY: process.env.JS_RENDERER_API_KEY ?? "",
+      FIRECRAWL_API_KEY: process.env.FIRECRAWL_API_KEY ?? "",
+      ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ?? "",
+      // Stripe (from Doppler)
+      STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY ?? "",
+      STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET ?? "",
+      STRIPE_PRICE_STARTER_MONTHLY: process.env.STRIPE_PRICE_STARTER_MONTHLY ?? "",
+      STRIPE_PRICE_PRO_MONTHLY: process.env.STRIPE_PRICE_PRO_MONTHLY ?? "",
+      STRIPE_PRICE_PRO_ANNUAL: process.env.STRIPE_PRICE_PRO_ANNUAL ?? "",
+      STRIPE_PRICE_BUSINESS_MONTHLY: process.env.STRIPE_PRICE_BUSINESS_MONTHLY ?? "",
+      STRIPE_PRICE_BUSINESS_ANNUAL: process.env.STRIPE_PRICE_BUSINESS_ANNUAL ?? "",
+      // Monitoring
+      SNOWGLOBE_URL: process.env.SNOWGLOBE_URL ?? "https://snowglobe.alexdiaz.me",
+      SNOWGLOBE_SITE_ID: process.env.SNOWGLOBE_SITE_ID ?? "snowscrape",
+      // WebSocket
       WS_API_DOMAIN: wsApi.url.apply((url) => new URL(url).host),
       WS_API_STAGE: wsApi.url.apply((url) => new URL(url).pathname.slice(1)),
     };
@@ -333,6 +373,8 @@ export default $config({
       webhookDeliveriesTable,
       proxyPoolTable,
       connectionsTable,
+      subscriptionsTable,
+      apiKeysTable,
     ];
 
     // ─── Default Python Lambda Config ─────────────────────────────────
@@ -527,6 +569,56 @@ export default $config({
       timeout: "120 seconds",
     });
 
+    // Billing
+    api.route("POST /billing/checkout", {
+      ...pythonDefaults,
+      handler: "backend/billing_handler.create_checkout_session_handler",
+      timeout: "10 seconds",
+    });
+
+    api.route("POST /billing/portal", {
+      ...pythonDefaults,
+      handler: "backend/billing_handler.create_customer_portal_handler",
+      timeout: "10 seconds",
+    });
+
+    api.route("POST /billing/webhook", {
+      ...pythonDefaults,
+      handler: "backend/billing_handler.stripe_webhook_handler",
+      timeout: "30 seconds",
+    });
+
+    api.route("GET /billing/subscription", {
+      ...pythonDefaults,
+      handler: "backend/billing_handler.get_subscription_handler",
+      timeout: "10 seconds",
+    });
+
+    api.route("GET /billing/usage", {
+      ...pythonDefaults,
+      handler: "backend/billing_handler.get_usage_handler",
+      timeout: "10 seconds",
+    });
+
+    // API Keys
+    api.route("POST /api-keys", {
+      ...pythonDefaults,
+      handler: "backend/api_key_handler.create_api_key_handler",
+      timeout: "10 seconds",
+    });
+
+    api.route("GET /api-keys", {
+      ...pythonDefaults,
+      handler: "backend/api_key_handler.list_api_keys_handler",
+      timeout: "10 seconds",
+    });
+
+    api.route("DELETE /api-keys/{api_key_id}", {
+      ...pythonDefaults,
+      handler: "backend/api_key_handler.delete_api_key_handler",
+      timeout: "10 seconds",
+    });
+
     // Async worker (no HTTP event — invoked directly by async start)
     const asyncWorker = new sst.aws.Function("ScraperPreviewAsyncWorker", {
       ...pythonDefaults,
@@ -652,6 +744,16 @@ export default $config({
         ...pythonDefaults,
         handler: "backend/handler.proxy_health_checker_handler",
         memory: "256 MB",
+        timeout: "60 seconds",
+      },
+    });
+
+    new sst.aws.Cron("ResetUsage", {
+      schedule: "rate(1 day)",
+      job: {
+        ...pythonDefaults,
+        handler: "backend/billing_handler.reset_usage_cron_handler",
+        memory: "512 MB",
         timeout: "60 seconds",
       },
     });

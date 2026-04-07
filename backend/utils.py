@@ -6,6 +6,7 @@ import os
 import random
 import re
 import requests
+import time
 
 # Optional imports - used only for specific features
 try:
@@ -608,7 +609,8 @@ def save_session_data(job_id: str, session_data: Dict[str, Any]) -> None:
 			Item={
 				'job_id': job_id,
 				'session_data': session_data,
-				'last_updated': datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+				'last_updated': datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
+				'ttl': int(time.time()) + (30 * 24 * 60 * 60),  # 30 days from now
 			}
 		)
 		logger.info("Session data saved successfully", job_id=job_id)

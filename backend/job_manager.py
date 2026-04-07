@@ -51,6 +51,7 @@ def create_job(job_data):
 			logger.debug("Generated job_id", job_id=job_data['job_id'])
 
 		# Ensure all necessary fields are present in job_data and add defaults if needed
+		ttl_30d = int(time.time()) + (30 * 24 * 60 * 60)  # 30 days from now
 		job_item = {
 			'created_at': job_data.get('created_at', datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')),
 			'job_id': job_data['job_id'],
@@ -64,6 +65,7 @@ def create_job(job_data):
 			'source_type': source_type,
 			'status': job_data.get('status', 'ready'),  # Default job status
 			'user_id': job_data['user_id'],
+			'ttl': ttl_30d,
 			'proxy_config': job_data.get('proxy_config', {
 				'enabled': False,
 				'geo_targeting': 'any',
@@ -109,7 +111,8 @@ def create_job(job_data):
 					'job_id': job_data['job_id'],
 					'url': url,
 					'state': 'ready',
-					'last_updated': timestamp
+					'last_updated': timestamp,
+					'ttl': ttl_30d,
 				})
 
 		logger.info("Job created successfully", job_id=job_data['job_id'], url_count=len(links))
@@ -588,6 +591,7 @@ def refresh_job(job_id):
 
 		# Update the job data with the new list of links
 		job_data['links'] = new_links
+		job_data['ttl'] = int(time.time()) + (30 * 24 * 60 * 60)  # Refresh TTL on update
 		job_table.put_item(Item=job_data)
 
 		# Update the job status to 'queued'
