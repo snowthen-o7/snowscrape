@@ -80,11 +80,8 @@ def _authenticate(event):
 # Price ID mapping from env vars
 def _get_price_id(plan: str, interval: str = "month") -> str:
 	key_map = {
-		("starter", "month"): "STRIPE_PRICE_STARTER_MONTHLY",
 		("pro", "month"): "STRIPE_PRICE_PRO_MONTHLY",
-		("pro", "year"): "STRIPE_PRICE_PRO_ANNUAL",
 		("business", "month"): "STRIPE_PRICE_BUSINESS_MONTHLY",
-		("business", "year"): "STRIPE_PRICE_BUSINESS_ANNUAL",
 	}
 	env_key = key_map.get((plan, interval))
 	if not env_key:
@@ -107,51 +104,46 @@ def create_checkout_session_handler(event, context):
 	user_id = user_data["sub"]
 
 	try:
-		body = json.loads(event.get("body") or "{}")
-		plan = body.get("plan", "pro")
-		interval = body.get("interval", "month")
+		body_data = json.loads(event.get("body") or "{}")
+		plan = body_data.get("plan", "pro")
+		interval = body_data.get("interval", "month")
+		is_trial = bool(body_data.get("is_trial", False))
 
-		if plan not in ("starter", "pro", "business"):
+		if plan not in ("pro", "business"):
 			return _response(400, {"message": "Invalid plan"}, event)
 		if interval not in ("month", "year"):
 			return _response(400, {"message": "Invalid interval"}, event)
 
 		price_id = _get_price_id(plan, interval)
 
-		# Get or create Stripe customer
 		sub = get_subscription(user_id)
 		customer_id = sub.get("stripe_customer_id")
 
 		if not customer_id:
-			# Create Stripe customer
-			customer = stripe.Customer.create(
-				metadata={"user_id": user_id},
-			)
+			customer = stripe.Customer.create(metadata={"user_id": user_id})
 			customer_id = customer.id
-			# Persist customer ID
-			create_or_update_subscription(
-				user_id,
-				stripe_customer_id=customer_id,
-				plan=sub.get("plan", "starter"),
-				monthly_pages_used=int(sub.get("monthly_pages_used", 0)),
-			)
 
-		# Determine success/cancel URLs
 		cors_origins = list(_CORS_ALLOWED_ORIGINS)
 		base_url = cors_origins[0] if cors_origins else "http://localhost:3001"
 
-		session = stripe.checkout.Session.create(
-			customer=customer_id,
-			mode="subscription",
-			line_items=[{"price": price_id, "quantity": 1}],
-			success_url=f"{base_url}/dashboard/settings?tab=billing&checkout=success",
-			cancel_url=f"{base_url}/dashboard/settings?tab=billing&checkout=cancel",
-			client_reference_id=user_id,
-			metadata={"user_id": user_id, "plan": plan},
-		)
+		session_kwargs = {
+			"customer": customer_id,
+			"mode": "subscription",
+			"line_items": [{"price": price_id, "quantity": 1}],
+			"success_url": f"{base_url}/dashboard?checkout=success",
+			"cancel_url": f"{base_url}/onboarding/checkout?cancelled=1",
+			"client_reference_id": user_id,
+			"metadata": {"user_id": user_id, "plan": plan},
+		}
+
+		if is_trial:
+			session_kwargs["subscription_data"] = {"trial_period_days": 14}
+			session_kwargs["payment_method_collection"] = "always"
+
+		session = stripe.checkout.Session.create(**session_kwargs)
 
 		logger.info("Checkout session created",
-					 user_id=user_id, plan=plan, interval=interval)
+					 user_id=user_id, plan=plan, interval=interval, is_trial=is_trial)
 		return _response(200, {"checkout_url": session.url}, event)
 
 	except ValueError as e:
@@ -294,44 +286,75 @@ def _handle_checkout_completed(session):
 		logger.error("Checkout completed but no user_id found", session_id=session.get("id"))
 		return
 
-	# Fetch full subscription details from Stripe
 	stripe_sub = stripe.Subscription.retrieve(subscription_id)
+
+	trial_end_iso = (
+		datetime.fromtimestamp(stripe_sub["trial_end"] or 0, tz=timezone.utc).isoformat()
+		if stripe_sub.get("trial_end") else ""
+	)
+	period_end_iso = datetime.fromtimestamp(
+		stripe_sub["current_period_end"], tz=timezone.utc
+	).isoformat()
 
 	create_or_update_subscription(
 		user_id,
 		plan=plan,
-		status=stripe_sub.status,
+		status=stripe_sub["status"],
 		stripe_customer_id=customer_id,
 		stripe_subscription_id=subscription_id,
 		current_period_start=datetime.fromtimestamp(
-			stripe_sub.current_period_start, tz=timezone.utc
+			stripe_sub["current_period_start"], tz=timezone.utc
 		).isoformat(),
-		current_period_end=datetime.fromtimestamp(
-			stripe_sub.current_period_end, tz=timezone.utc
-		).isoformat(),
-		usage_reset_date=datetime.fromtimestamp(
-			stripe_sub.current_period_end, tz=timezone.utc
-		).isoformat(),
+		current_period_end=period_end_iso,
+		trial_end=trial_end_iso,
+		cancel_at_period_end=bool(stripe_sub.get("cancel_at_period_end", False)),
+		usage_reset_date=period_end_iso,
 		monthly_pages_used=0,
 	)
 
 	logger.info("Subscription created via checkout",
-				user_id=user_id, plan=plan, subscription_id=subscription_id)
+				user_id=user_id, plan=plan, subscription_id=subscription_id,
+				trial_end=trial_end_iso)
 
 
 def _handle_subscription_updated(subscription):
-	"""Handle customer.subscription.updated — plan change, status change."""
+	"""Handle customer.subscription.updated — plan/status/trial/cancel-at-period-end."""
 	customer_id = subscription.get("customer")
 	subscription_id = subscription.get("id")
 
-	# Look up user by stripe_customer_id
 	user_id = _find_user_by_customer_id(customer_id)
 	if not user_id:
 		logger.warning("Subscription updated for unknown customer", customer_id=customer_id)
 		return
 
-	# Determine plan from price metadata
 	plan = _plan_from_subscription(subscription)
+	new_period_end_epoch = subscription["current_period_end"]
+	new_period_end = datetime.fromtimestamp(new_period_end_epoch, tz=timezone.utc).isoformat()
+	new_period_start = datetime.fromtimestamp(
+		subscription["current_period_start"], tz=timezone.utc
+	).isoformat()
+
+	# Race fix: only shift usage_reset_date if the period boundary actually moved.
+	# Normalize both to UTC epoch for comparison to avoid Z vs +00:00 mismatch.
+	current_sub = get_subscription(user_id)
+	stored_period_end_str = current_sub.get("current_period_end", "")
+	try:
+		stored_epoch = int(datetime.fromisoformat(
+			stored_period_end_str.replace("Z", "+00:00")
+		).timestamp()) if stored_period_end_str else 0
+	except (ValueError, AttributeError):
+		stored_epoch = 0
+	period_moved = (stored_epoch != new_period_end_epoch)
+	usage_reset_date = (
+		new_period_end if period_moved
+		else current_sub.get("usage_reset_date", new_period_end)
+	)
+
+	trial_end_epoch = subscription.get("trial_end")
+	trial_end_iso = (
+		datetime.fromtimestamp(trial_end_epoch, tz=timezone.utc).isoformat()
+		if trial_end_epoch else ""
+	)
 
 	create_or_update_subscription(
 		user_id,
@@ -339,15 +362,12 @@ def _handle_subscription_updated(subscription):
 		status=subscription.get("status", "active"),
 		stripe_customer_id=customer_id,
 		stripe_subscription_id=subscription_id,
-		current_period_start=datetime.fromtimestamp(
-			subscription["current_period_start"], tz=timezone.utc
-		).isoformat(),
-		current_period_end=datetime.fromtimestamp(
-			subscription["current_period_end"], tz=timezone.utc
-		).isoformat(),
-		usage_reset_date=datetime.fromtimestamp(
-			subscription["current_period_end"], tz=timezone.utc
-		).isoformat(),
+		current_period_start=new_period_start,
+		current_period_end=new_period_end,
+		trial_end=trial_end_iso,
+		cancel_at_period_end=bool(subscription.get("cancel_at_period_end", False)),
+		usage_reset_date=usage_reset_date,
+		monthly_pages_used=int(current_sub.get("monthly_pages_used", 0)),
 	)
 
 	logger.info("Subscription updated",
@@ -355,7 +375,7 @@ def _handle_subscription_updated(subscription):
 
 
 def _handle_subscription_deleted(subscription):
-	"""Handle customer.subscription.deleted — downgrade to starter."""
+	"""Handle customer.subscription.deleted — set plan to locked, status canceled."""
 	customer_id = subscription.get("customer")
 	user_id = _find_user_by_customer_id(customer_id)
 	if not user_id:
@@ -364,13 +384,13 @@ def _handle_subscription_deleted(subscription):
 
 	create_or_update_subscription(
 		user_id,
-		plan="starter",
+		plan="locked",
 		status="canceled",
 		stripe_customer_id=customer_id,
 		stripe_subscription_id="",
 	)
 
-	logger.info("Subscription canceled, reverted to starter", user_id=user_id)
+	logger.info("Subscription canceled, locked", user_id=user_id)
 
 
 def _handle_invoice_paid(invoice):
@@ -464,13 +484,15 @@ def get_subscription_handler(event, context):
 
 	user_id = user_data["sub"]
 	sub = get_subscription(user_id)
-	plan = sub.get("plan", "starter")
-	limits = PLAN_LIMITS.get(plan, PLAN_LIMITS["starter"])
+	plan = sub.get("plan", "locked")
+	limits = PLAN_LIMITS.get(plan, PLAN_LIMITS["locked"])
 
 	result = {
 		"plan": plan,
-		"status": sub.get("status", "active"),
+		"status": sub.get("status", "no_subscription"),
 		"current_period_end": sub.get("current_period_end", ""),
+		"trial_end": sub.get("trial_end", ""),
+		"cancel_at_period_end": bool(sub.get("cancel_at_period_end", False)),
 		"monthly_page_limit": sub.get("monthly_page_limit", limits["monthly_pages"]),
 		"monthly_pages_used": int(sub.get("monthly_pages_used", 0)),
 		"concurrent_job_limit": sub.get("concurrent_job_limit", limits["concurrent_jobs"]),
@@ -495,8 +517,8 @@ def get_usage_handler(event, context):
 
 	user_id = user_data["sub"]
 	sub = get_subscription(user_id)
-	plan = sub.get("plan", "starter")
-	limits = PLAN_LIMITS.get(plan, PLAN_LIMITS["starter"])
+	plan = sub.get("plan", "locked")
+	limits = PLAN_LIMITS.get(plan, PLAN_LIMITS["locked"])
 
 	pages_used = int(sub.get("monthly_pages_used", 0))
 	pages_limit = sub.get("monthly_page_limit", limits["monthly_pages"])
