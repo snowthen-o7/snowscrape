@@ -30,3 +30,6 @@ export type {
   CreateCheckoutResponse,
   CreatePortalResponse,
 } from './billing';
+
+export { apiKeysAPI } from './api-keys';
+export type { ApiKeyListItem, CreateApiKeyResponse } from './api-keys';
