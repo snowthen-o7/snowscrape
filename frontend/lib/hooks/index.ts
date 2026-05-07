@@ -6,3 +6,9 @@
 export * from './useJobs';
 export * from './useTemplates';
 export * from './useWebhooks';
+export {
+  useSubscription,
+  useUsage,
+  useStartCheckout,
+  useOpenPortal,
+} from './useSubscription';
