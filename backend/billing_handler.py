@@ -111,8 +111,8 @@ def create_checkout_session_handler(event, context):
 
 		if plan not in ("pro", "business"):
 			return _response(400, {"message": "Invalid plan"}, event)
-		if interval not in ("month", "year"):
-			return _response(400, {"message": "Invalid interval"}, event)
+		if interval != "month":
+			return _response(400, {"message": "Invalid interval — only monthly billing is supported at launch"}, event)
 
 		price_id = _get_price_id(plan, interval)
 

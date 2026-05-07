@@ -269,3 +269,22 @@ class TestSubscriptionUpdatedRaceFix:
 		).get("Item")
 		# usage_reset_date should not have moved
 		assert row['usage_reset_date'] == original_reset
+
+
+@pytest.mark.unit
+@pytest.mark.aws
+class TestCheckoutIntervalValidation:
+	def test_yearly_interval_returns_400(
+		self, dynamodb_client, mock_env_vars, lambda_context
+	):
+		from billing_handler import create_checkout_session_handler
+		event = {
+			"headers": {"Authorization": "Bearer t", "origin": "http://localhost:3001"},
+			"body": json.dumps({"plan": "pro", "interval": "year", "is_trial": True}),
+		}
+		with patch("billing_handler.validate_clerk_token",
+				   return_value={"sub": "user-y"}):
+			resp = create_checkout_session_handler(event, lambda_context)
+		assert resp["statusCode"] == 400
+		body = json.loads(resp["body"])
+		assert "monthly" in body["message"].lower() or "interval" in body["message"].lower()
