@@ -46,6 +46,14 @@ def mock_env_vars():
 	os.environ['REGION'] = 'us-east-2'
 	os.environ['CLERK_JWT_PUBLIC_KEY'] = 'test-public-key'
 	os.environ['CLERK_JWT_SECRET_KEY'] = 'test-secret-key'
+	os.environ['DYNAMODB_SUBSCRIPTIONS_TABLE'] = 'SnowscrapeSubscriptions-test'
+	os.environ['DYNAMODB_API_KEYS_TABLE'] = 'SnowscrapeApiKeys-test'
+	os.environ['DYNAMODB_BILLING_WEBHOOK_DEDUP_TABLE'] = 'SnowscrapeBillingWebhookDedup-test'
+	os.environ['STRIPE_SECRET_KEY'] = 'sk_test_dummy'
+	os.environ['STRIPE_WEBHOOK_SECRET'] = 'whsec_test_dummy'
+	os.environ['STRIPE_PRICE_PRO_MONTHLY'] = 'price_test_pro_monthly'
+	os.environ['STRIPE_PRICE_BUSINESS_MONTHLY'] = 'price_test_business_monthly'
+	os.environ['CORS_ALLOWED_ORIGIN'] = 'http://localhost:3001'
 
 	yield
 
@@ -55,7 +63,12 @@ def mock_env_vars():
 				'DYNAMODB_WEBHOOK_DELIVERIES_TABLE',
 				'S3_BUCKET', 'SQS_JOB_QUEUE', 'SQS_JOB_QUEUE_URL',
 				'SQS_WEBHOOK_QUEUE_URL', 'REGION',
-				'CLERK_JWT_PUBLIC_KEY', 'CLERK_JWT_SECRET_KEY']:
+				'CLERK_JWT_PUBLIC_KEY', 'CLERK_JWT_SECRET_KEY',
+				'DYNAMODB_SUBSCRIPTIONS_TABLE', 'DYNAMODB_API_KEYS_TABLE',
+				'DYNAMODB_BILLING_WEBHOOK_DEDUP_TABLE',
+				'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET',
+				'STRIPE_PRICE_PRO_MONTHLY', 'STRIPE_PRICE_BUSINESS_MONTHLY',
+				'CORS_ALLOWED_ORIGIN']:
 		if key in os.environ:
 			del os.environ[key]
 
@@ -158,6 +171,70 @@ def dynamodb_client(aws_credentials, mock_env_vars):
 			],
 			AttributeDefinitions=[
 				{'AttributeName': 'delivery_id', 'AttributeType': 'S'}
+			],
+			BillingMode='PAY_PER_REQUEST'
+		)
+
+		# Subscriptions table
+		dynamodb.create_table(
+			TableName='SnowscrapeSubscriptions-test',
+			KeySchema=[
+				{'AttributeName': 'user_id', 'KeyType': 'HASH'}
+			],
+			AttributeDefinitions=[
+				{'AttributeName': 'user_id', 'AttributeType': 'S'},
+				{'AttributeName': 'stripe_customer_id', 'AttributeType': 'S'}
+			],
+			GlobalSecondaryIndexes=[
+				{
+					'IndexName': 'StripeCustomerIndex',
+					'KeySchema': [
+						{'AttributeName': 'stripe_customer_id', 'KeyType': 'HASH'}
+					],
+					'Projection': {'ProjectionType': 'ALL'}
+				}
+			],
+			BillingMode='PAY_PER_REQUEST'
+		)
+
+		# ApiKeys table
+		dynamodb.create_table(
+			TableName='SnowscrapeApiKeys-test',
+			KeySchema=[
+				{'AttributeName': 'api_key_id', 'KeyType': 'HASH'}
+			],
+			AttributeDefinitions=[
+				{'AttributeName': 'api_key_id', 'AttributeType': 'S'},
+				{'AttributeName': 'user_id', 'AttributeType': 'S'},
+				{'AttributeName': 'key_hash', 'AttributeType': 'S'}
+			],
+			GlobalSecondaryIndexes=[
+				{
+					'IndexName': 'UserIdIndex',
+					'KeySchema': [
+						{'AttributeName': 'user_id', 'KeyType': 'HASH'}
+					],
+					'Projection': {'ProjectionType': 'ALL'}
+				},
+				{
+					'IndexName': 'KeyHashIndex',
+					'KeySchema': [
+						{'AttributeName': 'key_hash', 'KeyType': 'HASH'}
+					],
+					'Projection': {'ProjectionType': 'ALL'}
+				}
+			],
+			BillingMode='PAY_PER_REQUEST'
+		)
+
+		# BillingWebhookDedup table
+		dynamodb.create_table(
+			TableName='SnowscrapeBillingWebhookDedup-test',
+			KeySchema=[
+				{'AttributeName': 'event_id', 'KeyType': 'HASH'}
+			],
+			AttributeDefinitions=[
+				{'AttributeName': 'event_id', 'AttributeType': 'S'}
 			],
 			BillingMode='PAY_PER_REQUEST'
 		)
@@ -304,3 +381,44 @@ def lambda_context():
 			return 30000
 
 	return LambdaContext()
+
+
+@pytest.fixture
+def sample_pro_trialing_subscription():
+	"""Subscription row for a user mid-trial."""
+	now = datetime.now(timezone.utc)
+	return {
+		'user_id': 'user-trial-1',
+		'plan': 'pro',
+		'status': 'trialing',
+		'stripe_customer_id': 'cus_test_trial1',
+		'stripe_subscription_id': 'sub_test_trial1',
+		'current_period_start': now.isoformat(),
+		'current_period_end': (now.replace(microsecond=0)).isoformat(),
+		'trial_end': (now.replace(microsecond=0)).isoformat(),
+		'cancel_at_period_end': False,
+		'monthly_page_limit': 25000,
+		'monthly_pages_used': 0,
+		'concurrent_job_limit': 5,
+		'usage_reset_date': (now.replace(microsecond=0)).isoformat(),
+		'features': {
+			'js_rendering': True,
+			'proxy_rotation': True,
+			'webhooks': True,
+			'anti_bot': False,
+		},
+		'created_at': now.isoformat(),
+		'updated_at': now.isoformat(),
+	}
+
+
+@pytest.fixture
+def sample_pro_active_subscription(sample_pro_trialing_subscription):
+	"""Subscription row for a user past trial, paying."""
+	sub = dict(sample_pro_trialing_subscription)
+	sub['status'] = 'active'
+	sub['user_id'] = 'user-active-1'
+	sub['stripe_customer_id'] = 'cus_test_active1'
+	sub['stripe_subscription_id'] = 'sub_test_active1'
+	sub['trial_end'] = ''
+	return sub
