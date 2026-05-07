@@ -5,7 +5,7 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useUser } from '@clerk/nextjs';
 import { AppLayout } from '@/components/layout';
 import { PageHeader } from '@snowforge/ui';
@@ -23,16 +23,19 @@ import {
   Bell,
   Key,
   Settings as SettingsIcon,
-  Copy,
-  Eye,
-  EyeOff,
   Trash2,
   Plus,
-  CheckCircle2,
 } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@snowforge/ui';
 import { toast } from '@/lib/toast';
-import { ConfirmDialog } from '@snowforge/ui';
-import { useSubscription, useUsage, useOpenPortal } from '@/lib/hooks';
+import { useSubscription, useUsage, useOpenPortal, useApiKeys, useDeleteApiKey } from '@/lib/hooks';
+import { CreateApiKeyDialog } from '@/components/billing/CreateApiKeyDialog';
 
 function BillingTab() {
   const { data: sub, isLoading: subLoading } = useSubscription();
@@ -162,13 +165,162 @@ function BillingTab() {
   );
 }
 
+function ApiKeysTab() {
+  const { data: keys, isLoading } = useApiKeys();
+  const deleteKey = useDeleteApiKey();
+  const [createOpen, setCreateOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="p-6 text-muted-foreground">Loading…</CardContent>
+      </Card>
+    );
+  }
+
+  const activeKeys = (keys ?? []).filter((k) => k.is_active);
+  const revokedKeys = (keys ?? []).filter((k) => !k.is_active);
+
+  return (
+    <>
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>API keys</CardTitle>
+              <CardDescription>Programmatic access to SnowScrape</CardDescription>
+            </div>
+            <Button onClick={() => setCreateOpen(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              Create API key
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {activeKeys.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <Key className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p className="text-lg font-medium mb-2">No API keys</p>
+              <p className="text-sm">Create your first API key to get started</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {activeKeys.map((k) => (
+                <div
+                  key={k.api_key_id}
+                  className="rounded-lg border border-border bg-card p-4"
+                >
+                  <div className="flex items-start justify-between mb-2">
+                    <div>
+                      <h4 className="font-medium">{k.name}</h4>
+                      <p className="text-sm text-muted-foreground">
+                        Created {new Date(k.created_at).toLocaleDateString()}
+                      </p>
+                      {k.last_used_at && (
+                        <p className="text-xs text-muted-foreground">
+                          Last used {new Date(k.last_used_at).toLocaleString()}
+                        </p>
+                      )}
+                    </div>
+                    <Badge>Active</Badge>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={`${k.key_prefix}…`}
+                      readOnly
+                      className="font-mono text-sm"
+                    />
+                    <Button
+                      variant="destructive"
+                      size="icon"
+                      onClick={() => setConfirmDelete(k.api_key_id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {revokedKeys.length > 0 && (
+            <details className="mt-6">
+              <summary className="text-sm text-muted-foreground cursor-pointer">
+                Revoked keys ({revokedKeys.length})
+              </summary>
+              <div className="space-y-2 mt-3 opacity-60">
+                {revokedKeys.map((k) => (
+                  <div
+                    key={k.api_key_id}
+                    className="rounded border border-border p-3 text-sm"
+                  >
+                    <span className="font-medium">{k.name}</span>
+                    <span className="ml-2 text-muted-foreground font-mono">
+                      {k.key_prefix}…
+                    </span>
+                    <Badge variant="outline" className="ml-2">
+                      Revoked
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            </details>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Authentication</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <p className="text-sm text-muted-foreground">
+            Include the key in the Authorization header:
+          </p>
+          <code className="block rounded bg-muted p-3 text-xs">
+            Authorization: Bearer YOUR_API_KEY
+          </code>
+        </CardContent>
+      </Card>
+
+      <CreateApiKeyDialog open={createOpen} onOpenChange={setCreateOpen} />
+
+      <Dialog
+        open={!!confirmDelete}
+        onOpenChange={(o) => !o && setConfirmDelete(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Revoke API key?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This will immediately invalidate the key. Any service using it will
+            start receiving 401 errors.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmDelete(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={async () => {
+                if (!confirmDelete) return;
+                await deleteKey.mutateAsync(confirmDelete);
+                setConfirmDelete(null);
+              }}
+            >
+              Revoke
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 export default function SettingsPage() {
   const { user, isLoaded } = useUser();
-  const [apiKeys, setApiKeys] = useState<any[]>([]);
-  const [showApiKey, setShowApiKey] = useState<{ [key: string]: boolean }>({});
-  const [copiedKey, setCopiedKey] = useState<string | null>(null);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [keyToDelete, setKeyToDelete] = useState<string | null>(null);
 
   // Notification preferences
   const [emailNotifications, setEmailNotifications] = useState({
@@ -185,58 +337,6 @@ export default function SettingsPage() {
     resultsPerPage: '20',
     theme: 'dark',
   });
-
-  useEffect(() => {
-    // In production, fetch API keys from backend
-    // For now, using mock data
-    setApiKeys([
-      {
-        id: '1',
-        name: 'Production API Key',
-        key: 'sk_live_4eC39HqLyjWDarjtT1zdp7dc',
-        created: '2026-01-15T10:00:00Z',
-        lastUsed: '2026-01-19T14:30:00Z',
-      },
-    ]);
-  }, []);
-
-  const handleCreateApiKey = () => {
-    const keyName = prompt('Enter a name for this API key:');
-    if (!keyName) return;
-
-    const newKey = {
-      id: Date.now().toString(),
-      name: keyName,
-      key: `sk_live_${Math.random().toString(36).substring(2, 15)}${Math.random().toString(36).substring(2, 15)}`,
-      created: new Date().toISOString(),
-      lastUsed: null,
-    };
-
-    setApiKeys([...apiKeys, newKey]);
-    toast.success('API key created successfully');
-  };
-
-  const handleDeleteApiKey = (keyId: string) => {
-    setApiKeys(apiKeys.filter((k) => k.id !== keyId));
-    setDeleteDialogOpen(false);
-    setKeyToDelete(null);
-    toast.success('API key deleted');
-  };
-
-  const copyApiKey = (key: string, keyId: string) => {
-    navigator.clipboard.writeText(key);
-    setCopiedKey(keyId);
-    toast.success('API key copied to clipboard');
-    setTimeout(() => setCopiedKey(null), 2000);
-  };
-
-  const toggleShowKey = (keyId: string) => {
-    setShowApiKey((prev) => ({ ...prev, [keyId]: !prev[keyId] }));
-  };
-
-  const maskApiKey = (key: string) => {
-    return `${key.substring(0, 12)}${'•'.repeat(20)}`;
-  };
 
   const handleSaveNotifications = () => {
     // In production, save to backend
@@ -363,119 +463,7 @@ export default function SettingsPage() {
 
           {/* API Keys Tab */}
           <TabsContent value="api-keys" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle>API Keys</CardTitle>
-                    <CardDescription>
-                      Manage your API keys for programmatic access
-                    </CardDescription>
-                  </div>
-                  <Button onClick={handleCreateApiKey}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Create API Key
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {apiKeys.length === 0 ? (
-                  <div className="text-center py-12 text-muted-foreground">
-                    <Key className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p className="text-lg font-medium mb-2">No API Keys</p>
-                    <p className="text-sm">Create your first API key to get started</p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {apiKeys.map((apiKey) => (
-                      <div
-                        key={apiKey.id}
-                        className="rounded-lg border border-border bg-card p-4"
-                      >
-                        <div className="flex items-start justify-between mb-3">
-                          <div>
-                            <h4 className="font-medium">{apiKey.name}</h4>
-                            <p className="text-sm text-muted-foreground">
-                              Created {new Date(apiKey.created).toLocaleDateString()}
-                            </p>
-                            {apiKey.lastUsed && (
-                              <p className="text-xs text-muted-foreground">
-                                Last used {new Date(apiKey.lastUsed).toLocaleString()}
-                              </p>
-                            )}
-                          </div>
-                          <Badge variant="outline">Active</Badge>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <Input
-                            value={
-                              showApiKey[apiKey.id]
-                                ? apiKey.key
-                                : maskApiKey(apiKey.key)
-                            }
-                            readOnly
-                            className="font-mono text-sm"
-                          />
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => toggleShowKey(apiKey.id)}
-                          >
-                            {showApiKey[apiKey.id] ? (
-                              <EyeOff className="h-4 w-4" />
-                            ) : (
-                              <Eye className="h-4 w-4" />
-                            )}
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => copyApiKey(apiKey.key, apiKey.id)}
-                          >
-                            {copiedKey === apiKey.id ? (
-                              <CheckCircle2 className="h-4 w-4 text-green-600" />
-                            ) : (
-                              <Copy className="h-4 w-4" />
-                            )}
-                          </Button>
-                          <Button
-                            variant="destructive"
-                            size="icon"
-                            onClick={() => {
-                              setKeyToDelete(apiKey.id);
-                              setDeleteDialogOpen(true);
-                            }}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>API Documentation</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                <p className="text-sm text-muted-foreground">
-                  Use your API keys to authenticate requests to the SnowScrape API.
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  Include the key in the Authorization header:
-                </p>
-                <code className="block rounded bg-muted p-3 text-xs">
-                  Authorization: Bearer YOUR_API_KEY
-                </code>
-                <Button variant="link" className="p-0 h-auto">
-                  View Full API Documentation →
-                </Button>
-              </CardContent>
-            </Card>
+            <ApiKeysTab />
           </TabsContent>
 
           {/* Billing Tab */}
@@ -681,16 +669,6 @@ export default function SettingsPage() {
         </Tabs>
       </div>
 
-      {/* Delete API Key Confirmation Dialog */}
-      <ConfirmDialog
-        open={deleteDialogOpen}
-        onOpenChange={setDeleteDialogOpen}
-        onConfirm={() => keyToDelete && handleDeleteApiKey(keyToDelete)}
-        title="Delete API Key"
-        description="Are you sure you want to delete this API key? This action cannot be undone and any applications using this key will stop working."
-        confirmLabel="Delete"
-        variant="destructive"
-      />
     </AppLayout>
   );
 }
