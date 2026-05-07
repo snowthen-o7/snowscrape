@@ -4,8 +4,8 @@
  */
 
 import { MarketingLayout } from '@/components/layout';
-import { PricingCard } from '@snowforge/ui';
 import { CTASection } from '@/components/marketing/CTASection';
+import { PricingCTA } from '@/components/marketing/PricingCTA';
 import { Check, X } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@snowforge/ui';
 
@@ -30,86 +30,128 @@ export default function Pricing() {
       {/* Pricing Cards */}
       <section className="bg-background py-24 sm:py-32">
         <div className="mx-auto max-w-7xl px-6 lg:px-8">
-          <div className="grid grid-cols-1 gap-8 lg:grid-cols-4">
-            {/* Starter Plan */}
-            <PricingCard
-              name="Starter"
-              price={0}
-              description="Perfect for testing and small projects"
-              features={[
-                '1,000 API calls/month',
-                '100 MB storage',
-                'All query types (XPath, CSS, Regex)',
-                'Basic scheduling',
-                'CSV & JSON export',
-                'Email support',
-                'Access to all templates',
-              ]}
-              cta="Get Started Free"
-              ctaHref="/sign-up"
-            />
+          <div className="text-center mb-10">
+            <h2 className="text-2xl font-semibold mb-2">
+              Start with a 14-day free trial of Pro
+            </h2>
+            <p className="text-muted-foreground">
+              No charge until day 15. Cancel anytime. Card required.
+            </p>
+          </div>
 
+          <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
             {/* Pro Plan */}
-            <PricingCard
-              name="Pro"
-              price={49}
-              description="For professionals and growing teams"
-              features={[
-                '100,000 API calls/month',
-                '10 GB storage',
-                'JavaScript rendering',
-                'Advanced scheduling',
-                'All export formats',
-                'Proxy rotation',
-                'Webhook notifications',
-                'Priority email support',
-                'Custom templates',
-              ]}
-              cta="Start Free Trial"
-              ctaHref="/sign-up"
-              popular
-              variant="accent"
-            />
+            <div className="relative flex flex-col rounded-lg border bg-card p-8 transition-all border-primary shadow-lg ring-2 ring-primary/20">
+              <div className="absolute -top-4 left-1/2 -translate-x-1/2">
+                <span className="inline-flex items-center rounded-full bg-primary px-4 py-1 text-sm font-medium text-primary-foreground">
+                  Most Popular
+                </span>
+              </div>
+
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold text-card-foreground">Pro</h3>
+                <p className="mt-2 text-sm text-muted-foreground">For professionals and growing teams</p>
+              </div>
+
+              <div className="mb-6">
+                <div className="flex items-baseline">
+                  <span className="text-4xl font-bold text-card-foreground">$49</span>
+                  <span className="ml-2 text-sm text-muted-foreground">/month</span>
+                </div>
+              </div>
+
+              <ul className="mb-8 flex-1 space-y-3">
+                {[
+                  '100,000 API calls/month',
+                  '10 GB storage',
+                  'JavaScript rendering',
+                  'Advanced scheduling',
+                  'All export formats',
+                  'Proxy rotation',
+                  'Webhook notifications',
+                  'Priority email support',
+                  'Custom templates',
+                ].map((feature, index) => (
+                  <li key={index} className="flex items-start">
+                    <Check className="mr-3 h-5 w-5 flex-shrink-0 text-primary" />
+                    <span className="text-sm text-muted-foreground">{feature}</span>
+                  </li>
+                ))}
+              </ul>
+
+              <PricingCTA plan="pro" />
+            </div>
 
             {/* Business Plan */}
-            <PricingCard
-              name="Business"
-              price={149}
-              description="For teams and businesses"
-              features={[
-                '500,000 API calls/month',
-                '50 GB storage',
-                'Everything in Pro',
-                'Dedicated proxies',
-                'Custom rate limits',
-                'Team collaboration (5 users)',
-                'SSO & SAML',
-                'Phone & chat support',
-                'SLA guarantee',
-              ]}
-              cta="Start Free Trial"
-              ctaHref="/sign-up"
-            />
+            <div className="relative flex flex-col rounded-lg border bg-card p-8 transition-all border-border hover:border-primary/50 hover:shadow-md">
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold text-card-foreground">Business</h3>
+                <p className="mt-2 text-sm text-muted-foreground">For teams and businesses</p>
+              </div>
+
+              <div className="mb-6">
+                <div className="flex items-baseline">
+                  <span className="text-4xl font-bold text-card-foreground">$149</span>
+                  <span className="ml-2 text-sm text-muted-foreground">/month</span>
+                </div>
+              </div>
+
+              <ul className="mb-8 flex-1 space-y-3">
+                {[
+                  '500,000 API calls/month',
+                  '50 GB storage',
+                  'Everything in Pro',
+                  'Dedicated proxies',
+                  'Custom rate limits',
+                  'Team collaboration (5 users)',
+                  'SSO & SAML',
+                  'Phone & chat support',
+                  'SLA guarantee',
+                ].map((feature, index) => (
+                  <li key={index} className="flex items-start">
+                    <Check className="mr-3 h-5 w-5 flex-shrink-0 text-primary" />
+                    <span className="text-sm text-muted-foreground">{feature}</span>
+                  </li>
+                ))}
+              </ul>
+
+              <PricingCTA plan="business" />
+            </div>
 
             {/* Enterprise Plan */}
-            <PricingCard
-              name="Enterprise"
-              price="Custom"
-              description="For large-scale operations"
-              features={[
-                'Unlimited API calls',
-                'Unlimited storage',
-                'Everything in Business',
-                'Dedicated infrastructure',
-                'Custom integrations',
-                'Unlimited team members',
-                'Dedicated account manager',
-                '24/7 phone support',
-                'Custom SLAs',
-              ]}
-              cta="Contact Sales"
-              ctaHref="/contact"
-            />
+            <div className="relative flex flex-col rounded-lg border bg-card p-8 transition-all border-border hover:border-primary/50 hover:shadow-md">
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold text-card-foreground">Enterprise</h3>
+                <p className="mt-2 text-sm text-muted-foreground">For large-scale operations</p>
+              </div>
+
+              <div className="mb-6">
+                <div className="flex items-baseline">
+                  <span className="text-4xl font-bold text-card-foreground">Custom</span>
+                </div>
+              </div>
+
+              <ul className="mb-8 flex-1 space-y-3">
+                {[
+                  'Unlimited API calls',
+                  'Unlimited storage',
+                  'Everything in Business',
+                  'Dedicated infrastructure',
+                  'Custom integrations',
+                  'Unlimited team members',
+                  'Dedicated account manager',
+                  '24/7 phone support',
+                  'Custom SLAs',
+                ].map((feature, index) => (
+                  <li key={index} className="flex items-start">
+                    <Check className="mr-3 h-5 w-5 flex-shrink-0 text-primary" />
+                    <span className="text-sm text-muted-foreground">{feature}</span>
+                  </li>
+                ))}
+              </ul>
+
+              <PricingCTA plan="enterprise" variant="outline" />
+            </div>
           </div>
 
           {/* Annual discount notice */}
@@ -141,9 +183,6 @@ export default function Pricing() {
                     Features
                   </th>
                   <th className="pb-4 px-6 text-sm font-semibold text-center text-foreground">
-                    Starter
-                  </th>
-                  <th className="pb-4 px-6 text-sm font-semibold text-center text-foreground">
                     Pro
                   </th>
                   <th className="pb-4 px-6 text-sm font-semibold text-center text-foreground">
@@ -159,9 +198,6 @@ export default function Pricing() {
                 <tr>
                   <td className="py-4 pr-8 text-sm text-muted-foreground">
                     API calls per month
-                  </td>
-                  <td className="py-4 px-6 text-sm text-center text-foreground">
-                    1,000
                   </td>
                   <td className="py-4 px-6 text-sm text-center text-foreground">
                     100,000
@@ -180,9 +216,6 @@ export default function Pricing() {
                     Storage
                   </td>
                   <td className="py-4 px-6 text-sm text-center text-foreground">
-                    100 MB
-                  </td>
-                  <td className="py-4 px-6 text-sm text-center text-foreground">
                     10 GB
                   </td>
                   <td className="py-4 px-6 text-sm text-center text-foreground">
@@ -197,9 +230,6 @@ export default function Pricing() {
                 <tr>
                   <td className="py-4 pr-8 text-sm text-muted-foreground">
                     JavaScript rendering
-                  </td>
-                  <td className="py-4 px-6 text-center">
-                    <X className="inline h-5 w-5 text-muted-foreground" />
                   </td>
                   <td className="py-4 px-6 text-center">
                     <Check className="inline h-5 w-5 text-accent-foreground" />
@@ -218,9 +248,6 @@ export default function Pricing() {
                     Proxy rotation
                   </td>
                   <td className="py-4 px-6 text-center">
-                    <X className="inline h-5 w-5 text-muted-foreground" />
-                  </td>
-                  <td className="py-4 px-6 text-center">
                     <Check className="inline h-5 w-5 text-accent-foreground" />
                   </td>
                   <td className="py-4 px-6 text-center">
@@ -235,9 +262,6 @@ export default function Pricing() {
                 <tr>
                   <td className="py-4 pr-8 text-sm text-muted-foreground">
                     Webhook notifications
-                  </td>
-                  <td className="py-4 px-6 text-center">
-                    <X className="inline h-5 w-5 text-muted-foreground" />
                   </td>
                   <td className="py-4 px-6 text-center">
                     <Check className="inline h-5 w-5 text-accent-foreground" />
@@ -259,9 +283,6 @@ export default function Pricing() {
                     1
                   </td>
                   <td className="py-4 px-6 text-sm text-center text-foreground">
-                    1
-                  </td>
-                  <td className="py-4 px-6 text-sm text-center text-foreground">
                     5
                   </td>
                   <td className="py-4 pl-6 text-sm text-center text-foreground">
@@ -273,9 +294,6 @@ export default function Pricing() {
                 <tr>
                   <td className="py-4 pr-8 text-sm text-muted-foreground">
                     Support
-                  </td>
-                  <td className="py-4 px-6 text-sm text-center text-foreground">
-                    Email
                   </td>
                   <td className="py-4 px-6 text-sm text-center text-foreground">
                     Priority email
@@ -292,9 +310,6 @@ export default function Pricing() {
                 <tr>
                   <td className="py-4 pr-8 text-sm text-muted-foreground">
                     SLA guarantee
-                  </td>
-                  <td className="py-4 px-6 text-center">
-                    <X className="inline h-5 w-5 text-muted-foreground" />
                   </td>
                   <td className="py-4 px-6 text-center">
                     <X className="inline h-5 w-5 text-muted-foreground" />
