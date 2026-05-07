@@ -32,6 +32,135 @@ import {
 } from 'lucide-react';
 import { toast } from '@/lib/toast';
 import { ConfirmDialog } from '@snowforge/ui';
+import { useSubscription, useUsage, useOpenPortal } from '@/lib/hooks';
+
+function BillingTab() {
+  const { data: sub, isLoading: subLoading } = useSubscription();
+  const { data: usage } = useUsage();
+  const openPortal = useOpenPortal();
+
+  if (subLoading || !sub) {
+    return (
+      <Card>
+        <CardContent className="p-6 text-muted-foreground">Loading…</CardContent>
+      </Card>
+    );
+  }
+
+  const planLabels: Record<string, string> = {
+    pro: 'Pro',
+    business: 'Business',
+    enterprise: 'Enterprise',
+    locked: 'Locked',
+  };
+  const planPrices: Record<string, string> = {
+    pro: '$49/month',
+    business: '$149/month',
+    enterprise: 'Custom',
+    locked: '—',
+  };
+
+  const statusBadge = () => {
+    switch (sub.status) {
+      case 'trialing':
+        return <Badge variant="secondary">Trialing</Badge>;
+      case 'active':
+        return <Badge>Active</Badge>;
+      case 'past_due':
+        return <Badge variant="destructive">Past due</Badge>;
+      case 'canceled':
+        return <Badge variant="outline">Canceled</Badge>;
+      default:
+        return <Badge variant="outline">{sub.status}</Badge>;
+    }
+  };
+
+  let trialBanner: React.ReactNode = null;
+  if (sub.status === 'trialing' && sub.trial_end) {
+    const ms = new Date(sub.trial_end).getTime() - Date.now();
+    const days = Math.max(0, Math.ceil(ms / 86_400_000));
+    trialBanner = (
+      <div className="rounded bg-muted text-muted-foreground text-sm p-3">
+        Trial ends in {days} {days === 1 ? 'day' : 'days'}.
+      </div>
+    );
+  }
+  if (sub.cancel_at_period_end) {
+    trialBanner = (
+      <div className="rounded bg-muted text-muted-foreground text-sm p-3">
+        Your subscription is set to cancel at the end of the current period.
+      </div>
+    );
+  }
+
+  const pct = usage?.pages_percentage ?? 0;
+  const usageColor =
+    pct < 80 ? 'bg-primary' : pct < 95 ? 'bg-amber-500' : 'bg-destructive';
+
+  return (
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle>Current plan</CardTitle>
+          <CardDescription>Manage your subscription</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="rounded-lg border border-border bg-card p-6">
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <h3 className="text-2xl font-bold">
+                  {planLabels[sub.plan] ?? sub.plan}
+                </h3>
+                <p className="text-muted-foreground">
+                  {planPrices[sub.plan] ?? ''}
+                </p>
+              </div>
+              {statusBadge()}
+            </div>
+            {trialBanner}
+          </div>
+          <div className="flex gap-2">
+            <Button
+              onClick={() => openPortal.mutate()}
+              disabled={openPortal.isPending || !sub.has_billing_account}
+            >
+              Manage subscription
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Usage this period</CardTitle>
+          <CardDescription>
+            Resets on{' '}
+            {usage?.billing_period_end
+              ? new Date(usage.billing_period_end).toLocaleDateString()
+              : '—'}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex justify-between text-sm">
+            <span>Pages used</span>
+            <span>
+              {usage?.pages_used.toLocaleString() ?? 0} /{' '}
+              {usage?.pages_limit === -1
+                ? 'unlimited'
+                : usage?.pages_limit?.toLocaleString() ?? 0}
+            </span>
+          </div>
+          <div className="h-2 bg-muted rounded overflow-hidden">
+            <div
+              className={`h-full ${usageColor} transition-all`}
+              style={{ width: `${Math.min(100, pct)}%` }}
+            />
+          </div>
+        </CardContent>
+      </Card>
+    </>
+  );
+}
 
 export default function SettingsPage() {
   const { user, isLoaded } = useUser();
@@ -351,115 +480,7 @@ export default function SettingsPage() {
 
           {/* Billing Tab */}
           <TabsContent value="billing" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Current Plan</CardTitle>
-                <CardDescription>
-                  Manage your subscription and billing information
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="rounded-lg border border-border bg-card p-6">
-                  <div className="flex items-start justify-between mb-4">
-                    <div>
-                      <h3 className="text-2xl font-bold">Pro Plan</h3>
-                      <p className="text-muted-foreground">
-                        $49/month - Billed monthly
-                      </p>
-                    </div>
-                    <Badge>Active</Badge>
-                  </div>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">API Calls</span>
-                      <span>50,000 / 100,000</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Storage</span>
-                      <span>2.5 GB / 10 GB</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Next billing date</span>
-                      <span>February 1, 2026</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex gap-2">
-                  <Button>Upgrade Plan</Button>
-                  <Button variant="outline">View All Plans</Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Payment Method</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between rounded-lg border border-border p-4">
-                  <div className="flex items-center gap-4">
-                    <CreditCard className="h-8 w-8 text-muted-foreground" />
-                    <div>
-                      <p className="font-medium">•••• •••• •••• 4242</p>
-                      <p className="text-sm text-muted-foreground">Expires 12/2027</p>
-                    </div>
-                  </div>
-                  <Button variant="outline" size="sm">
-                    Update
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Billing History</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {[
-                    {
-                      date: '2026-01-01',
-                      amount: '$49.00',
-                      status: 'Paid',
-                      invoice: 'INV-2026-001',
-                    },
-                    {
-                      date: '2025-12-01',
-                      amount: '$49.00',
-                      status: 'Paid',
-                      invoice: 'INV-2025-012',
-                    },
-                    {
-                      date: '2025-11-01',
-                      amount: '$49.00',
-                      status: 'Paid',
-                      invoice: 'INV-2025-011',
-                    },
-                  ].map((item, index) => (
-                    <div
-                      key={index}
-                      className="flex items-center justify-between py-3 border-b border-border last:border-0"
-                    >
-                      <div>
-                        <p className="font-medium">{item.invoice}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {new Date(item.date).toLocaleDateString()}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <Badge variant="outline">{item.status}</Badge>
-                        <p className="font-medium">{item.amount}</p>
-                        <Button variant="ghost" size="sm">
-                          Download
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+            <BillingTab />
           </TabsContent>
 
           {/* Notifications Tab */}
