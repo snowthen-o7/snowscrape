@@ -1,6 +1,6 @@
 # SnowScrape Infrastructure
 
-**Last Updated:** 2026-02-06 (SST Ion Migration)
+**Last Updated:** 2026-05-07
 **AWS Account ID:** 282128795857
 **Primary Region:** us-east-2
 
@@ -16,7 +16,7 @@ SnowScrape is a serverless web scraping platform deployed on AWS.
                     ┌───────────────────────┼───────────────────────┐
                     │                       │                       │
               [DynamoDB]              [SQS Queues]            [S3 Bucket]
-              (8 tables)           (2 queues + 2 DLQs)       (results)
+              (11 tables)          (2 queues + 2 DLQs)       (results)
 ```
 
 **Frontend:** Next.js on Vercel (region: iad1)
@@ -48,20 +48,76 @@ SnowScrape is a serverless web scraping platform deployed on AWS.
 | webhookDelivery | webhook_delivery_handler | 512 MB | 60s | SQS webhook sender |
 | *...utilities* | handler.* | 256-512 MB | 30s | Validation, preview |
 
-### DynamoDB Tables (8)
+### DynamoDB Tables (11)
 
-| Table | Partition Key | Sort Key | GSIs | Encryption | PITR |
-|-------|--------------|----------|------|------------|------|
-| Jobs | job_id (S) | - | StatusIndex (status), ScheduleIndex (jobStatus + nextRun) | SSE | Enabled |
-| Urls | job_id (S) | url (S) | StatusIndex (status) | SSE | Enabled |
-| Sessions | job_id (S) | - | - | SSE | Enabled |
-| Templates | template_id (S) | - | UserIdIndex (user_id) | SSE | Enabled |
-| Webhooks | webhook_id (S) | - | UserIdIndex (user_id) | SSE | Enabled |
-| WebhookDeliveries | delivery_id (S) | - | WebhookIdIndex (webhook_id + timestamp) | SSE | Enabled |
-| ProxyPool | proxy_id (S) | - | - | SSE | Enabled |
-| Connections | connection_id (S) | - | - (TTL enabled) | SSE | - |
+| Table | Partition Key | Sort Key | GSIs | Encryption | PITR | TTL |
+|-------|--------------|----------|------|------------|------|-----|
+| Jobs | job_id (S) | - | StatusIndex (status), ScheduleIndex (jobStatus + nextRun) | SSE | Enabled | - |
+| Urls | job_id (S) | url (S) | StatusIndex (status) | SSE | Enabled | - |
+| Sessions | job_id (S) | - | - | SSE | Enabled | - |
+| Templates | template_id (S) | - | UserIdIndex (user_id) | SSE | Enabled | - |
+| Webhooks | webhook_id (S) | - | UserIdIndex (user_id) | SSE | Enabled | - |
+| WebhookDeliveries | delivery_id (S) | - | WebhookIdIndex (webhook_id + timestamp) | SSE | Enabled | - |
+| ProxyPool | proxy_id (S) | - | - | SSE | Enabled | - |
+| Connections | connection_id (S) | - | - | SSE | - | `ttl` (WebSocket) |
+| Subscriptions | user_id (S) | - | StripeCustomerIndex (stripe_customer_id) | SSE | Enabled | - |
+| ApiKeys | api_key_id (S) | - | UserIdIndex (user_id), KeyHashIndex (key_hash) | SSE | Enabled | `ttl` (reserved) |
+| BillingWebhookDedup | event_id (S) | - | - | SSE | Enabled | `ttl` (30 days) |
 
 All tables use PAY_PER_REQUEST billing mode.
+
+#### Subscriptions Table
+
+- **Resource name:** `Subscriptions` (SST resource), `snowscrape-{stage}-Subscriptions`
+- **Partition key:** `user_id` (string)
+- **GSI:** `StripeCustomerIndex` on `stripe_customer_id` (string), full projection — used for reverse-lookups during Stripe webhook handling
+- **Encryption:** SSE (AES-256)
+- **PITR:** Enabled
+- **TTL:** Not used (subscriptions are long-lived records)
+- **Purpose:** Stores per-user subscription state — plan tier (`pro`/`business`/`enterprise`/`locked`), Stripe customer/subscription/price IDs, status (`trialing`/`active`/`past_due`/`canceled`), `trial_end`, `cancel_at_period_end`, monthly page usage counters, and billing period boundaries.
+
+#### ApiKeys Table
+
+- **Resource name:** `ApiKeys`, `snowscrape-{stage}-ApiKeys`
+- **Partition key:** `api_key_id` (string, UUID)
+- **GSIs:**
+  - `UserIdIndex` on `user_id` (full projection) — lists all keys for a user
+  - `KeyHashIndex` on `key_hash` (full projection) — fast lookup at API authentication time
+- **Encryption:** SSE
+- **PITR:** Enabled
+- **TTL:** Enabled on `ttl` attribute (reserved for future ephemeral keys; not currently set)
+- **Purpose:** Stores user-generated API keys. The raw key is hashed (SHA-256) before storage; only the hash and a short human-readable prefix are persisted. Soft-delete via `is_active=false`.
+
+#### BillingWebhookDedup Table
+
+- **Resource name:** `BillingWebhookDedup`, `snowscrape-{stage}-BillingWebhookDedup`
+- **Partition key:** `event_id` (string, Stripe event ID e.g. `evt_xxx`)
+- **No GSIs**
+- **Encryption:** SSE
+- **PITR:** Enabled
+- **TTL:** Enabled on `ttl` attribute — 30-day retention window
+- **Purpose:** Idempotency table for the Stripe webhook handler. A conditional-put on `event_id` ensures each Stripe event is processed exactly once, even when Stripe retries delivery.
+
+#### Billing Flow Diagram
+
+```
+Clerk signup
+   ↓
+Next.js middleware (60-second cookie cache of subscription status)
+   ↓ (no subscription found)
+/onboarding/checkout — single CTA → POST /billing/checkout
+   ↓
+Stripe Checkout (14-day trial of Pro, card required at signup)
+   ↓
+checkout.session.completed webhook fires to API Gateway
+   ↓
+backend/billing_handler.stripe_webhook_handler
+  ├─ idempotency check via BillingWebhookDedup (conditional put on event_id)
+  └─ _handle_checkout_completed
+       └─ Subscriptions row created with status=trialing, trial_end set
+   ↓
+Frontend redirected to /dashboard?checkout=success
+```
 
 ### SQS Queues (4)
 
@@ -108,6 +164,9 @@ All tables use PAY_PER_REQUEST billing mode.
 | DYNAMODB_WEBHOOK_DELIVERIES_TABLE | sst.config.ts | Delivery logs table |
 | DYNAMODB_PROXY_POOL_TABLE | sst.config.ts | Proxy pool table |
 | DYNAMODB_CONNECTIONS_TABLE | sst.config.ts | WebSocket connections |
+| DYNAMODB_SUBSCRIPTIONS_TABLE | sst.config.ts | Billing subscriptions table |
+| DYNAMODB_API_KEYS_TABLE | sst.config.ts | API keys table |
+| DYNAMODB_BILLING_WEBHOOK_DEDUP_TABLE | sst.config.ts | Stripe webhook idempotency table |
 | S3_BUCKET | sst.config.ts | Results storage bucket |
 | SQS_JOB_QUEUE_URL | sst.config.ts | Job processing queue URL |
 | SQS_WEBHOOK_QUEUE_URL | sst.config.ts | Webhook delivery queue URL |
@@ -115,6 +174,37 @@ All tables use PAY_PER_REQUEST billing mode.
 | SNOWGLOBE_URL | sst.config.ts | Observatory API endpoint |
 | SNOWGLOBE_API_KEY | env var | Observatory API key |
 | RESIDENTIAL_PROXY_URL | env var | Proxy service URL (optional) |
+
+**Stripe (from Doppler `sf-snowscrape`)**
+
+| Variable | dev value | prd value |
+|--------------------------------|--------------------------|--------------------------|
+| STRIPE_SECRET_KEY | sk_test_... | sk_live_... |
+| STRIPE_WEBHOOK_SECRET | whsec_test_... | whsec_live_... |
+| STRIPE_PRICE_PRO_MONTHLY | price_test_\<pro-id\> | price_live_\<pro-id\> |
+| STRIPE_PRICE_BUSINESS_MONTHLY | price_test_\<biz-id\> | price_live_\<biz-id\> |
+
+**Stripe Customer Portal Configuration**
+
+Configure once per stage in Stripe dashboard → Settings → Billing → Customer portal. Match these exact settings on both test mode and live mode:
+
+- Customers can cancel subscriptions — at end of billing period
+- Customers can switch plans — both Pro and Business prices selected
+- Customers can update payment methods
+- Show invoice history
+- Allow invoice download
+- Promotion codes: disabled (out of scope for MVP)
+- Default return URL: `http://localhost:3001/dashboard/settings` (dev), `https://<prod-domain>/dashboard/settings` (prd)
+
+Webhook endpoint registered per stage — the SST-generated API Gateway URL:
+`https://<api-id>.execute-api.us-east-2.amazonaws.com/billing/webhook`
+
+Subscribed Stripe events:
+- `checkout.session.completed`
+- `customer.subscription.updated`
+- `customer.subscription.deleted`
+- `invoice.payment_succeeded`
+- `invoice.payment_failed`
 
 ### Frontend (Vercel)
 
@@ -177,6 +267,11 @@ All tables use PAY_PER_REQUEST billing mode.
 
 | Date | Change | Author |
 |------|--------|--------|
+| 2026-05-07 | Billing MVP shipped: added Subscriptions, ApiKeys, BillingWebhookDedup tables; trial-only entry flow with Stripe Customer Portal for plan management; idempotent webhook handler. Stripe products provisioned per stage in Doppler sf-snowscrape. | Alex Diaz |
+| 2026-03-25 | Added Firecrawl integration for Tier 3/4 scraping (JS rendering + anti-bot) | Claude |
+| 2026-03-25 | Added AI-powered data extraction via Claude (ai_extractor.py) | Claude |
+| 2026-03-25 | Added WebSocket end-to-end pipeline for real-time job updates | Claude |
+| 2026-03-25 | Documentation audit: updated all stale READMEs and created PROGRESS.md | Claude |
 | 2026-02-06 | Migrated from Serverless Framework to SST Ion (TypeScript IaC) | Claude |
 | 2026-02-06 | Merged frontend + backend into unified monorepo | Claude |
 | 2026-02-06 | Migrated API Gateway from V1 (REST) to V2 (HTTP) | Claude |
