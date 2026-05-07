@@ -304,13 +304,17 @@ function ApiKeysTab() {
             </Button>
             <Button
               variant="destructive"
+              disabled={deleteKey.isPending}
               onClick={async () => {
                 if (!confirmDelete) return;
-                await deleteKey.mutateAsync(confirmDelete);
-                setConfirmDelete(null);
+                try {
+                  await deleteKey.mutateAsync(confirmDelete);
+                } finally {
+                  setConfirmDelete(null);
+                }
               }}
             >
-              Revoke
+              {deleteKey.isPending ? 'Revoking…' : 'Revoke'}
             </Button>
           </DialogFooter>
         </DialogContent>
