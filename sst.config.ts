@@ -209,6 +209,20 @@ export default $config({
       },
     });
 
+    const billingWebhookDedupTable = new sst.aws.Dynamo("BillingWebhookDedup", {
+      fields: {
+        event_id: "string",
+      },
+      primaryIndex: { hashKey: "event_id" },
+      transform: {
+        table: {
+          pointInTimeRecovery: { enabled: true },
+          serverSideEncryption: { enabled: true },
+          ttl: { attributeName: "ttl", enabled: true },
+        },
+      },
+    });
+
     // ─── SQS Queues ───────────────────────────────────────────────────
 
     const jobDlq = new sst.aws.Queue("JobDLQ", {
@@ -329,6 +343,7 @@ export default $config({
       DYNAMODB_CONNECTIONS_TABLE: connectionsTable.name,
       DYNAMODB_SUBSCRIPTIONS_TABLE: subscriptionsTable.name,
       DYNAMODB_API_KEYS_TABLE: apiKeysTable.name,
+      DYNAMODB_BILLING_WEBHOOK_DEDUP_TABLE: billingWebhookDedupTable.name,
       // AWS
       REGION: "us-east-2",
       S3_BUCKET: resultsBucket.name,
@@ -349,11 +364,8 @@ export default $config({
       // Stripe (from Doppler)
       STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY ?? "",
       STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET ?? "",
-      STRIPE_PRICE_STARTER_MONTHLY: process.env.STRIPE_PRICE_STARTER_MONTHLY ?? "",
       STRIPE_PRICE_PRO_MONTHLY: process.env.STRIPE_PRICE_PRO_MONTHLY ?? "",
-      STRIPE_PRICE_PRO_ANNUAL: process.env.STRIPE_PRICE_PRO_ANNUAL ?? "",
       STRIPE_PRICE_BUSINESS_MONTHLY: process.env.STRIPE_PRICE_BUSINESS_MONTHLY ?? "",
-      STRIPE_PRICE_BUSINESS_ANNUAL: process.env.STRIPE_PRICE_BUSINESS_ANNUAL ?? "",
       // Monitoring
       SNOWGLOBE_URL: process.env.SNOWGLOBE_URL ?? "https://snowglobe.alexdiaz.me",
       SNOWGLOBE_SITE_ID: process.env.SNOWGLOBE_SITE_ID ?? "snowscrape",
@@ -375,6 +387,7 @@ export default $config({
       connectionsTable,
       subscriptionsTable,
       apiKeysTable,
+      billingWebhookDedupTable,
     ];
 
     // ─── Default Python Lambda Config ─────────────────────────────────
