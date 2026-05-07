@@ -29,6 +29,7 @@ dependencies = [
   "jmespath==1.0.1",
   "six==1.16.0",
   "anthropic>=0.42.0",
+  "stripe>=8.0.0",
 ]
 
 [build-system]
