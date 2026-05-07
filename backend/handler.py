@@ -189,6 +189,102 @@ def create_job_handler(event, context):
 		validate_job_data(job_data)
 		job_data["user_id"] = user_data["sub"]
 
+		# ── Billing enforcement (fail-CLOSED on inactive sub, fail-open on errors) ──
+		try:
+			from billing import (
+				check_usage_quota, check_concurrent_job_limit,
+				check_feature_access, is_subscription_active, get_subscription,
+			)
+
+			# Hard gate: subscription must be active/trialing
+			sub = get_subscription(user_data["sub"])
+			if not is_subscription_active(sub):
+				return {
+					"statusCode": 402,
+					"body": json.dumps({
+						"message": "Active subscription required",
+						"plan": sub.get("plan", "locked"),
+						"status": sub.get("status", "no_subscription"),
+					}),
+					"headers": {
+						'Access-Control-Allow-Origin': get_cors_origin(event),
+						"Content-Type": "application/json"
+					}
+				}
+
+			# Check page quota
+			quota = check_usage_quota(user_data["sub"])
+			if not quota["allowed"]:
+				return {
+					"statusCode": 402,
+					"body": json.dumps({
+						"message": "Monthly page limit reached",
+						"plan": quota["plan"],
+						"used": quota["used"],
+						"limit": quota["limit"],
+					}),
+					"headers": {
+						'Access-Control-Allow-Origin': get_cors_origin(event),
+						"Content-Type": "application/json"
+					}
+				}
+
+			# Check concurrent job limit
+			concurrent = check_concurrent_job_limit(user_data["sub"])
+			if not concurrent["allowed"]:
+				return {
+					"statusCode": 429,
+					"body": json.dumps({
+						"message": "Concurrent job limit reached",
+						"plan": concurrent["plan"],
+						"active_jobs": concurrent["active_jobs"],
+						"limit": concurrent["limit"],
+					}),
+					"headers": {
+						'Access-Control-Allow-Origin': get_cors_origin(event),
+						"Content-Type": "application/json"
+					}
+				}
+
+			# Check feature access for premium features
+			render_config = job_data.get("render_config") or job_data.get("rendering") or {}
+			if render_config.get("enabled"):
+				feature = check_feature_access(user_data["sub"], "js_rendering")
+				if not feature["allowed"]:
+					return {
+						"statusCode": 403,
+						"body": json.dumps({
+							"message": "JS rendering requires a Pro or higher plan",
+							"plan": feature["plan"],
+						}),
+						"headers": {
+							'Access-Control-Allow-Origin': get_cors_origin(event),
+							"Content-Type": "application/json"
+						}
+					}
+
+			proxy_config = job_data.get("proxy_config") or job_data.get("proxy") or {}
+			if proxy_config.get("enabled"):
+				feature = check_feature_access(user_data["sub"], "proxy_rotation")
+				if not feature["allowed"]:
+					return {
+						"statusCode": 403,
+						"body": json.dumps({
+							"message": "Proxy rotation requires a Pro or higher plan",
+							"plan": feature["plan"],
+						}),
+						"headers": {
+							'Access-Control-Allow-Origin': get_cors_origin(event),
+							"Content-Type": "application/json"
+						}
+					}
+		except ImportError:
+			logger.warning("Billing module not available, skipping enforcement")
+		except Exception as billing_err:
+			logger.warning("Billing check failed, allowing request",
+						   error=str(billing_err))
+		# ── End billing enforcement ───────────────────────────────────
+
 		logger.info("Creating job", job_name=job_data.get('name'), user_id=user_data.get("sub"))
 
 		# Create job
@@ -882,6 +978,18 @@ def process_job_handler(event, context):
 								metrics.emit_urls_processed(job_id, urls_processed)
 					except Exception:
 						pass  # Ignore metrics errors
+
+					# Track billing usage (fail-open)
+					try:
+						from billing import increment_usage
+						if isinstance(result, dict):
+							pages = len(result.get('crawl_results', []))
+							if pages > 0:
+								user_id = job_data.get('user_id', '')
+								if user_id:
+									increment_usage(user_id, pages)
+					except Exception:
+						pass  # Never block job processing for billing
 
 					processed_count += 1
 

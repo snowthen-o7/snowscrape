@@ -15,44 +15,46 @@ class TestHandlers:
 		"""Test successful job creation via handler."""
 		from handler import create_job_handler
 
+		_sub_active = {'user_id': 'user-123', 'plan': 'pro', 'status': 'trialing'}
 		_quota_ok = {'allowed': True, 'plan': 'pro', 'status': 'trialing', 'used': 0, 'limit': 25000, 'remaining': 25000}
 		_conc_ok = {'allowed': True, 'plan': 'pro', 'status': 'trialing', 'active_jobs': 0, 'limit': 5}
 
 		with patch('utils.parse_links_from_file') as mock_parse:
 			with patch('handler.validate_clerk_token') as mock_validate:
-				with patch('billing.check_usage_quota', return_value=_quota_ok):
-					with patch('billing.check_concurrent_job_limit', return_value=_conc_ok):
-						mock_parse.return_value = ['http://test1.com', 'http://test2.com']
-						mock_validate.return_value = {'sub': 'user-123'}
+				with patch('billing.get_subscription', return_value=_sub_active):
+					with patch('billing.check_usage_quota', return_value=_quota_ok):
+						with patch('billing.check_concurrent_job_limit', return_value=_conc_ok):
+							mock_parse.return_value = ['http://test1.com', 'http://test2.com']
+							mock_validate.return_value = {'sub': 'user-123'}
 
-						event = {
-							'headers': {
-								'Authorization': 'Bearer test-token'
-							},
-							'body': json.dumps({
-								'name': 'Test Job',
-								'source': 'http://example.com/urls.csv',
-								'file_mapping': {
-									'delimiter': ',',
-									'enclosure': '"',
-									'escape': '\\',
-									'url_column': 0
+							event = {
+								'headers': {
+									'Authorization': 'Bearer test-token'
 								},
-								'queries': [{
-									'name': 'title',
-									'type': 'xpath',
-									'query': '//title/text()'
-								}],
-								'rate_limit': 5
-							})
-						}
+								'body': json.dumps({
+									'name': 'Test Job',
+									'source': 'http://example.com/urls.csv',
+									'file_mapping': {
+										'delimiter': ',',
+										'enclosure': '"',
+										'escape': '\\',
+										'url_column': 0
+									},
+									'queries': [{
+										'name': 'title',
+										'type': 'xpath',
+										'query': '//title/text()'
+									}],
+									'rate_limit': 5
+								})
+							}
 
-						response = create_job_handler(event, lambda_context)
+							response = create_job_handler(event, lambda_context)
 
-						assert response['statusCode'] == 201
-						body = json.loads(response['body'])
-						assert 'job_id' in body
-						assert body['message'] == 'Job created successfully'
+							assert response['statusCode'] == 201
+							body = json.loads(response['body'])
+							assert 'job_id' in body
+							assert body['message'] == 'Job created successfully'
 
 	@mock_aws
 	def test_create_job_handler_no_token(self, dynamodb_client, mock_env_vars, lambda_context):
@@ -124,51 +126,53 @@ class TestHandlers:
 		"""Test successful job deletion via handler."""
 		from handler import create_job_handler, delete_job_handler
 
+		_sub_active = {'user_id': 'user-123', 'plan': 'pro', 'status': 'trialing'}
 		_quota_ok = {'allowed': True, 'plan': 'pro', 'status': 'trialing', 'used': 0, 'limit': 25000, 'remaining': 25000}
 		_conc_ok = {'allowed': True, 'plan': 'pro', 'status': 'trialing', 'active_jobs': 0, 'limit': 5}
 
 		# First create a job
 		with patch('utils.parse_links_from_file') as mock_parse:
 			with patch('handler.validate_clerk_token') as mock_validate:
-				with patch('billing.check_usage_quota', return_value=_quota_ok):
-					with patch('billing.check_concurrent_job_limit', return_value=_conc_ok):
-						mock_parse.return_value = ['http://test1.com']
-						mock_validate.return_value = {'sub': 'user-123'}
+				with patch('billing.get_subscription', return_value=_sub_active):
+					with patch('billing.check_usage_quota', return_value=_quota_ok):
+						with patch('billing.check_concurrent_job_limit', return_value=_conc_ok):
+							mock_parse.return_value = ['http://test1.com']
+							mock_validate.return_value = {'sub': 'user-123'}
 
-						create_event = {
-							'headers': {'Authorization': 'Bearer test-token'},
-							'body': json.dumps({
-								'name': 'Test Job',
-								'source': 'http://example.com/urls.csv',
-								'file_mapping': {
-									'delimiter': ',',
-									'enclosure': '"',
-									'escape': '\\',
-									'url_column': 0
-								},
-								'queries': [{
-									'name': 'title',
-									'type': 'xpath',
-									'query': '//title/text()'
-								}],
-								'rate_limit': 5
-							})
-						}
+							create_event = {
+								'headers': {'Authorization': 'Bearer test-token'},
+								'body': json.dumps({
+									'name': 'Test Job',
+									'source': 'http://example.com/urls.csv',
+									'file_mapping': {
+										'delimiter': ',',
+										'enclosure': '"',
+										'escape': '\\',
+										'url_column': 0
+									},
+									'queries': [{
+										'name': 'title',
+										'type': 'xpath',
+										'query': '//title/text()'
+									}],
+									'rate_limit': 5
+								})
+							}
 
-						create_response = create_job_handler(create_event, lambda_context)
-						job_id = json.loads(create_response['body'])['job_id']
+							create_response = create_job_handler(create_event, lambda_context)
+							job_id = json.loads(create_response['body'])['job_id']
 
-						# Now delete it
-						delete_event = {
-							'headers': {'Authorization': 'Bearer test-token'},
-							'pathParameters': {'job_id': job_id}
-						}
+							# Now delete it
+							delete_event = {
+								'headers': {'Authorization': 'Bearer test-token'},
+								'pathParameters': {'job_id': job_id}
+							}
 
-						response = delete_job_handler(delete_event, lambda_context)
+							response = delete_job_handler(delete_event, lambda_context)
 
-						assert response['statusCode'] == 200
-						body = json.loads(response['body'])
-						assert body['message'] == 'Job deleted successfully'
+							assert response['statusCode'] == 200
+							body = json.loads(response['body'])
+							assert body['message'] == 'Job deleted successfully'
 
 	@mock_aws
 	def test_delete_job_handler_no_auth(self, dynamodb_client, mock_env_vars, lambda_context):
@@ -191,52 +195,54 @@ class TestHandlers:
 		"""Test retrieving job details via handler."""
 		from handler import create_job_handler, get_job_details_handler
 
+		_sub_active = {'user_id': 'user-123', 'plan': 'pro', 'status': 'trialing'}
 		_quota_ok = {'allowed': True, 'plan': 'pro', 'status': 'trialing', 'used': 0, 'limit': 25000, 'remaining': 25000}
 		_conc_ok = {'allowed': True, 'plan': 'pro', 'status': 'trialing', 'active_jobs': 0, 'limit': 5}
 
 		# First create a job
 		with patch('utils.parse_links_from_file') as mock_parse:
 			with patch('handler.validate_clerk_token') as mock_validate:
-				with patch('billing.check_usage_quota', return_value=_quota_ok):
-					with patch('billing.check_concurrent_job_limit', return_value=_conc_ok):
-						mock_parse.return_value = ['http://test1.com']
-						mock_validate.return_value = {'sub': 'user-123'}
+				with patch('billing.get_subscription', return_value=_sub_active):
+					with patch('billing.check_usage_quota', return_value=_quota_ok):
+						with patch('billing.check_concurrent_job_limit', return_value=_conc_ok):
+							mock_parse.return_value = ['http://test1.com']
+							mock_validate.return_value = {'sub': 'user-123'}
 
-						create_event = {
-							'headers': {'Authorization': 'Bearer test-token'},
-							'body': json.dumps({
-								'name': 'Test Job',
-								'source': 'http://example.com/urls.csv',
-								'file_mapping': {
-									'delimiter': ',',
-									'enclosure': '"',
-									'escape': '\\',
-									'url_column': 0
-								},
-								'queries': [{
-									'name': 'title',
-									'type': 'xpath',
-									'query': '//title/text()'
-								}],
-								'rate_limit': 5
-							})
-						}
+							create_event = {
+								'headers': {'Authorization': 'Bearer test-token'},
+								'body': json.dumps({
+									'name': 'Test Job',
+									'source': 'http://example.com/urls.csv',
+									'file_mapping': {
+										'delimiter': ',',
+										'enclosure': '"',
+										'escape': '\\',
+										'url_column': 0
+									},
+									'queries': [{
+										'name': 'title',
+										'type': 'xpath',
+										'query': '//title/text()'
+									}],
+									'rate_limit': 5
+								})
+							}
 
-						create_response = create_job_handler(create_event, lambda_context)
-						job_id = json.loads(create_response['body'])['job_id']
+							create_response = create_job_handler(create_event, lambda_context)
+							job_id = json.loads(create_response['body'])['job_id']
 
-						# Now retrieve it
-						get_event = {
-							'headers': {'Authorization': 'Bearer test-token'},
-							'pathParameters': {'job_id': job_id}
-						}
+							# Now retrieve it
+							get_event = {
+								'headers': {'Authorization': 'Bearer test-token'},
+								'pathParameters': {'job_id': job_id}
+							}
 
-						response = get_job_details_handler(get_event, lambda_context)
+							response = get_job_details_handler(get_event, lambda_context)
 
-						assert response['statusCode'] == 200
-						body = json.loads(response['body'])
-						assert body['job_id'] == job_id
-						assert body['name'] == 'Test Job'
+							assert response['statusCode'] == 200
+							body = json.loads(response['body'])
+							assert body['job_id'] == job_id
+							assert body['name'] == 'Test Job'
 
 	@mock_aws
 	def test_get_job_details_handler_not_found(self, dynamodb_client, mock_env_vars, lambda_context):
@@ -262,124 +268,23 @@ class TestHandlers:
 		"""Test pausing a job via handler."""
 		from handler import create_job_handler, pause_job_handler
 
+		_sub_active = {'user_id': 'user-123', 'plan': 'pro', 'status': 'trialing'}
 		_quota_ok = {'allowed': True, 'plan': 'pro', 'status': 'trialing', 'used': 0, 'limit': 25000, 'remaining': 25000}
 		_conc_ok = {'allowed': True, 'plan': 'pro', 'status': 'trialing', 'active_jobs': 0, 'limit': 5}
 
 		# First create a job
 		with patch('utils.parse_links_from_file') as mock_parse:
 			with patch('handler.validate_clerk_token') as mock_validate:
-				with patch('billing.check_usage_quota', return_value=_quota_ok):
-					with patch('billing.check_concurrent_job_limit', return_value=_conc_ok):
-						mock_parse.return_value = ['http://test1.com']
-						mock_validate.return_value = {'sub': 'user-123'}
+				with patch('billing.get_subscription', return_value=_sub_active):
+					with patch('billing.check_usage_quota', return_value=_quota_ok):
+						with patch('billing.check_concurrent_job_limit', return_value=_conc_ok):
+							mock_parse.return_value = ['http://test1.com']
+							mock_validate.return_value = {'sub': 'user-123'}
 
-						create_event = {
-							'headers': {'Authorization': 'Bearer test-token'},
-							'body': json.dumps({
-								'name': 'Test Job',
-								'source': 'http://example.com/urls.csv',
-								'file_mapping': {
-									'delimiter': ',',
-									'enclosure': '"',
-									'escape': '\\',
-									'url_column': 0
-								},
-								'queries': [{
-									'name': 'title',
-									'type': 'xpath',
-									'query': '//title/text()'
-								}],
-								'rate_limit': 5
-							})
-						}
-
-						create_response = create_job_handler(create_event, lambda_context)
-						job_id = json.loads(create_response['body'])['job_id']
-
-						# Now pause it
-						pause_event = {
-							'headers': {'Authorization': 'Bearer test-token'},
-							'pathParameters': {'job_id': job_id}
-						}
-
-						response = pause_job_handler(pause_event, lambda_context)
-
-						assert response['statusCode'] == 200
-						body = json.loads(response['body'])
-						assert body['message'] == 'Job paused successfully'
-
-	@mock_aws
-	def test_cancel_job_handler_success(self, dynamodb_client, mock_env_vars, lambda_context):
-		"""Test cancelling a job via handler."""
-		from handler import create_job_handler, cancel_job_handler
-
-		_quota_ok = {'allowed': True, 'plan': 'pro', 'status': 'trialing', 'used': 0, 'limit': 25000, 'remaining': 25000}
-		_conc_ok = {'allowed': True, 'plan': 'pro', 'status': 'trialing', 'active_jobs': 0, 'limit': 5}
-
-		# First create a job
-		with patch('utils.parse_links_from_file') as mock_parse:
-			with patch('handler.validate_clerk_token') as mock_validate:
-				with patch('billing.check_usage_quota', return_value=_quota_ok):
-					with patch('billing.check_concurrent_job_limit', return_value=_conc_ok):
-						mock_parse.return_value = ['http://test1.com']
-						mock_validate.return_value = {'sub': 'user-123'}
-
-						create_event = {
-							'headers': {'Authorization': 'Bearer test-token'},
-							'body': json.dumps({
-								'name': 'Test Job',
-								'source': 'http://example.com/urls.csv',
-								'file_mapping': {
-									'delimiter': ',',
-									'enclosure': '"',
-									'escape': '\\',
-									'url_column': 0
-								},
-								'queries': [{
-									'name': 'title',
-									'type': 'xpath',
-									'query': '//title/text()'
-								}],
-								'rate_limit': 5
-							})
-						}
-
-						create_response = create_job_handler(create_event, lambda_context)
-						job_id = json.loads(create_response['body'])['job_id']
-
-						# Now cancel it
-						cancel_event = {
-							'headers': {'Authorization': 'Bearer test-token'},
-							'pathParameters': {'job_id': job_id}
-						}
-
-						response = cancel_job_handler(cancel_event, lambda_context)
-
-						assert response['statusCode'] == 200
-						body = json.loads(response['body'])
-						assert body['message'] == 'Job cancelled successfully'
-
-	@mock_aws
-	def test_get_all_job_statuses_handler(self, dynamodb_client, mock_env_vars, lambda_context):
-		"""Test retrieving all job statuses via handler."""
-		from handler import create_job_handler, get_all_job_statuses_handler
-
-		_quota_ok = {'allowed': True, 'plan': 'pro', 'status': 'trialing', 'used': 0, 'limit': 25000, 'remaining': 25000}
-		_conc_ok = {'allowed': True, 'plan': 'pro', 'status': 'trialing', 'active_jobs': 0, 'limit': 5}
-
-		# Create multiple jobs
-		with patch('utils.parse_links_from_file') as mock_parse:
-			with patch('handler.validate_clerk_token') as mock_validate:
-				with patch('billing.check_usage_quota', return_value=_quota_ok):
-					with patch('billing.check_concurrent_job_limit', return_value=_conc_ok):
-						mock_parse.return_value = ['http://test1.com']
-						mock_validate.return_value = {'sub': 'user-123'}
-
-						for i in range(3):
 							create_event = {
 								'headers': {'Authorization': 'Bearer test-token'},
 								'body': json.dumps({
-									'name': f'Test Job {i}',
+									'name': 'Test Job',
 									'source': 'http://example.com/urls.csv',
 									'file_mapping': {
 										'delimiter': ',',
@@ -395,87 +300,196 @@ class TestHandlers:
 									'rate_limit': 5
 								})
 							}
-							create_job_handler(create_event, lambda_context)
 
-						# Now retrieve all jobs
-						event = {
-							'headers': {'Authorization': 'Bearer test-token'},
-							'queryStringParameters': {}
-						}
-						response = get_all_job_statuses_handler(event, lambda_context)
+							create_response = create_job_handler(create_event, lambda_context)
+							job_id = json.loads(create_response['body'])['job_id']
 
-						assert response['statusCode'] == 200
-						body = json.loads(response['body'])
-						assert isinstance(body, dict)
-						assert 'jobs' in body
-						assert len(body['jobs']) == 3
+							# Now pause it
+							pause_event = {
+								'headers': {'Authorization': 'Bearer test-token'},
+								'pathParameters': {'job_id': job_id}
+							}
+
+							response = pause_job_handler(pause_event, lambda_context)
+
+							assert response['statusCode'] == 200
+							body = json.loads(response['body'])
+							assert body['message'] == 'Job paused successfully'
 
 	@mock_aws
-	def test_update_job_handler_success(self, dynamodb_client, mock_env_vars, lambda_context):
-		"""Test updating a job via handler."""
-		from handler import create_job_handler, update_job_handler
+	def test_cancel_job_handler_success(self, dynamodb_client, mock_env_vars, lambda_context):
+		"""Test cancelling a job via handler."""
+		from handler import create_job_handler, cancel_job_handler
 
+		_sub_active = {'user_id': 'user-123', 'plan': 'pro', 'status': 'trialing'}
 		_quota_ok = {'allowed': True, 'plan': 'pro', 'status': 'trialing', 'used': 0, 'limit': 25000, 'remaining': 25000}
 		_conc_ok = {'allowed': True, 'plan': 'pro', 'status': 'trialing', 'active_jobs': 0, 'limit': 5}
 
 		# First create a job
 		with patch('utils.parse_links_from_file') as mock_parse:
 			with patch('handler.validate_clerk_token') as mock_validate:
-				with patch('billing.check_usage_quota', return_value=_quota_ok):
-					with patch('billing.check_concurrent_job_limit', return_value=_conc_ok):
-						mock_parse.return_value = ['http://test1.com']
-						mock_validate.return_value = {'sub': 'user-123'}
+				with patch('billing.get_subscription', return_value=_sub_active):
+					with patch('billing.check_usage_quota', return_value=_quota_ok):
+						with patch('billing.check_concurrent_job_limit', return_value=_conc_ok):
+							mock_parse.return_value = ['http://test1.com']
+							mock_validate.return_value = {'sub': 'user-123'}
 
-						create_event = {
-							'headers': {'Authorization': 'Bearer test-token'},
-							'body': json.dumps({
-								'name': 'Test Job',
-								'source': 'http://example.com/urls.csv',
-								'file_mapping': {
-									'delimiter': ',',
-									'enclosure': '"',
-									'escape': '\\',
-									'url_column': 0
-								},
-								'queries': [{
-									'name': 'title',
-									'type': 'xpath',
-									'query': '//title/text()'
-								}],
-								'rate_limit': 5
-							})
-						}
+							create_event = {
+								'headers': {'Authorization': 'Bearer test-token'},
+								'body': json.dumps({
+									'name': 'Test Job',
+									'source': 'http://example.com/urls.csv',
+									'file_mapping': {
+										'delimiter': ',',
+										'enclosure': '"',
+										'escape': '\\',
+										'url_column': 0
+									},
+									'queries': [{
+										'name': 'title',
+										'type': 'xpath',
+										'query': '//title/text()'
+									}],
+									'rate_limit': 5
+								})
+							}
 
-						create_response = create_job_handler(create_event, lambda_context)
-						job_id = json.loads(create_response['body'])['job_id']
+							create_response = create_job_handler(create_event, lambda_context)
+							job_id = json.loads(create_response['body'])['job_id']
 
-						# Now update it
-						update_event = {
-							'headers': {'Authorization': 'Bearer test-token'},
-							'pathParameters': {'job_id': job_id},
-							'body': json.dumps({
-								'name': 'Updated Job Name',
-								'source': 'http://example.com/urls.csv',
-								'file_mapping': {
-									'delimiter': ',',
-									'enclosure': '"',
-									'escape': '\\',
-									'url_column': 0
-								},
-								'queries': [{
-									'name': 'title',
-									'type': 'xpath',
-									'query': '//title/text()'
-								}],
-								'rate_limit': 3
-							})
-						}
+							# Now cancel it
+							cancel_event = {
+								'headers': {'Authorization': 'Bearer test-token'},
+								'pathParameters': {'job_id': job_id}
+							}
 
-						response = update_job_handler(update_event, lambda_context)
+							response = cancel_job_handler(cancel_event, lambda_context)
 
-						assert response['statusCode'] == 200
-						body = json.loads(response['body'])
-						assert body['message'] == 'Job updated successfully'
+							assert response['statusCode'] == 200
+							body = json.loads(response['body'])
+							assert body['message'] == 'Job cancelled successfully'
+
+	@mock_aws
+	def test_get_all_job_statuses_handler(self, dynamodb_client, mock_env_vars, lambda_context):
+		"""Test retrieving all job statuses via handler."""
+		from handler import create_job_handler, get_all_job_statuses_handler
+
+		_sub_active = {'user_id': 'user-123', 'plan': 'pro', 'status': 'trialing'}
+		_quota_ok = {'allowed': True, 'plan': 'pro', 'status': 'trialing', 'used': 0, 'limit': 25000, 'remaining': 25000}
+		_conc_ok = {'allowed': True, 'plan': 'pro', 'status': 'trialing', 'active_jobs': 0, 'limit': 5}
+
+		# Create multiple jobs
+		with patch('utils.parse_links_from_file') as mock_parse:
+			with patch('handler.validate_clerk_token') as mock_validate:
+				with patch('billing.get_subscription', return_value=_sub_active):
+					with patch('billing.check_usage_quota', return_value=_quota_ok):
+						with patch('billing.check_concurrent_job_limit', return_value=_conc_ok):
+							mock_parse.return_value = ['http://test1.com']
+							mock_validate.return_value = {'sub': 'user-123'}
+
+							for i in range(3):
+								create_event = {
+									'headers': {'Authorization': 'Bearer test-token'},
+									'body': json.dumps({
+										'name': f'Test Job {i}',
+										'source': 'http://example.com/urls.csv',
+										'file_mapping': {
+											'delimiter': ',',
+											'enclosure': '"',
+											'escape': '\\',
+											'url_column': 0
+										},
+										'queries': [{
+											'name': 'title',
+											'type': 'xpath',
+											'query': '//title/text()'
+										}],
+										'rate_limit': 5
+									})
+								}
+								create_job_handler(create_event, lambda_context)
+
+							# Now retrieve all jobs
+							event = {
+								'headers': {'Authorization': 'Bearer test-token'},
+								'queryStringParameters': {}
+							}
+							response = get_all_job_statuses_handler(event, lambda_context)
+
+							assert response['statusCode'] == 200
+							body = json.loads(response['body'])
+							assert isinstance(body, dict)
+							assert 'jobs' in body
+							assert len(body['jobs']) == 3
+
+	@mock_aws
+	def test_update_job_handler_success(self, dynamodb_client, mock_env_vars, lambda_context):
+		"""Test updating a job via handler."""
+		from handler import create_job_handler, update_job_handler
+
+		_sub_active = {'user_id': 'user-123', 'plan': 'pro', 'status': 'trialing'}
+		_quota_ok = {'allowed': True, 'plan': 'pro', 'status': 'trialing', 'used': 0, 'limit': 25000, 'remaining': 25000}
+		_conc_ok = {'allowed': True, 'plan': 'pro', 'status': 'trialing', 'active_jobs': 0, 'limit': 5}
+
+		# First create a job
+		with patch('utils.parse_links_from_file') as mock_parse:
+			with patch('handler.validate_clerk_token') as mock_validate:
+				with patch('billing.get_subscription', return_value=_sub_active):
+					with patch('billing.check_usage_quota', return_value=_quota_ok):
+						with patch('billing.check_concurrent_job_limit', return_value=_conc_ok):
+							mock_parse.return_value = ['http://test1.com']
+							mock_validate.return_value = {'sub': 'user-123'}
+
+							create_event = {
+								'headers': {'Authorization': 'Bearer test-token'},
+								'body': json.dumps({
+									'name': 'Test Job',
+									'source': 'http://example.com/urls.csv',
+									'file_mapping': {
+										'delimiter': ',',
+										'enclosure': '"',
+										'escape': '\\',
+										'url_column': 0
+									},
+									'queries': [{
+										'name': 'title',
+										'type': 'xpath',
+										'query': '//title/text()'
+									}],
+									'rate_limit': 5
+								})
+							}
+
+							create_response = create_job_handler(create_event, lambda_context)
+							job_id = json.loads(create_response['body'])['job_id']
+
+							# Now update it
+							update_event = {
+								'headers': {'Authorization': 'Bearer test-token'},
+								'pathParameters': {'job_id': job_id},
+								'body': json.dumps({
+									'name': 'Updated Job Name',
+									'source': 'http://example.com/urls.csv',
+									'file_mapping': {
+										'delimiter': ',',
+										'enclosure': '"',
+										'escape': '\\',
+										'url_column': 0
+									},
+									'queries': [{
+										'name': 'title',
+										'type': 'xpath',
+										'query': '//title/text()'
+									}],
+									'rate_limit': 3
+								})
+							}
+
+							response = update_job_handler(update_event, lambda_context)
+
+							assert response['statusCode'] == 200
+							body = json.loads(response['body'])
+							assert body['message'] == 'Job updated successfully'
 
 	@mock_aws
 	def test_update_job_handler_no_auth(self, dynamodb_client, mock_env_vars, lambda_context):
