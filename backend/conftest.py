@@ -386,36 +386,40 @@ def lambda_context():
 @pytest.fixture
 def sample_pro_trialing_subscription():
 	"""Subscription row for a user mid-trial."""
+	from datetime import timedelta
 	now = datetime.now(timezone.utc)
+	now_iso = now.strftime('%Y-%m-%dT%H:%M:%SZ')
+	period_end_iso = (now + timedelta(days=14)).strftime('%Y-%m-%dT%H:%M:%SZ')
 	return {
 		'user_id': 'user-trial-1',
 		'plan': 'pro',
 		'status': 'trialing',
 		'stripe_customer_id': 'cus_test_trial1',
 		'stripe_subscription_id': 'sub_test_trial1',
-		'current_period_start': now.isoformat(),
-		'current_period_end': (now.replace(microsecond=0)).isoformat(),
-		'trial_end': (now.replace(microsecond=0)).isoformat(),
+		'current_period_start': now_iso,
+		'current_period_end': period_end_iso,
+		'trial_end': period_end_iso,
 		'cancel_at_period_end': False,
 		'monthly_page_limit': 25000,
 		'monthly_pages_used': 0,
 		'concurrent_job_limit': 5,
-		'usage_reset_date': (now.replace(microsecond=0)).isoformat(),
+		'usage_reset_date': period_end_iso,
 		'features': {
 			'js_rendering': True,
 			'proxy_rotation': True,
 			'webhooks': True,
 			'anti_bot': False,
 		},
-		'created_at': now.isoformat(),
-		'updated_at': now.isoformat(),
+		'created_at': now_iso,
+		'updated_at': now_iso,
 	}
 
 
 @pytest.fixture
 def sample_pro_active_subscription(sample_pro_trialing_subscription):
 	"""Subscription row for a user past trial, paying."""
-	sub = dict(sample_pro_trialing_subscription)
+	import copy
+	sub = copy.deepcopy(sample_pro_trialing_subscription)
 	sub['status'] = 'active'
 	sub['user_id'] = 'user-active-1'
 	sub['stripe_customer_id'] = 'cus_test_active1'
