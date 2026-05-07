@@ -21,3 +21,12 @@ export const api = {
   webhooks: webhooksAPI,
   analytics: analyticsAPI,
 };
+
+export { billingAPI } from './billing';
+export type {
+  SubscriptionDTO,
+  UsageDTO,
+  CreateCheckoutRequest,
+  CreateCheckoutResponse,
+  CreatePortalResponse,
+} from './billing';
