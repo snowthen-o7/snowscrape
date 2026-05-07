@@ -366,6 +366,7 @@ export default $config({
       STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET ?? "",
       STRIPE_PRICE_PRO_MONTHLY: process.env.STRIPE_PRICE_PRO_MONTHLY ?? "",
       STRIPE_PRICE_BUSINESS_MONTHLY: process.env.STRIPE_PRICE_BUSINESS_MONTHLY ?? "",
+      STRIPE_PORTAL_CONFIG_ID: process.env.STRIPE_PORTAL_CONFIG_ID ?? "",
       // Monitoring
       SNOWGLOBE_URL: process.env.SNOWGLOBE_URL ?? "https://snowglobe.alexdiaz.me",
       SNOWGLOBE_SITE_ID: process.env.SNOWGLOBE_SITE_ID ?? "snowscrape",

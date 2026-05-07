@@ -176,10 +176,17 @@ def create_customer_portal_handler(event, context):
 		cors_origins = list(_CORS_ALLOWED_ORIGINS)
 		base_url = cors_origins[0] if cors_origins else "http://localhost:3001"
 
-		session = stripe.billing_portal.Session.create(
-			customer=customer_id,
-			return_url=f"{base_url}/dashboard/settings?tab=billing",
-		)
+		# Use SnowScrape-specific portal configuration if set so we don't
+		# fall through to the LLC-shared default (which is owned by SnowFort).
+		session_kwargs = {
+			"customer": customer_id,
+			"return_url": f"{base_url}/dashboard/settings?tab=billing",
+		}
+		portal_config_id = os.environ.get("STRIPE_PORTAL_CONFIG_ID", "")
+		if portal_config_id:
+			session_kwargs["configuration"] = portal_config_id
+
+		session = stripe.billing_portal.Session.create(**session_kwargs)
 
 		logger.info("Portal session created", user_id=user_id)
 		return _response(200, {"portal_url": session.url}, event)
