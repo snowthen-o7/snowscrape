@@ -378,7 +378,7 @@ export default function Pricing() {
             <AccordionItem value="item-5">
               <AccordionTrigger>Is there a free trial for paid plans?</AccordionTrigger>
               <AccordionContent>
-                Yes! All paid plans come with a 14-day free trial. No credit card required to start.
+                Yes! All paid plans come with a 14-day free trial. A card is required but you won't be charged until day 15.
                 You can cancel at any time during the trial period without being charged.
               </AccordionContent>
             </AccordionItem>
@@ -414,7 +414,7 @@ export default function Pricing() {
       {/* CTA */}
       <CTASection
         title="Ready to get started?"
-        description="Start your free trial today. No credit card required."
+        description="Start your 14-day Pro trial. Card required, no charge until day 15."
         primaryCTA={{ text: 'Start Free Trial', href: '/sign-up' }}
         secondaryCTA={{ text: 'Contact Sales', href: '/contact' }}
       />
