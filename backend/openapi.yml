@@ -2464,7 +2464,7 @@ components:
         key:
           type: string
           description: Full API key value (sk_live_...). Shown ONCE -- never recoverable after this response.
-          example: "sk_live_abcdef1234567890abcdef1234567890"
+          example: "sk_live_EXAMPLE_REPLACE_WITH_REAL_KEY"
         key_prefix:
           type: string
           description: First few characters of the key for identification
