@@ -55,7 +55,10 @@
 		"react-toastify": "latest",
 		"recharts": "latest",
 		"tailwind-merge": "latest",
+		"tailwindcss": "latest",
 		"tailwindcss-animate": "latest",
+		"@tailwindcss/postcss": "latest",
+		"postcss": "latest",
 		"zod": "latest"
 	},
 	"devDependencies": {
@@ -63,7 +66,6 @@
 		"@clerk/types": "latest",
 		"@lhci/cli": "latest",
 		"@playwright/test": "latest",
-		"@tailwindcss/postcss": "latest",
 		"@testing-library/jest-dom": "latest",
 		"@testing-library/react": "latest",
 		"@testing-library/user-event": "latest",
@@ -76,8 +78,6 @@
 		"eslint-config-next": "latest",
 		"jsdom": "latest",
 		"lighthouse": "latest",
-		"postcss": "latest",
-		"tailwindcss": "latest",
 		"typescript": "latest",
 		"vitest": "latest"
 	}
