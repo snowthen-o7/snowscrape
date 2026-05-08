@@ -5,7 +5,6 @@ import { UserButton, useUser } from '@clerk/nextjs';
 import {
   AppLayout as BaseAppLayout,
   type AppLayoutProps as BaseAppLayoutProps,
-  useSidebar,
   ThemeToggle
 } from '@snowforge/ui';
 import {
@@ -26,7 +25,8 @@ import { NotificationCenter } from '@/components/NotificationCenter';
  * Use this instead of AppLayout directly in SnowScrape pages.
  */
 export function SnowScrapeLayout({ children }: { children: React.ReactNode }) {
-  const { collapsed, setCollapsed } = useSidebar();
+  // @snowforge/ui v4 removed sidebar collapse state — sidebar is always
+  // expanded on desktop now. No useSidebar() call needed here.
   const { user } = useUser();
   const [isMounted, setIsMounted] = useState(false);
 
@@ -91,8 +91,6 @@ export function SnowScrapeLayout({ children }: { children: React.ReactNode }) {
     <BaseAppLayout
       sidebar={sidebarConfig}
       topNav={topNavConfig}
-      sidebarCollapsed={collapsed}
-      onSidebarCollapsedChange={setCollapsed}
     >
       {children}
     </BaseAppLayout>
