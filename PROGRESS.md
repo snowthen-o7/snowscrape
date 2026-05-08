@@ -1,7 +1,7 @@
 # SnowScrape -- Progress & Launch Readiness
 
-**Last Updated:** 2026-05-07
-**Launch Readiness:** ~88%
+**Last Updated:** 2026-05-08
+**Launch Readiness:** ~95% (live, awaiting first $0 trial-signup smoke)
 **Build Status:** PASSES
 **Test Coverage:** ~60-70% (unit + integration; Playwright setup present)
 
@@ -68,16 +68,21 @@
 - Sentry error monitoring
 - 42 unit tests (Vitest), Playwright E2E setup
 
-### Billing / Stripe Integration (Code complete, deploy pending)
+### Billing / Stripe Integration (Live in production)
 
 - 14-day Pro trial with card-required checkout (no free starter tier)
 - Stripe Customer Portal handles all plan changes, cancellations, payment updates (no in-app plan picker)
 - 3 paid tiers: Pro $49/mo, Business $149/mo, Enterprise (sales-led)
 - Backend: idempotent Stripe webhook handler with `BillingWebhookDedup` table, race-fixed period-end updates, hard 402 gate at job-create when subscription inactive, fail-open usage counters
-- Frontend: subscription-status middleware gate (60s cookie cache), `/onboarding/checkout` and `/billing/locked` screens, Settings → Billing tab live data, one-time-secret API-key modal
+- Frontend: subscription-status proxy gate (60s cookie cache, only caches `trialing`/`active`), `/onboarding/checkout` and `/billing/locked` screens, Settings → Billing tab live data, one-time-secret API-key modal
 - Pricing page: dropped Starter card, 14-day-trial hero, `<PricingCTA>` routes signed-out → /sign-up, signed-in active → portal, signed-in no-sub → /onboarding/checkout
-- Tests: 9 backend webhook tests, 2 integration tests for locked-user behavior, 3 Vitest unit tests, 1 Playwright E2E (gated on Clerk test user)
-- Pending operational tasks: Stripe products provisioning, Doppler secret population, SST deploy to dev/prd, smoke test
+- Tests: 11 backend webhook + integration tests, 3 Vitest unit tests, 1 Playwright E2E (gated on Clerk test user)
+- **Deployed to dev** (test mode) on 2026-05-07: smoke test passed end-to-end (signup → checkout → trial → cancel → past-due lockout → webhook idempotency replay)
+- **Deployed to prd** (live mode) on 2026-05-08: backend + frontend live; awaiting first real $0 trial signup as final acceptance
+- Live Stripe identifiers (test mode): Pro `price_1TUYHnAnsCk0eFqBMfkFoAaj`, Business `price_1TUYHzAnsCk0eFqBcXokmvKv`, Portal config `bpc_1TUYIIAnsCk0eFqBGb41J2Zv`, Webhook `we_1TUat5AnsCk0eFqBGBqPX87U`
+- Live Stripe identifiers (live mode): Pro `price_1TUf3bAhxqX4McFQyyCQu6Tq`, Business `price_1TUf3mAhxqX4McFQlhAp2mCF`, Portal config `bpc_1TUf3vAhxqX4McFQ2R2Tb72j`, Webhook `we_1TUfJPAhxqX4McFQM0W5R5M7`
+- Production frontend: `https://scrape.snowforge.dev` (Vercel)
+- Production API: `https://2pg2gj4048.execute-api.us-east-2.amazonaws.com`
 
 ---
 
@@ -110,11 +115,12 @@
 
 | Work Item | Estimate | Priority |
 |-----------|----------|----------|
-| Stripe deployment + smoke (operational) | <1 week | CRITICAL -- last mile |
+| First real $0 trial signup as final live smoke | hours | CRITICAL -- final acceptance |
 | API key auth on public endpoints | 1 week | MEDIUM |
 | Real analytics data pipeline | 2-3 weeks | HIGH |
 | Email notifications | 1 week | MEDIUM |
 | In-app notification center | 1 week | LOW |
+| `@snowforge/ui` v3→v4 migration + revert `typescript.ignoreBuildErrors` | 1-2 hours | LOW (debt) |
 
 ---
 

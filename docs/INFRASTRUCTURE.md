@@ -1,8 +1,10 @@
 # SnowScrape Infrastructure
 
-**Last Updated:** 2026-05-07
+**Last Updated:** 2026-05-08
 **AWS Account ID:** 282128795857
 **Primary Region:** us-east-2
+**Production Frontend:** https://scrape.snowforge.dev (Vercel project `snowscrape`)
+**Production API:** https://2pg2gj4048.execute-api.us-east-2.amazonaws.com
 
 ---
 
@@ -177,12 +179,20 @@ Frontend redirected to /dashboard?checkout=success
 
 **Stripe (from Doppler `sf-snowscrape`)**
 
-| Variable | dev value | prd value |
+| Variable | dev value (test mode) | prd value (live mode) |
 |--------------------------------|--------------------------|--------------------------|
 | STRIPE_SECRET_KEY | sk_test_... | sk_live_... |
-| STRIPE_WEBHOOK_SECRET | whsec_test_... | whsec_live_... |
-| STRIPE_PRICE_PRO_MONTHLY | price_test_\<pro-id\> | price_live_\<pro-id\> |
-| STRIPE_PRICE_BUSINESS_MONTHLY | price_test_\<biz-id\> | price_live_\<biz-id\> |
+| STRIPE_WEBHOOK_SECRET | whsec_UjI4rADiURdTnW4S09LRlZSDNVq2Rww4 | whsec_Iql4Wm2gDInz48oMbMumwalReaiYbvcq |
+| STRIPE_PRICE_PRO_MONTHLY | price_1TUYHnAnsCk0eFqBMfkFoAaj | price_1TUf3bAhxqX4McFQyyCQu6Tq |
+| STRIPE_PRICE_BUSINESS_MONTHLY | price_1TUYHzAnsCk0eFqBcXokmvKv | price_1TUf3mAhxqX4McFQlhAp2mCF |
+| STRIPE_PORTAL_CONFIG_ID | bpc_1TUYIIAnsCk0eFqBGb41J2Zv | bpc_1TUf3vAhxqX4McFQ2R2Tb72j |
+
+**Stripe Webhook Endpoints**
+
+| Stage | Webhook ID | URL | Subscribed events |
+|-------|------------|-----|-------------------|
+| dev (test) | we_1TUat5AnsCk0eFqBGBqPX87U | `https://g5vmashyda.execute-api.us-east-2.amazonaws.com/billing/webhook` | 5 (see below) |
+| prd (live) | we_1TUfJPAhxqX4McFQM0W5R5M7 | `https://2pg2gj4048.execute-api.us-east-2.amazonaws.com/billing/webhook` | 5 (see below) |
 
 **Stripe Customer Portal Configuration**
 
@@ -268,6 +278,7 @@ Subscribed Stripe events:
 | Date | Change | Author |
 |------|--------|--------|
 | 2026-05-07 | Billing MVP shipped: added Subscriptions, ApiKeys, BillingWebhookDedup tables; trial-only entry flow with Stripe Customer Portal for plan management; idempotent webhook handler. Stripe products provisioned per stage in Doppler sf-snowscrape. | Alex Diaz |
+| 2026-05-08 | Billing MVP went live in prd: live-mode Stripe products + portal config + webhook registered; SST deployed to prod stage; Vercel frontend deployed with `typescript.ignoreBuildErrors=true` (temporary, pending @snowforge/ui v3→v4 migration). Bugs fixed during smoke: middleware/proxy collision, Stripe API 2024-09+ schema (current_period_end moved to items[]), DynamoDB Decimal JSON serialization, stale subscription-status cookie, @clerk/types duplicate version, Clerk v7 sign-in/up prop renames, snowforge-ui v4 useSidebar API. | Alex Diaz |
 | 2026-03-25 | Added Firecrawl integration for Tier 3/4 scraping (JS rendering + anti-bot) | Claude |
 | 2026-03-25 | Added AI-powered data extraction via Claude (ai_extractor.py) | Claude |
 | 2026-03-25 | Added WebSocket end-to-end pipeline for real-time job updates | Claude |
