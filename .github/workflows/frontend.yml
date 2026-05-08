@@ -46,8 +46,13 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pnpm-store-
 
+      - name: Configure git auth for private deps
+        run: node scripts/setup-git-auth.cjs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --no-frozen-lockfile --prod=false
 
       - name: Run unit tests
         run: pnpm test -- --run
@@ -97,8 +102,13 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pnpm-store-
 
+      - name: Configure git auth for private deps
+        run: node scripts/setup-git-auth.cjs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --no-frozen-lockfile --prod=false
 
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps
@@ -149,8 +159,13 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pnpm-store-
 
+      - name: Configure git auth for private deps
+        run: node scripts/setup-git-auth.cjs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --no-frozen-lockfile --prod=false
 
       - name: Run linter
         run: pnpm lint
@@ -188,8 +203,13 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pnpm-store-
 
+      - name: Configure git auth for private deps
+        run: node scripts/setup-git-auth.cjs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --no-frozen-lockfile --prod=false
 
       - name: Build application
         run: pnpm build
