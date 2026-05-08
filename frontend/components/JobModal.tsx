@@ -10,8 +10,11 @@ import { Checkbox } from '@snowforge/ui';
 import { Switch } from '@snowforge/ui';
 
 import { X, Loader2, Plus, Trash2, Save, FolderOpen, Link, FileText, AlertCircle, CheckCircle2 } from 'lucide-react'
-import { SessionResource } from '@clerk/types';
 import { FormData, FileMapping, Job, Query, Scheduling, Template, ProxyConfig, RenderConfig, ExportConfig, NotificationConfig, SourceType, URLPreviewResponse, COMMON_TIMEZONES } from '@/lib/types';
+
+// Structural type for the only session method we use; avoids the
+// @clerk/types ↔ @clerk/shared version drift that breaks Vercel builds.
+type AuthSession = { getToken: () => Promise<string | null> };
 import { validateQueries, validateHTTP, validateSFTP } from '@/lib/utils';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -21,7 +24,7 @@ import { QueryTypeHelpButton } from './QueryTypeHelp';
 export function JobModal({ closeModal, jobDetails, session }: {
   closeModal: () => void,
   jobDetails?: Job | null,
-  session: SessionResource | null,
+  session: AuthSession | null,
  }) {
   const [formData, setFormData] = useState<FormData>({
     name: '',

@@ -63,7 +63,6 @@
 	},
 	"devDependencies": {
 		"@axe-core/playwright": "latest",
-		"@clerk/types": "latest",
 		"@lhci/cli": "latest",
 		"@playwright/test": "latest",
 		"@testing-library/jest-dom": "latest",
