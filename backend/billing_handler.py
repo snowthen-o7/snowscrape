@@ -282,6 +282,34 @@ def _dispatch_event(event_type: str, data: dict) -> None:
 		logger.info("Unhandled webhook event", event_type=event_type)
 
 
+def _get_period_bounds(subscription) -> tuple[int, int]:
+	"""
+	Return (current_period_start, current_period_end) epochs from a Stripe
+	Subscription. Stripe API 2024-09+ moved these from the Subscription level
+	to the SubscriptionItem level. Try items[0] first, fall back to top-level
+	for older API versions / older webhook events.
+	"""
+	try:
+		items = subscription.get("items", {}).get("data", []) or []
+	except AttributeError:
+		items = []
+	if items:
+		first = items[0]
+		try:
+			start = first.get("current_period_start")
+			end = first.get("current_period_end")
+		except AttributeError:
+			start = first["current_period_start"] if "current_period_start" in first else None
+			end = first["current_period_end"] if "current_period_end" in first else None
+		if start is not None and end is not None:
+			return int(start), int(end)
+	# Fallback for older API versions
+	try:
+		return int(subscription.get("current_period_start")), int(subscription.get("current_period_end"))
+	except (AttributeError, TypeError):
+		return int(subscription["current_period_start"]), int(subscription["current_period_end"])
+
+
 def _handle_checkout_completed(session):
 	"""Handle checkout.session.completed — new subscription created."""
 	user_id = session.get("client_reference_id") or session.get("metadata", {}).get("user_id")
@@ -299,9 +327,9 @@ def _handle_checkout_completed(session):
 		datetime.fromtimestamp(stripe_sub["trial_end"] or 0, tz=timezone.utc).isoformat()
 		if stripe_sub.get("trial_end") else ""
 	)
-	period_end_iso = datetime.fromtimestamp(
-		stripe_sub["current_period_end"], tz=timezone.utc
-	).isoformat()
+	period_start_epoch, period_end_epoch = _get_period_bounds(stripe_sub)
+	period_end_iso = datetime.fromtimestamp(period_end_epoch, tz=timezone.utc).isoformat()
+	period_start_iso = datetime.fromtimestamp(period_start_epoch, tz=timezone.utc).isoformat()
 
 	create_or_update_subscription(
 		user_id,
@@ -309,9 +337,7 @@ def _handle_checkout_completed(session):
 		status=stripe_sub["status"],
 		stripe_customer_id=customer_id,
 		stripe_subscription_id=subscription_id,
-		current_period_start=datetime.fromtimestamp(
-			stripe_sub["current_period_start"], tz=timezone.utc
-		).isoformat(),
+		current_period_start=period_start_iso,
 		current_period_end=period_end_iso,
 		trial_end=trial_end_iso,
 		cancel_at_period_end=bool(stripe_sub.get("cancel_at_period_end", False)),
@@ -335,11 +361,9 @@ def _handle_subscription_updated(subscription):
 		return
 
 	plan = _plan_from_subscription(subscription)
-	new_period_end_epoch = subscription["current_period_end"]
+	new_period_start_epoch, new_period_end_epoch = _get_period_bounds(subscription)
 	new_period_end = datetime.fromtimestamp(new_period_end_epoch, tz=timezone.utc).isoformat()
-	new_period_start = datetime.fromtimestamp(
-		subscription["current_period_start"], tz=timezone.utc
-	).isoformat()
+	new_period_start = datetime.fromtimestamp(new_period_start_epoch, tz=timezone.utc).isoformat()
 
 	# Race fix: only shift usage_reset_date if the period boundary actually moved.
 	# Normalize both to UTC epoch for comparison to avoid Z vs +00:00 mismatch.
