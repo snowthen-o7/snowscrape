@@ -89,10 +89,16 @@ export const proxy = clerkMiddleware(async (auth, req) => {
 		}
 	}
 
-	const res = redirectForStatus(status ?? 'no_subscription', req);
-	if (!cached) {
+	const finalStatus = status ?? 'no_subscription';
+	const res = redirectForStatus(finalStatus, req);
+
+	// Only cache happy-path statuses. Caching no_subscription/past_due/canceled
+	// would keep the user locked out for 60s after they pay (webhook race) or
+	// after they fix billing. Active/trialing are stable enough to cache.
+	const cacheableStatuses = ['trialing', 'active'];
+	if (!cached && cacheableStatuses.includes(finalStatus)) {
 		const cookiePayload: SubStatusCookie = {
-			status: status ?? 'no_subscription',
+			status: finalStatus,
 			fetched_at: Math.floor(Date.now() / 1000),
 		};
 		res.cookies.set(SUBSCRIPTION_COOKIE, JSON.stringify(cookiePayload), {
