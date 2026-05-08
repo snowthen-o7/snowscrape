@@ -53,10 +53,19 @@ def _cors_origin(event=None):
 	return next(iter(_CORS_ALLOWED_ORIGINS))
 
 
+def _decimal_default(o):
+	"""JSON encoder shim — DynamoDB stores numeric fields as Decimal, which
+	json.dumps can't serialize natively. Cast to int when whole, else float."""
+	from decimal import Decimal
+	if isinstance(o, Decimal):
+		return int(o) if o == o.to_integral_value() else float(o)
+	raise TypeError(f"Object of type {type(o).__name__} is not JSON serializable")
+
+
 def _response(status, body, event=None):
 	return {
 		"statusCode": status,
-		"body": json.dumps(body),
+		"body": json.dumps(body, default=_decimal_default),
 		"headers": {
 			"Content-Type": "application/json",
 			"Access-Control-Allow-Origin": _cors_origin(event),
