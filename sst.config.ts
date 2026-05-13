@@ -367,6 +367,8 @@ export default $config({
       STRIPE_PRICE_PRO_MONTHLY: process.env.STRIPE_PRICE_PRO_MONTHLY ?? "",
       STRIPE_PRICE_BUSINESS_MONTHLY: process.env.STRIPE_PRICE_BUSINESS_MONTHLY ?? "",
       STRIPE_PORTAL_CONFIG_ID: process.env.STRIPE_PORTAL_CONFIG_ID ?? "",
+      // Clerk webhook (from Doppler)
+      CLERK_WEBHOOK_SECRET: process.env.CLERK_WEBHOOK_SECRET ?? "",
       // Monitoring
       SNOWGLOBE_URL: process.env.SNOWGLOBE_URL ?? "https://snowglobe.alexdiaz.me",
       SNOWGLOBE_SITE_ID: process.env.SNOWGLOBE_SITE_ID ?? "snowscrape",
@@ -612,6 +614,13 @@ export default $config({
       ...pythonDefaults,
       handler: "backend/billing_handler.get_usage_handler",
       timeout: "10 seconds",
+    });
+
+    // Clerk Webhook
+    api.route("POST /clerk/webhook", {
+      ...pythonDefaults,
+      handler: "backend/clerk_webhook_handler.handle_clerk_webhook",
+      timeout: "60 seconds",
     });
 
     // API Keys
