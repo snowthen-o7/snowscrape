@@ -15,8 +15,10 @@ import {
   Plus,
   Webhook,
   Settings,
+  Trash2,
 } from 'lucide-react';
 import { NotificationCenter } from '@/components/NotificationCenter';
+import { DeleteAccountModal } from '@/components/billing/DeleteAccountModal';
 
 /**
  * SnowScrape-specific layout wrapper
@@ -29,6 +31,7 @@ export function SnowScrapeLayout({ children }: { children: React.ReactNode }) {
   // expanded on desktop now. No useSidebar() call needed here.
   const { user } = useUser();
   const [isMounted, setIsMounted] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
   useEffect(() => {
     setIsMounted(true);
@@ -73,8 +76,17 @@ export function SnowScrapeLayout({ children }: { children: React.ReactNode }) {
               labelIcon={<Settings className="h-4 w-4" />}
               href="/dashboard/settings"
             />
+            <UserButton.Action
+              label="Delete account"
+              labelIcon={<Trash2 className="h-4 w-4 text-destructive" />}
+              onClick={() => setDeleteModalOpen(true)}
+            />
           </UserButton.MenuItems>
         </UserButton>
+        <DeleteAccountModal
+          open={deleteModalOpen}
+          onOpenChange={setDeleteModalOpen}
+        />
       </div>
     </>
   ) : null;
