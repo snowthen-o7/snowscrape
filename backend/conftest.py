@@ -146,7 +146,17 @@ def dynamodb_client(aws_credentials, mock_env_vars):
 				{'AttributeName': 'template_id', 'KeyType': 'HASH'}
 			],
 			AttributeDefinitions=[
-				{'AttributeName': 'template_id', 'AttributeType': 'S'}
+				{'AttributeName': 'template_id', 'AttributeType': 'S'},
+				{'AttributeName': 'user_id', 'AttributeType': 'S'},
+			],
+			GlobalSecondaryIndexes=[
+				{
+					'IndexName': 'UserIdIndex',
+					'KeySchema': [
+						{'AttributeName': 'user_id', 'KeyType': 'HASH'}
+					],
+					'Projection': {'ProjectionType': 'ALL'}
+				}
 			],
 			BillingMode='PAY_PER_REQUEST'
 		)
@@ -158,7 +168,17 @@ def dynamodb_client(aws_credentials, mock_env_vars):
 				{'AttributeName': 'webhook_id', 'KeyType': 'HASH'}
 			],
 			AttributeDefinitions=[
-				{'AttributeName': 'webhook_id', 'AttributeType': 'S'}
+				{'AttributeName': 'webhook_id', 'AttributeType': 'S'},
+				{'AttributeName': 'user_id', 'AttributeType': 'S'},
+			],
+			GlobalSecondaryIndexes=[
+				{
+					'IndexName': 'UserIdIndex',
+					'KeySchema': [
+						{'AttributeName': 'user_id', 'KeyType': 'HASH'}
+					],
+					'Projection': {'ProjectionType': 'ALL'}
+				}
 			],
 			BillingMode='PAY_PER_REQUEST'
 		)
@@ -170,7 +190,19 @@ def dynamodb_client(aws_credentials, mock_env_vars):
 				{'AttributeName': 'delivery_id', 'KeyType': 'HASH'}
 			],
 			AttributeDefinitions=[
-				{'AttributeName': 'delivery_id', 'AttributeType': 'S'}
+				{'AttributeName': 'delivery_id', 'AttributeType': 'S'},
+				{'AttributeName': 'webhook_id', 'AttributeType': 'S'},
+				{'AttributeName': 'timestamp', 'AttributeType': 'N'},
+			],
+			GlobalSecondaryIndexes=[
+				{
+					'IndexName': 'WebhookIdIndex',
+					'KeySchema': [
+						{'AttributeName': 'webhook_id', 'KeyType': 'HASH'},
+						{'AttributeName': 'timestamp', 'KeyType': 'RANGE'},
+					],
+					'Projection': {'ProjectionType': 'ALL'}
+				}
 			],
 			BillingMode='PAY_PER_REQUEST'
 		)
