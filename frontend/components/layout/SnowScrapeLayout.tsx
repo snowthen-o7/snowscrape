@@ -17,6 +17,7 @@ import {
   Settings,
   Trash2,
   Plug,
+  Send,
 } from 'lucide-react';
 import { NotificationCenter } from '@/components/NotificationCenter';
 import { DeleteAccountModal } from '@/components/billing/DeleteAccountModal';
@@ -49,6 +50,7 @@ export function SnowScrapeLayout({ children }: { children: React.ReactNode }) {
       { label: 'Analytics', href: '/dashboard/analytics', icon: BarChart2 },
       { label: 'Webhooks', href: '/webhooks', icon: Webhook },
       { label: 'Integrations', href: '/dashboard/integrations', icon: Plug },
+      { label: 'Destinations', href: '/dashboard/destinations', icon: Send },
     ],
     quickAction: {
       label: 'New Job',
