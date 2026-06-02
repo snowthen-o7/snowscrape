@@ -14,6 +14,7 @@ from metrics import get_metrics_emitter
 from typing import Any, Dict
 from rate_limiter import DomainRateLimiter, DEFAULT_MIN_DELAY
 from utils import decimal_to_float, delete_job_links, fetch_url_with_session, fetch_urls_for_job, get_links_for_job, initialize_session, parse_links_from_file, save_results_to_s3, save_session_data, update_job_status, update_url_status, validate_job_data
+from docs_exporter import DocsExporter
 from webhook_dispatcher import WebhookDispatcher
 
 # Initialize logger and metrics
@@ -84,6 +85,7 @@ def create_job(job_data):
 				'fallback_to_standard': True
 			}),
 			'crawl_delay': Decimal(str(job_data.get('crawl_delay', DEFAULT_MIN_DELAY))),
+			'export_destination_ids': job_data.get('export_destination_ids') or [],
 		}
 
 		# Add source-type specific fields
@@ -286,6 +288,31 @@ def cancel_job(job_id):
 	except ClientError as e:
 		logger.error("Error cancelling job", error=e.response['Error']['Message'])
 		return None
+
+def _on_job_completed(job_data: dict, results_summary: dict) -> None:
+	"""Fan out post-completion notifications: webhooks + export destinations."""
+	job_id = job_data["job_id"]
+	user_id = job_data.get("user_id", "")
+	try:
+		WebhookDispatcher.dispatch_job_completed(
+			job_id=job_id, user_id=user_id, job_data=job_data, results_summary=results_summary,
+		)
+	except Exception as e:
+		logger.warning("Failed to dispatch job.completed webhook", error=str(e))
+
+	destination_ids = job_data.get("export_destination_ids") or []
+	if destination_ids:
+		try:
+			DocsExporter.dispatch_job_completed(
+				job_id=job_id,
+				user_id=user_id,
+				destination_ids=destination_ids,
+				results_s3_key=job_data.get("results_s3_key", ""),
+				job_data=job_data,
+			)
+		except Exception as e:
+			logger.warning("Failed to dispatch Docs export", error=str(e))
+
 
 def process_job(job_data: Dict[str, Any]) -> Dict[str, Any]:
 	"""
@@ -522,22 +549,14 @@ def process_job(job_data: Dict[str, Any]) -> Dict[str, Any]:
 			}
 		)
 
-		# Dispatch job.completed webhook event
-		try:
-			results_summary = {
-				'total_urls': total_urls,
-				'processed': processed_urls,
-				'failed': failed_urls,
-				'success_rate': (processed_urls / total_urls * 100) if total_urls > 0 else 0
-			}
-			WebhookDispatcher.dispatch_job_completed(
-				job_id=job_id,
-				user_id=job_data.get('user_id'),
-				job_data=job_data,
-				results_summary=results_summary
-			)
-		except Exception as webhook_error:
-			logger.warning("Failed to dispatch job.completed webhook", error=str(webhook_error))
+		# Dispatch job.completed webhook + export destinations
+		results_summary = {
+			'total_urls': total_urls,
+			'processed': processed_urls,
+			'failed': failed_urls,
+			'success_rate': (processed_urls / total_urls * 100) if total_urls > 0 else 0
+		}
+		_on_job_completed(job_data=job_data, results_summary=results_summary)
 
 	except Exception as e:
 		logger.error("Error updating job status", job_id=job_id, error=str(e))

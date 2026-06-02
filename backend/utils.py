@@ -670,6 +670,14 @@ def validate_job_data(data):
 		# Use the strict validator which provides comprehensive validation
 		validated_data = validate_job_data_strict(data)
 
+		# Optional list of destination IDs. Empty list is fine; missing key also fine.
+		if "export_destination_ids" in data:
+			ids = data["export_destination_ids"]
+			if not isinstance(ids, list) or not all(isinstance(i, str) for i in ids):
+				raise ValueError("export_destination_ids must be a list of strings")
+			if len(ids) > 10:
+				raise ValueError("Maximum 10 export destinations per job")
+
 		# Additional scheduling validation (if present)
 		if 'scheduling' in data and data['scheduling'] is not None:
 			scheduling = data['scheduling']
