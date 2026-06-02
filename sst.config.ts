@@ -752,6 +752,31 @@ export default $config({
       timeout: "10 seconds",
     });
 
+    // Google Account Integration
+    api.route("GET /integrations/google/auth-url", {
+      ...pythonDefaults,
+      handler: "backend/google_account_handler.get_auth_url_handler",
+      timeout: "10 seconds",
+    });
+
+    api.route("POST /integrations/google/callback", {
+      ...pythonDefaults,
+      handler: "backend/google_account_handler.oauth_callback_handler",
+      timeout: "30 seconds",
+    });
+
+    api.route("GET /integrations/google", {
+      ...pythonDefaults,
+      handler: "backend/google_account_handler.list_google_accounts_handler",
+      timeout: "10 seconds",
+    });
+
+    api.route("DELETE /integrations/google", {
+      ...pythonDefaults,
+      handler: "backend/google_account_handler.revoke_google_account_handler",
+      timeout: "10 seconds",
+    });
+
     // Async worker (no HTTP event — invoked directly by async start)
     const asyncWorker = new sst.aws.Function("ScraperPreviewAsyncWorker", {
       ...pythonDefaults,
