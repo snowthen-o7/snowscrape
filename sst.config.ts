@@ -883,6 +883,21 @@ export default $config({
       },
     );
 
+    docsExportQueue.subscribe(
+      {
+        ...pythonDefaults,
+        handler: "backend/docs_export_handler.docs_export_handler",
+        memory: "512 MB",
+        timeout: "120 seconds",
+      },
+      {
+        batch: {
+          size: 5,
+          partialResponses: true,
+        },
+      },
+    );
+
     // ─── Cron Jobs ────────────────────────────────────────────────────
 
     new sst.aws.Cron("ScheduleJobs", {
