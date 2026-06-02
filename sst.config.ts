@@ -777,6 +777,25 @@ export default $config({
       timeout: "10 seconds",
     });
 
+    // Export Destinations
+    api.route("POST /export-destinations", {
+      ...pythonDefaults,
+      handler: "backend/export_destination_handler.create_destination_handler",
+      timeout: "10 seconds",
+    });
+
+    api.route("GET /export-destinations", {
+      ...pythonDefaults,
+      handler: "backend/export_destination_handler.list_destinations_handler",
+      timeout: "10 seconds",
+    });
+
+    api.route("DELETE /export-destinations/{destination_id}", {
+      ...pythonDefaults,
+      handler: "backend/export_destination_handler.delete_destination_handler",
+      timeout: "10 seconds",
+    });
+
     // Async worker (no HTTP event — invoked directly by async start)
     const asyncWorker = new sst.aws.Function("ScraperPreviewAsyncWorker", {
       ...pythonDefaults,
