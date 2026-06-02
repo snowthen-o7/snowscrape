@@ -189,6 +189,19 @@ export default $config({
       },
     });
 
+    // ─── KMS Key for OAuth Token Encryption ───────────────────────────
+
+    const oauthTokenKey = new aws.kms.Key("OAuthTokenKey", {
+      description: `SnowScrape OAuth refresh token encryption (${stage})`,
+      enableKeyRotation: true,
+      deletionWindowInDays: 30,
+    });
+
+    new aws.kms.Alias("OAuthTokenKeyAlias", {
+      name: `alias/snowscrape-${stage}-oauth-tokens`,
+      targetKeyId: oauthTokenKey.keyId,
+    });
+
     const apiKeysTable = new sst.aws.Dynamo("ApiKeys", {
       fields: {
         api_key_id: "string",
@@ -199,6 +212,61 @@ export default $config({
       globalIndexes: {
         UserIdIndex: { hashKey: "user_id" },
         KeyHashIndex: { hashKey: "key_hash" },
+      },
+      transform: {
+        table: {
+          pointInTimeRecovery: { enabled: true },
+          serverSideEncryption: { enabled: true },
+          ttl: { attributeName: "ttl", enabled: true },
+        },
+      },
+    });
+
+    const googleAccountsTable = new sst.aws.Dynamo("GoogleAccounts", {
+      fields: {
+        user_id: "string",
+        google_user_id: "string",
+      },
+      primaryIndex: { hashKey: "user_id" },
+      globalIndexes: {
+        GoogleUserIdIndex: { hashKey: "google_user_id" },
+      },
+      transform: {
+        table: {
+          pointInTimeRecovery: { enabled: true },
+          serverSideEncryption: { enabled: true },
+        },
+      },
+    });
+
+    const exportDestinationsTable = new sst.aws.Dynamo("ExportDestinations", {
+      fields: {
+        destination_id: "string",
+        user_id: "string",
+      },
+      primaryIndex: { hashKey: "destination_id" },
+      globalIndexes: {
+        UserIdIndex: { hashKey: "user_id" },
+      },
+      transform: {
+        table: {
+          pointInTimeRecovery: { enabled: true },
+          serverSideEncryption: { enabled: true },
+        },
+      },
+    });
+
+    const docsExportsTable = new sst.aws.Dynamo("DocsExports", {
+      fields: {
+        export_id: "string",
+        job_id: "string",
+        user_id: "string",
+        timestamp: "number",
+      },
+      primaryIndex: { hashKey: "export_id" },
+      globalIndexes: {
+        JobIdIndex: { hashKey: "job_id", rangeKey: "timestamp" },
+        UserIdIndex: { hashKey: "user_id", rangeKey: "timestamp" },
       },
       transform: {
         table: {
@@ -267,6 +335,29 @@ export default $config({
           visibilityTimeoutSeconds: 60, // Matches Lambda timeout
           messageRetentionSeconds: 345600, // 4 days
           receiveWaitTimeSeconds: 20, // Long polling
+        },
+      },
+    });
+
+    const docsExportDlq = new sst.aws.Queue("DocsExportDLQ", {
+      transform: {
+        queue: {
+          messageRetentionSeconds: 1209600, // 14 days
+          visibilityTimeoutSeconds: 120,
+        },
+      },
+    });
+
+    const docsExportQueue = new sst.aws.Queue("DocsExportQueue", {
+      dlq: {
+        queue: docsExportDlq.arn,
+        retry: 3,
+      },
+      transform: {
+        queue: {
+          visibilityTimeoutSeconds: 120, // matches Lambda timeout
+          messageRetentionSeconds: 345600, // 4 days
+          receiveWaitTimeSeconds: 20, // long polling
         },
       },
     });
@@ -375,6 +466,16 @@ export default $config({
       // WebSocket
       WS_API_DOMAIN: wsApi.url.apply((url) => new URL(url).host),
       WS_API_STAGE: wsApi.url.apply((url) => new URL(url).pathname.slice(1)),
+      // Google Docs export
+      DYNAMODB_GOOGLE_ACCOUNTS_TABLE: googleAccountsTable.name,
+      DYNAMODB_EXPORT_DESTINATIONS_TABLE: exportDestinationsTable.name,
+      DYNAMODB_DOCS_EXPORTS_TABLE: docsExportsTable.name,
+      SQS_DOCS_EXPORT_QUEUE_URL: docsExportQueue.url,
+      OAUTH_TOKEN_KMS_KEY_ID: oauthTokenKey.keyId,
+      // Google OAuth client (from Doppler)
+      GOOGLE_OAUTH_CLIENT_ID: process.env.GOOGLE_OAUTH_CLIENT_ID ?? "",
+      GOOGLE_OAUTH_CLIENT_SECRET: process.env.GOOGLE_OAUTH_CLIENT_SECRET ?? "",
+      GOOGLE_OAUTH_REDIRECT_URI: process.env.GOOGLE_OAUTH_REDIRECT_URI ?? "",
     };
 
     // ─── Shared Lambda Permissions ────────────────────────────────────
@@ -391,6 +492,9 @@ export default $config({
       subscriptionsTable,
       apiKeysTable,
       billingWebhookDedupTable,
+      googleAccountsTable,
+      exportDestinationsTable,
+      docsExportsTable,
     ];
 
     // ─── Default Python Lambda Config ─────────────────────────────────
@@ -400,7 +504,13 @@ export default $config({
       memory: "512 MB" as const,
       timeout: "30 seconds" as const,
       environment: sharedEnv,
-      link: [...allTables, jobQueue, webhookQueue, resultsBucket],
+      link: [...allTables, jobQueue, webhookQueue, docsExportQueue, resultsBucket],
+      permissions: [
+        {
+          actions: ["kms:Encrypt", "kms:Decrypt", "kms:GenerateDataKey"],
+          resources: [oauthTokenKey.arn],
+        },
+      ],
     };
 
     // ─── HTTP API ─────────────────────────────────────────────────────
