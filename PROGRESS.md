@@ -1,7 +1,7 @@
 # SnowScrape -- Progress & Launch Readiness
 
-**Last Updated:** 2026-05-08
-**Launch Readiness:** ~95% (live, awaiting first $0 trial-signup smoke)
+**Last Updated:** 2026-06-02
+**Launch Readiness:** ~98% (live, Google Docs destination complete)
 **Build Status:** PASSES
 **Test Coverage:** ~60-70% (unit + integration; Playwright setup present)
 
@@ -67,6 +67,18 @@
 - Marketing landing pages
 - Sentry error monitoring
 - 42 unit tests (Vitest), Playwright E2E setup
+
+### Google Docs Export Destination (Backend complete; code-ready for deploy)
+- OAuth flow for connecting user Google accounts (drive.file + drive.metadata.readonly + documents scopes)
+- KMS-encrypted refresh token storage (per-user)
+- Export destinations CRUD (Google Docs as v1 target)
+- SQS-triggered docs export Lambda: reads scrape results from S3, formats via three templates (structured_log, compact_list, narrative), writes to user's Drive folder via Google Docs batchUpdate API
+- Fan-out from job completion handler: jobs can attach 0-10 destinations; results auto-export after each successful run
+- Frontend UI: Integrations page (connect/disconnect Google), Destinations CRUD page, DestinationSelector inside the manual job creation form
+- 50+ backend unit + integration tests covering OAuth, destinations, dispatcher, and export Lambda
+- Deploy + Doppler secrets + Google Cloud Console OAuth client setup are user-action follow-ups
+- Drive folder picker UI deferred to v1.1 (users paste folder ID for now)
+- AI/Visual job creation forms not yet wired with destinations (follow-up)
 
 ### Billing / Stripe Integration (Live in production)
 

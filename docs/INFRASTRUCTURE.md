@@ -1,6 +1,6 @@
 # SnowScrape Infrastructure
 
-**Last Updated:** 2026-05-08
+**Last Updated:** 2026-06-02
 **AWS Account ID:** 282128795857
 **Primary Region:** us-east-2
 **Production Frontend:** https://scrape.snowforge.dev (Vercel project `snowscrape`)
@@ -18,7 +18,7 @@ SnowScrape is a serverless web scraping platform deployed on AWS.
                     ┌───────────────────────┼───────────────────────┐
                     │                       │                       │
               [DynamoDB]              [SQS Queues]            [S3 Bucket]
-              (11 tables)          (2 queues + 2 DLQs)       (results)
+              (14 tables)          (3 queues + 3 DLQs)       (results)
 ```
 
 **Frontend:** Next.js on Vercel (region: iad1)
@@ -50,7 +50,7 @@ SnowScrape is a serverless web scraping platform deployed on AWS.
 | webhookDelivery | webhook_delivery_handler | 512 MB | 60s | SQS webhook sender |
 | *...utilities* | handler.* | 256-512 MB | 30s | Validation, preview |
 
-### DynamoDB Tables (11)
+### DynamoDB Tables (14)
 
 | Table | Partition Key | Sort Key | GSIs | Encryption | PITR | TTL |
 |-------|--------------|----------|------|------------|------|-----|
@@ -65,6 +65,9 @@ SnowScrape is a serverless web scraping platform deployed on AWS.
 | Subscriptions | user_id (S) | - | StripeCustomerIndex (stripe_customer_id) | SSE | Enabled | - |
 | ApiKeys | api_key_id (S) | - | UserIdIndex (user_id), KeyHashIndex (key_hash) | SSE | Enabled | `ttl` (reserved) |
 | BillingWebhookDedup | event_id (S) | - | - | SSE | Enabled | `ttl` (30 days) |
+| GoogleAccounts | user_id (S) | - | GoogleUserIdIndex (google_user_id) | SSE + KMS | Enabled | - |
+| ExportDestinations | destination_id (S) | - | UserIdIndex (user_id) | SSE | Enabled | - |
+| DocsExports | export_id (S) | - | JobIdIndex (job_id), UserIdIndex (user_id) | SSE | Enabled | `ttl` (90 days) |
 
 All tables use PAY_PER_REQUEST billing mode.
 
@@ -100,6 +103,38 @@ All tables use PAY_PER_REQUEST billing mode.
 - **TTL:** Enabled on `ttl` attribute — 30-day retention window
 - **Purpose:** Idempotency table for the Stripe webhook handler. A conditional-put on `event_id` ensures each Stripe event is processed exactly once, even when Stripe retries delivery.
 
+#### GoogleAccounts Table
+
+- **Resource name:** `GoogleAccounts`, `snowscrape-{stage}-GoogleAccounts`
+- **Partition key:** `user_id` (string)
+- **GSI:** `GoogleUserIdIndex` on `google_user_id` (string, full projection) — used to find user by Google account ID during OAuth callback
+- **Encryption:** SSE + KMS (refresh tokens encrypted with alias/snowscrape-{stage}-oauth-tokens)
+- **PITR:** Enabled
+- **TTL:** Not used
+- **Purpose:** Per-user Google OAuth account record. Stores `access_token_expires_at`, KMS-encrypted refresh token, and OAuth scope list. Access tokens are not persisted — refreshed on-demand per-export.
+
+#### ExportDestinations Table
+
+- **Resource name:** `ExportDestinations`, `snowscrape-{stage}-ExportDestinations`
+- **Partition key:** `destination_id` (string, UUID)
+- **GSI:** `UserIdIndex` on `user_id` (full projection) — lists all destinations for a user
+- **Encryption:** SSE
+- **PITR:** Enabled
+- **TTL:** Not used
+- **Purpose:** User-defined export destinations. Stores type (e.g., `google_docs`), Google Docs target folder ID, job selector config (all jobs, specific jobs, or job tags), and email notification setting.
+
+#### DocsExports Table
+
+- **Resource name:** `DocsExports`, `snowscrape-{stage}-DocsExports`
+- **Partition key:** `export_id` (string, UUID)
+- **GSIs:**
+  - `JobIdIndex` on `job_id` (full projection) — track exports for a given job
+  - `UserIdIndex` on `user_id` (full projection) — list all user exports
+- **Encryption:** SSE
+- **PITR:** Enabled
+- **TTL:** Enabled on `ttl` attribute — 90-day retention (created_at + 90 days)
+- **Purpose:** Async export delivery log. Stores destination ID, export status (queued/processing/success/failed), Google Doc ID, template name (structured_log/compact_list/narrative), error message if failed, and delivery timestamp. Indexed for audit trails and retry/replay.
+
 #### Billing Flow Diagram
 
 ```
@@ -121,7 +156,7 @@ backend/billing_handler.stripe_webhook_handler
 Frontend redirected to /dashboard?checkout=success
 ```
 
-### SQS Queues (4)
+### SQS Queues (6)
 
 | Queue | Visibility | Retention | Max Retries | DLQ |
 |-------|-----------|-----------|-------------|-----|
@@ -129,6 +164,8 @@ Frontend redirected to /dashboard?checkout=success
 | SnowscrapeJobDLQ | 5 min | 14 days | - | - |
 | SnowscrapeWebhookQueue | 60s | 4 days | 3 | SnowscrapeWebhookDLQ |
 | SnowscrapeWebhookDLQ | 60s | 14 days | - | - |
+| DocsExportQueue | 30s | 4 days | 3 | DocsExportDLQ |
+| DocsExportDLQ | 60s | 14 days | - | - |
 
 ### S3 Bucket
 
@@ -216,6 +253,14 @@ Subscribed Stripe events:
 - `invoice.payment_succeeded`
 - `invoice.payment_failed`
 
+**Google Docs OAuth (from Doppler `sf-snowscrape`)**
+
+| Variable | Description |
+|----------|-------------|
+| GOOGLE_OAUTH_CLIENT_ID | Google Cloud OAuth 2.0 client ID |
+| GOOGLE_OAUTH_CLIENT_SECRET | Google Cloud OAuth 2.0 client secret |
+| GOOGLE_OAUTH_REDIRECT_URI | Backend callback URL (e.g., `https://2pg2gj4048.execute-api.us-east-2.amazonaws.com/integrations/google/callback`) |
+
 ### Frontend (Vercel)
 
 | Variable | Public | Description |
@@ -225,6 +270,18 @@ Subscribed Stripe events:
 | NEXT_PUBLIC_API_URL | Yes | Backend API Gateway URL |
 | NEXT_PUBLIC_WS_URL | Yes | WebSocket API URL |
 | NEXT_PUBLIC_SENTRY_DSN | Yes | Sentry error tracking |
+
+---
+
+## Google Docs Export
+
+- **OAuth scopes**: `drive.file` (create-only), `drive.metadata.readonly` (folder picker support), `documents` (write to Docs), `openid`/`email`/`profile`.
+- **Token storage**: Refresh tokens KMS-encrypted (alias/snowscrape-{stage}-oauth-tokens) before persistence to GoogleAccounts. Access tokens are not stored — refreshed per-export.
+- **Delivery**: Post-job-completion fan-out via DocsExportQueue (SQS, 3 retries + DLQ). Triggered alongside webhook delivery in job_manager._on_job_completed.
+- **Routes**: `/integrations/google/{auth-url, callback, GET, DELETE}`, `/export-destinations/{POST, GET, DELETE/{id}}`.
+- **Billing**: Not metered against plan limits in v1.0.
+- **KMS Key**: `alias/snowscrape-{stage}-oauth-tokens` — automatically created by SST and exposed via OAUTH_TOKEN_KMS_KEY_ID env var.
+- **Env vars**: GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, GOOGLE_OAUTH_REDIRECT_URI (from Doppler); OAUTH_TOKEN_KMS_KEY_ID (from SST output).
 
 ---
 
@@ -277,6 +334,7 @@ Subscribed Stripe events:
 
 | Date | Change | Author |
 |------|--------|--------|
+| 2026-06-02 | Added Google Docs export destination feature. New AWS resources: KMS key (alias/snowscrape-{stage}-oauth-tokens), 3 DynamoDB tables (GoogleAccounts, ExportDestinations, DocsExports), SQS queue+DLQ (DocsExportQueue, DocsExportDLQ), and SQS-subscriber Lambda. New env vars: GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, GOOGLE_OAUTH_REDIRECT_URI (from Doppler), OAUTH_TOKEN_KMS_KEY_ID (from SST). New routes: /integrations/google/* and /export-destinations/*. | Alex Diaz |
 | 2026-05-07 | Billing MVP shipped: added Subscriptions, ApiKeys, BillingWebhookDedup tables; trial-only entry flow with Stripe Customer Portal for plan management; idempotent webhook handler. Stripe products provisioned per stage in Doppler sf-snowscrape. | Alex Diaz |
 | 2026-05-08 | Billing MVP went live in prd: live-mode Stripe products + portal config + webhook registered; SST deployed to prod stage; Vercel frontend deployed with `typescript.ignoreBuildErrors=true` (temporary, pending @snowforge/ui v3→v4 migration). Bugs fixed during smoke: middleware/proxy collision, Stripe API 2024-09+ schema (current_period_end moved to items[]), DynamoDB Decimal JSON serialization, stale subscription-status cookie, @clerk/types duplicate version, Clerk v7 sign-in/up prop renames, snowforge-ui v4 useSidebar API. | Alex Diaz |
 | 2026-03-25 | Added Firecrawl integration for Tier 3/4 scraping (JS rendering + anti-bot) | Claude |
