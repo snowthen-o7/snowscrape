@@ -9,6 +9,7 @@ import secrets
 from typing import Dict, Optional
 
 import boto3
+import requests
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
@@ -83,4 +84,36 @@ def exchange_code_for_credentials(code: str) -> Dict:
 		"refresh_token": creds.refresh_token,
 		"expiry": creds.expiry.isoformat() if creds.expiry else None,
 		"scopes": list(creds.scopes or []),
+	}
+
+
+def refresh_access_token(refresh_token: str) -> Dict:
+	"""Refresh expired access token. Returns dict with access_token, expiry."""
+	creds = Credentials(
+		token=None,
+		refresh_token=refresh_token,
+		token_uri="https://oauth2.googleapis.com/token",
+		client_id=os.environ["GOOGLE_OAUTH_CLIENT_ID"],
+		client_secret=os.environ["GOOGLE_OAUTH_CLIENT_SECRET"],
+	)
+	creds.refresh(Request())
+	return {
+		"access_token": creds.token,
+		"expiry": creds.expiry.isoformat() if creds.expiry else None,
+	}
+
+
+def fetch_google_user_info(access_token: str) -> Dict:
+	"""Call Google userinfo endpoint. Returns dict with google_user_id, email, name."""
+	resp = requests.get(
+		"https://openidconnect.googleapis.com/v1/userinfo",
+		headers={"Authorization": f"Bearer {access_token}"},
+		timeout=10,
+	)
+	resp.raise_for_status()
+	data = resp.json()
+	return {
+		"google_user_id": data["sub"],
+		"email": data["email"],
+		"name": data.get("name", ""),
 	}

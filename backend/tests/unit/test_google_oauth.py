@@ -77,3 +77,49 @@ def test_exchange_code_returns_credentials(monkeypatch):
 	assert result["access_token"] == "access-token"
 	assert result["refresh_token"] == "refresh-token"
 	assert "drive.file" in result["scopes"][0]
+
+
+def test_refresh_access_token_calls_google(monkeypatch):
+	from google_oauth import refresh_access_token
+
+	fake_creds = MagicMock()
+	fake_creds.token = "new-access-token"
+	fake_creds.expiry = MagicMock()
+	fake_creds.expiry.isoformat.return_value = "2026-06-01T12:00:00"
+
+	monkeypatch.setattr(
+		"google_oauth.Credentials",
+		MagicMock(return_value=fake_creds),
+	)
+	monkeypatch.setattr("google_oauth.Request", MagicMock())
+
+	result = refresh_access_token(refresh_token="refresh-abc")
+
+	fake_creds.refresh.assert_called_once()
+	assert result["access_token"] == "new-access-token"
+	assert result["expiry"] == "2026-06-01T12:00:00"
+
+
+def test_fetch_google_user_info(monkeypatch):
+	from google_oauth import fetch_google_user_info
+
+	fake_response = MagicMock()
+	fake_response.json.return_value = {
+		"sub": "google-user-123",
+		"email": "user@example.com",
+		"name": "Test User",
+	}
+	fake_response.raise_for_status.return_value = None
+
+	fake_requests_get = MagicMock(return_value=fake_response)
+	monkeypatch.setattr("google_oauth.requests.get", fake_requests_get)
+
+	result = fetch_google_user_info(access_token="access-abc")
+
+	assert result["google_user_id"] == "google-user-123"
+	assert result["email"] == "user@example.com"
+	assert result["name"] == "Test User"
+	called_url = fake_requests_get.call_args.args[0]
+	assert "userinfo" in called_url
+	headers = fake_requests_get.call_args.kwargs["headers"]
+	assert headers["Authorization"] == "Bearer access-abc"
