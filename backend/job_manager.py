@@ -528,6 +528,7 @@ def process_job(job_data: Dict[str, Any]) -> Dict[str, Any]:
 	try:
 		# Save the consolidated results to S3 or DynamoDB
 		results_file_key = save_results_to_s3(results, job_id)
+		job_data['results_s3_key'] = results_file_key
 	except Exception as e:
 		logger.error("Error saving results to S3", job_id=job_id, error=str(e))
 		return {'status': 'error', 'message': f"Failed to save results: {str(e)}"}
