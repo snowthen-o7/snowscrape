@@ -33,3 +33,18 @@ export type {
 
 export { apiKeysAPI } from './api-keys';
 export type { ApiKeyListItem, CreateApiKeyResponse } from './api-keys';
+
+export { integrationsAPI } from './integrations';
+export type {
+  GoogleAccount,
+  GoogleAuthUrlResponse,
+  GoogleCallbackResponse,
+} from './integrations';
+
+export { destinationsAPI } from './destinations';
+export type {
+  ExportDestination,
+  CreateDestinationInput,
+  DestinationMode,
+  DestinationFormat,
+} from './destinations';

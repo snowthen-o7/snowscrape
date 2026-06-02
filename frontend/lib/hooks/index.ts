@@ -13,3 +13,14 @@ export {
   useOpenPortal,
 } from './useSubscription';
 export { useApiKeys, useCreateApiKey, useDeleteApiKey } from './useApiKeys';
+export {
+  useGoogleAccounts,
+  useStartGoogleOAuth,
+  useCompleteGoogleOAuth,
+  useRevokeGoogleAccount,
+} from './useGoogleAccount';
+export {
+  useDestinations,
+  useCreateDestination,
+  useDeleteDestination,
+} from './useDestinations';
