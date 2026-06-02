@@ -41,3 +41,39 @@ def test_decrypt_token_returns_plaintext(monkeypatch):
 	assert result == "plaintext-token"
 	fake_kms.decrypt.assert_called_once()
 	assert fake_kms.decrypt.call_args.kwargs["CiphertextBlob"] == b"ciphertext-bytes"
+
+
+def test_build_consent_url_includes_state_and_scopes():
+	from google_oauth import build_consent_url
+
+	url, state = build_consent_url(user_id="user_123")
+
+	assert "accounts.google.com" in url
+	assert "client_id=client-abc" in url
+	assert "redirect_uri=http%3A%2F%2Flocalhost%3A3001%2Fcb" in url
+	assert "scope=" in url
+	assert "access_type=offline" in url
+	assert "prompt=consent" in url
+	assert state in url
+	assert len(state) >= 32
+
+
+def test_exchange_code_returns_credentials(monkeypatch):
+	from google_oauth import exchange_code_for_credentials
+
+	fake_creds = MagicMock(
+		token="access-token",
+		refresh_token="refresh-token",
+		expiry=None,
+		scopes=["https://www.googleapis.com/auth/drive.file"],
+	)
+	fake_flow = MagicMock()
+	fake_flow.credentials = fake_creds
+	monkeypatch.setattr("google_oauth._build_flow", lambda: fake_flow)
+
+	result = exchange_code_for_credentials(code="auth-code-123")
+
+	fake_flow.fetch_token.assert_called_once_with(code="auth-code-123")
+	assert result["access_token"] == "access-token"
+	assert result["refresh_token"] == "refresh-token"
+	assert "drive.file" in result["scopes"][0]
