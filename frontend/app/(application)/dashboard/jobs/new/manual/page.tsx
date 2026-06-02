@@ -212,6 +212,7 @@ export default function ManualConfigurationPage() {
         render_config: data.render_config,
         export_config: data.export_config,
         notification_config: data.notification_config,
+        export_destination_ids: data.export_destination_ids ?? [],
         ...(data.source_type === 'csv' ? {
           source: data.source,
           file_mapping: data.file_mapping,
