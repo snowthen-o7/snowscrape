@@ -7,15 +7,15 @@ class Resource:
     class Api:
         type: str
         url: str
+    class ApiKeys:
+        name: str
+        type: str
     class App:
         name: str
         stage: str
-    class ClerkJwtPublicKey:
+    class BillingWebhookDedup:
+        name: str
         type: str
-        value: str
-    class ClerkJwtSecretKey:
-        type: str
-        value: str
     class Connections:
         name: str
         type: str
@@ -31,9 +31,6 @@ class Resource:
     class ProxyPool:
         name: str
         type: str
-    class ResidentialProxyUrl:
-        type: str
-        value: str
     class Results:
         name: str
         type: str
@@ -41,6 +38,9 @@ class Resource:
         name: str
         type: str
     class Sessions:
+        name: str
+        type: str
+    class Subscriptions:
         name: str
         type: str
     class Templates:
