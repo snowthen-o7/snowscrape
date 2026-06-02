@@ -76,6 +76,7 @@ const baseJobFields = {
   render_config: renderConfigSchema.optional(),
   export_config: exportConfigSchema.optional(),
   notification_config: notificationConfigSchema.optional(),
+  export_destination_ids: z.array(z.string()).max(10).optional(),
 };
 
 const csvJobSchema = z.object({

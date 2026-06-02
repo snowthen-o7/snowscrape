@@ -85,6 +85,7 @@ export default function ManualConfigurationPage() {
         webhook_on_failure: true,
         webhook_url: null,
       },
+      export_destination_ids: [],
     },
   });
 

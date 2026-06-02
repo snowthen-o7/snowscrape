@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@snowforge/ui';
 import { Checkbox } from '@snowforge/ui';
 import type { JobFormValues } from '@/lib/schemas/jobFormSchema';
+import { DestinationSelector } from '@/components/destinations/DestinationSelector';
 
 export function ExportTab() {
   const { control, watch, setValue, getValues } = useFormContext<JobFormValues>();
@@ -167,6 +168,20 @@ export function ExportTab() {
           </CardContent>
         )}
       </Card>
+
+      {/* Export Destinations */}
+      <div className="space-y-3 border-t pt-6">
+        <div className="space-y-1">
+          <Label className="text-base">Google Docs Destinations</Label>
+          <p className="text-sm text-muted-foreground">
+            Pick saved destinations to auto-export results to Google Docs after each successful run.
+          </p>
+        </div>
+        <DestinationSelector
+          value={watch('export_destination_ids') ?? []}
+          onChange={(ids) => setValue('export_destination_ids', ids, { shouldDirty: true })}
+        />
+      </div>
     </div>
   );
 }
