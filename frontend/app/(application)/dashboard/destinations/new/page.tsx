@@ -170,6 +170,13 @@ export default function NewDestinationPage() {
                     <SelectItem value="one_doc_per_row">One doc per row</SelectItem>
                   </SelectContent>
                 </Select>
+                {watch('mode') === 'one_doc_per_row' && (
+                  <p className="text-xs text-muted-foreground">
+                    Creates a separate Google Doc for each result row (e.g. one doc per
+                    profile). Limited to 25 rows per run — larger jobs should use
+                    &ldquo;New doc per run&rdquo; or be split.
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2">

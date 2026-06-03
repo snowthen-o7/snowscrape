@@ -16,6 +16,12 @@ from logger import get_logger
 
 logger = get_logger(__name__)
 
+# one_doc_per_row creates one Google Doc per result row. Cap the count so a large
+# job cannot spawn thousands of Drive/Docs API calls (rate limits) or blow the
+# Lambda's 120s timeout. Comfortably covers the small-N "one doc per person" use
+# case; larger runs should use new_doc_per_run or split the job.
+MAX_DOCS_PER_ROW_RUN = 25
+
 
 def _build_drive_service(access_token: str):
 	creds = Credentials(token=access_token)
@@ -44,18 +50,45 @@ def _render_doc_title(naming_template: str, job_name: str) -> str:
 	)
 
 
-def _log_export(export_id: str, status: str, *, doc_id="", doc_url="", error=""):
+def _log_export(export_id: str, status: str, *, doc_id="", doc_url="", doc_count=0, error=""):
 	table = get_table(os.environ["DYNAMODB_DOCS_EXPORTS_TABLE"])
 	table.put_item(Item={
 		"export_id": export_id,
 		"status": status,
 		"doc_id": doc_id,
 		"doc_url": doc_url,
+		"doc_count": doc_count,
 		"error": error[:1000],
 		"timestamp": int(time.time()),
 		"created_at": datetime.now(timezone.utc).isoformat(),
 		"ttl": int(time.time()) + 60 * 60 * 24 * 90,
 	})
+
+
+def _row_label(row: Dict, index: int) -> str:
+	"""Human-readable suffix for a per-row doc title."""
+	return str(row.get("title") or row.get("url") or f"Row {index + 1}")
+
+
+def _create_doc(drive, docs, *, folder_id: str, title: str, rows, format_template: str):
+	"""Create a Google Doc in folder_id and write the formatted rows. Returns (doc_id, doc_url)."""
+	created = drive.files().create(
+		body={
+			"name": title,
+			"mimeType": "application/vnd.google-apps.document",
+			"parents": [folder_id],
+		},
+		fields="id, webViewLink",
+	).execute()
+	doc_id = created["id"]
+	doc_url = created["webViewLink"]
+	requests = format_rows_to_docs_requests(
+		rows=rows,
+		format_template=format_template,
+		title=title,
+	)
+	docs.documents().batchUpdate(documentId=doc_id, body={"requests": requests}).execute()
+	return doc_id, doc_url
 
 
 def _process_one(message: Dict) -> None:
@@ -79,29 +112,46 @@ def _process_one(message: Dict) -> None:
 	access_token = tokens["access_token"]
 
 	rows = _read_results(message["results_s3_key"])
-	title = _render_doc_title(dest["naming_template"], job_name)
+	base_title = _render_doc_title(dest["naming_template"], job_name)
+	folder_id = dest["drive_folder_id"]
+	format_template = dest["format_template"]
+	mode = dest.get("mode", "new_doc_per_run")
 
 	drive = _build_drive_service(access_token)
-	created = drive.files().create(
-		body={
-			"name": title,
-			"mimeType": "application/vnd.google-apps.document",
-			"parents": [dest["drive_folder_id"]],
-		},
-		fields="id, webViewLink",
-	).execute()
-	doc_id = created["id"]
-	doc_url = created["webViewLink"]
-
 	docs = _build_docs_service(access_token)
-	requests = format_rows_to_docs_requests(
-		rows=rows,
-		format_template=dest["format_template"],
-		title=title,
-	)
-	docs.documents().batchUpdate(documentId=doc_id, body={"requests": requests}).execute()
 
-	_log_export(export_id, "success", doc_id=doc_id, doc_url=doc_url)
+	if mode == "one_doc_per_row":
+		if len(rows) > MAX_DOCS_PER_ROW_RUN:
+			raise RuntimeError(
+				f"one_doc_per_row supports up to {MAX_DOCS_PER_ROW_RUN} rows; "
+				f"this run had {len(rows)}. Use new_doc_per_run or split the job."
+			)
+		first_doc_id = ""
+		first_doc_url = ""
+		for i, row in enumerate(rows):
+			row_title = f"{base_title} — {_row_label(row, i)}"
+			doc_id, doc_url = _create_doc(
+				drive, docs,
+				folder_id=folder_id,
+				title=row_title,
+				rows=[row],
+				format_template=format_template,
+			)
+			if not first_doc_id:
+				first_doc_id, first_doc_url = doc_id, doc_url
+		_log_export(
+			export_id, "success",
+			doc_id=first_doc_id, doc_url=first_doc_url, doc_count=len(rows),
+		)
+	else:
+		doc_id, doc_url = _create_doc(
+			drive, docs,
+			folder_id=folder_id,
+			title=base_title,
+			rows=rows,
+			format_template=format_template,
+		)
+		_log_export(export_id, "success", doc_id=doc_id, doc_url=doc_url, doc_count=1)
 
 
 def docs_export_handler(event, context):

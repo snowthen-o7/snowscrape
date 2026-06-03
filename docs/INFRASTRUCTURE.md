@@ -278,6 +278,7 @@ Subscribed Stripe events:
 - **OAuth scopes**: `drive.file` (create-only), `documents` (write to Docs), `openid`/`email`/`profile`. (v1.1 folder-picker work will add back `drive.metadata.readonly`.)
 - **Token storage**: Refresh tokens KMS-encrypted (alias/snowscrape-{stage}-oauth-tokens) before persistence to GoogleAccounts. Access tokens are not stored — refreshed per-export.
 - **Delivery**: Post-job-completion fan-out via DocsExportQueue (SQS, 3 retries + DLQ). Triggered alongside webhook delivery in job_manager._on_job_completed.
+- **Modes**: `new_doc_per_run` (one doc per job run, all rows) and `one_doc_per_row` (one doc per result row — e.g. one doc per profile). `one_doc_per_row` is capped at `MAX_DOCS_PER_ROW_RUN` (25) rows per run to stay within Drive API rate limits and the 120s Lambda timeout; over-cap runs fail cleanly and log to DocsExports.
 - **Routes**: `/integrations/google/{auth-url, callback, GET, DELETE}`, `/export-destinations/{POST, GET, DELETE/{id}}`.
 - **Billing**: Not metered against plan limits in v1.0.
 - **KMS Key**: `alias/snowscrape-{stage}-oauth-tokens` — automatically created by SST and exposed via OAUTH_TOKEN_KMS_KEY_ID env var.
