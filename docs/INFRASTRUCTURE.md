@@ -275,7 +275,7 @@ Subscribed Stripe events:
 
 ## Google Docs Export
 
-- **OAuth scopes**: `drive.file` (create-only), `drive.metadata.readonly` (folder picker support), `documents` (write to Docs), `openid`/`email`/`profile`.
+- **OAuth scopes**: `drive.file` (create-only), `documents` (write to Docs), `openid`/`email`/`profile`. (v1.1 folder-picker work will add back `drive.metadata.readonly`.)
 - **Token storage**: Refresh tokens KMS-encrypted (alias/snowscrape-{stage}-oauth-tokens) before persistence to GoogleAccounts. Access tokens are not stored — refreshed per-export.
 - **Delivery**: Post-job-completion fan-out via DocsExportQueue (SQS, 3 retries + DLQ). Triggered alongside webhook delivery in job_manager._on_job_completed.
 - **Routes**: `/integrations/google/{auth-url, callback, GET, DELETE}`, `/export-destinations/{POST, GET, DELETE/{id}}`.

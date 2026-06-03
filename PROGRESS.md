@@ -69,7 +69,7 @@
 - 42 unit tests (Vitest), Playwright E2E setup
 
 ### Google Docs Export Destination (Backend complete; code-ready for deploy)
-- OAuth flow for connecting user Google accounts (drive.file + drive.metadata.readonly + documents scopes)
+- OAuth flow for connecting user Google accounts (drive.file + documents scopes; drive.metadata.readonly deferred to v1.1 folder picker)
 - KMS-encrypted refresh token storage (per-user)
 - Export destinations CRUD (Google Docs as v1 target)
 - SQS-triggered docs export Lambda: reads scrape results from S3, formats via three templates (structured_log, compact_list, narrative), writes to user's Drive folder via Google Docs batchUpdate API

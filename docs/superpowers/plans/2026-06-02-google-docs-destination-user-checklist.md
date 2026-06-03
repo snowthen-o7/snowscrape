@@ -14,7 +14,7 @@ Required before any deploy can succeed, because Lambda needs `GOOGLE_OAUTH_CLIEN
 
 - [ ] Open https://console.cloud.google.com/ — create/select a project for SnowScrape.
 - [ ] Enable APIs: **Google Drive API**, **Google Docs API**, **Google Picker API** (Picker is for the v1.1 folder picker UI; harmless to enable now).
-- [ ] Configure the OAuth consent screen: external, app name "SnowScrape", support email = your email. Add scopes: `drive.file`, `drive.metadata.readonly`, `documents`, `openid`, `email`, `profile`. Add yourself as a test user until you submit for verification.
+- [ ] Configure the OAuth consent screen: external, app name "SnowScrape", support email = your email. Add scopes: `drive.file`, `documents`, `openid`, `email`, `profile`. Add yourself as a test user until you submit for verification. (Do NOT add `drive.metadata.readonly` — it's a restricted scope and isn't needed in v1.0. It will be added back when the v1.1 Drive folder picker ships.)
 - [ ] Create credentials → OAuth client ID → Web application.
 - [ ] Add authorized redirect URIs (BOTH):
   - Dev: `http://localhost:3001/dashboard/integrations/google/callback`
