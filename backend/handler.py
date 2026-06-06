@@ -14,7 +14,7 @@ from logger import get_logger, log_lambda_invocation, log_exception
 from metrics import get_metrics_emitter
 from observatory_client import get_observatory_client
 from urllib.parse import urlparse
-from utils import decimal_to_float, detect_csv_settings, extract_token_from_event, get_links_for_job, parse_links_from_file, preview_url_template, refresh_job_urls, validate_clerk_token, validate_job_data, verify_resource_ownership
+from utils import decimal_to_float, detect_csv_settings, extract_token_from_event, get_links_for_job, parse_links_from_file, preview_url_template, refresh_job_urls, resolve_user_id, validate_clerk_token, validate_job_data, verify_resource_ownership
 from cache import cache_get, cache_set, cache_delete
 from webhook_dispatcher import WebhookDispatcher
 from proxy_manager import get_proxy_manager
@@ -169,8 +169,8 @@ def create_job_handler(event, context):
 			}
 
 		try:
-			user_data = validate_clerk_token(token)
-			logger.info("User authenticated", user_id=user_data.get("sub"))
+			user_id = resolve_user_id(token)
+			logger.info("User authenticated", user_id=user_id)
 		except Exception as e:
 			logger.warning("Token validation failed", error=str(e))
 			duration_ms = (time.time() - start_time) * 1000
@@ -187,7 +187,7 @@ def create_job_handler(event, context):
 		# Parse and validate job data
 		job_data = json.loads(event['body'])
 		validate_job_data(job_data)
-		job_data["user_id"] = user_data["sub"]
+		job_data["user_id"] = user_id
 
 		# ── Billing enforcement (fail-CLOSED on inactive sub, fail-open on errors) ──
 		try:
@@ -197,7 +197,7 @@ def create_job_handler(event, context):
 			)
 
 			# Hard gate: subscription must be active/trialing
-			sub = get_subscription(user_data["sub"])
+			sub = get_subscription(user_id)
 			if not is_subscription_active(sub):
 				return {
 					"statusCode": 402,
@@ -213,7 +213,7 @@ def create_job_handler(event, context):
 				}
 
 			# Check page quota
-			quota = check_usage_quota(user_data["sub"])
+			quota = check_usage_quota(user_id)
 			if not quota["allowed"]:
 				return {
 					"statusCode": 402,
@@ -230,7 +230,7 @@ def create_job_handler(event, context):
 				}
 
 			# Check concurrent job limit
-			concurrent = check_concurrent_job_limit(user_data["sub"])
+			concurrent = check_concurrent_job_limit(user_id)
 			if not concurrent["allowed"]:
 				return {
 					"statusCode": 429,
@@ -249,7 +249,7 @@ def create_job_handler(event, context):
 			# Check feature access for premium features
 			render_config = job_data.get("render_config") or job_data.get("rendering") or {}
 			if render_config.get("enabled"):
-				feature = check_feature_access(user_data["sub"], "js_rendering")
+				feature = check_feature_access(user_id, "js_rendering")
 				if not feature["allowed"]:
 					return {
 						"statusCode": 403,
@@ -265,7 +265,7 @@ def create_job_handler(event, context):
 
 			proxy_config = job_data.get("proxy_config") or job_data.get("proxy") or {}
 			if proxy_config.get("enabled"):
-				feature = check_feature_access(user_data["sub"], "proxy_rotation")
+				feature = check_feature_access(user_id, "proxy_rotation")
 				if not feature["allowed"]:
 					return {
 						"statusCode": 403,
@@ -285,14 +285,14 @@ def create_job_handler(event, context):
 						   error=str(billing_err))
 		# ── End billing enforcement ───────────────────────────────────
 
-		logger.info("Creating job", job_name=job_data.get('name'), user_id=user_data.get("sub"))
+		logger.info("Creating job", job_name=job_data.get('name'), user_id=user_id)
 
 		# Create job
 		job_id = create_job(job_data)
 
 		if job_id:
 			# Invalidate user's job list cache
-			cache_delete(f"jobs:{user_data['sub']}")
+			cache_delete(f"jobs:{user_id}")
 			logger.log_job_event(job_id, 'created', 'ready', job_name=job_data.get('name'))
 
 			# Emit custom metrics for job creation
@@ -375,8 +375,7 @@ def delete_job_handler(event, context):
 		}
 
 	try:
-		user_data = validate_clerk_token(token)
-		user_id = user_data.get("sub")
+		user_id = resolve_user_id(token)
 	except Exception as e:
 		return {
 			"statusCode": 401,
@@ -451,8 +450,7 @@ def get_all_job_statuses_handler(event, context):
 			}
 
 		try:
-			user_data = validate_clerk_token(token)
-			user_id = user_data.get("sub")
+			user_id = resolve_user_id(token)
 		except Exception as e:
 			return {
 				"statusCode": 401,
@@ -533,8 +531,7 @@ def get_crawl_handler(event, context):
 		}
 
 	try:
-		user_data = validate_clerk_token(token)
-		user_id = user_data.get("sub")
+		user_id = resolve_user_id(token)
 	except Exception as e:
 		return {
 			"statusCode": 401,
@@ -612,8 +609,7 @@ def get_job_crawls_handler(event, context):
 		}
 
 	try:
-		user_data = validate_clerk_token(token)
-		user_id = user_data.get("sub")
+		user_id = resolve_user_id(token)
 	except Exception as e:
 		return {
 			"statusCode": 401,
@@ -679,8 +675,7 @@ def get_job_details_handler(event, context):
 		}
 
 	try:
-		user_data = validate_clerk_token(token)
-		user_id = user_data.get("sub")
+		user_id = resolve_user_id(token)
 	except Exception as e:
 		return {
 			"statusCode": 401,
@@ -753,8 +748,7 @@ def pause_job_handler(event, context):
 		}
 
 	try:
-		user_data = validate_clerk_token(token)
-		user_id = user_data.get("sub")
+		user_id = resolve_user_id(token)
 	except Exception as e:
 		return {
 			"statusCode": 401,
@@ -820,8 +814,7 @@ def cancel_job_handler(event, context):
 		}
 
 	try:
-		user_data = validate_clerk_token(token)
-		user_id = user_data.get("sub")
+		user_id = resolve_user_id(token)
 	except Exception as e:
 		return {
 			"statusCode": 401,
@@ -1070,8 +1063,7 @@ def refresh_job_handler(event, context):
 		}
 
 	try:
-		user_data = validate_clerk_token(token)
-		user_id = user_data.get("sub")
+		user_id = resolve_user_id(token)
 	except Exception as e:
 		return {
 			"statusCode": 401,
@@ -1137,8 +1129,7 @@ def resume_job_handler(event, context):
 		}
 
 	try:
-		user_data = validate_clerk_token(token)
-		user_id = user_data.get("sub")
+		user_id = resolve_user_id(token)
 	except Exception as e:
 		return {
 			"statusCode": 401,
@@ -1461,8 +1452,7 @@ def update_job_handler(event, context):
 		}
 
 	try:
-		user_data = validate_clerk_token(token)
-		user_id = user_data.get("sub")
+		user_id = resolve_user_id(token)
 	except Exception as e:
 		return {
 			"statusCode": 401,
@@ -1726,8 +1716,7 @@ def download_results_handler(event, context):
 			}
 
 		try:
-			user_data = validate_clerk_token(token)
-			user_id = user_data.get("sub")
+			user_id = resolve_user_id(token)
 			logger.info("User authenticated", user_id=user_id)
 		except Exception as e:
 			logger.warning("Token validation failed", error=str(e))
@@ -1926,8 +1915,7 @@ def preview_results_handler(event, context):
 			}
 
 		try:
-			user_data = validate_clerk_token(token)
-			user_id = user_data.get("sub")
+			user_id = resolve_user_id(token)
 			logger.info("User authenticated", user_id=user_id)
 		except Exception as e:
 			logger.warning("Token validation failed", error=str(e))

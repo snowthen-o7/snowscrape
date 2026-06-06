@@ -21,7 +21,7 @@ class TestLockedUserAccess:
 				"rate_limit": 5,
 			}),
 		}
-		with patch("handler.validate_clerk_token", return_value={"sub": "user-locked"}):
+		with patch("handler.resolve_user_id", return_value="user-locked"):
 			resp = create_job_handler(event, lambda_context)
 		assert resp["statusCode"] == 402
 		body = json.loads(resp["body"])
@@ -32,7 +32,7 @@ class TestLockedUserAccess:
 	):
 		from handler import get_all_job_statuses_handler
 		event = {"headers": {"Authorization": "Bearer t"}}
-		with patch("handler.validate_clerk_token", return_value={"sub": "user-locked"}):
+		with patch("handler.resolve_user_id", return_value="user-locked"):
 			resp = get_all_job_statuses_handler(event, lambda_context)
 		# 200 with empty list — read access preserved for locked users
 		assert resp["statusCode"] == 200

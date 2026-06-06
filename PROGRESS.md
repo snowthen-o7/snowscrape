@@ -6,6 +6,7 @@
 **Test Coverage:** ~60-70% (unit + integration; Playwright setup present)
 
 ### Recent -- 2026-06-06
+- API-key auth wired across the entire /jobs data-plane (claude-main, pending Alex's merge to main). Programmatic API access (the launch "sub-project #2") was blocked because `validate_api_key` existed but was never called: every public endpoint still required a Clerk JWT, so the Settings -> API Keys feature produced keys that did not actually authenticate anything. Added a single auth resolver `resolve_user_id(token)` in `utils.py` that accepts either a SnowScrape API key (`sk_live_...`, checked first by prefix) or a Clerk session JWT, returning the owning user_id (raising on an invalid credential so callers keep their existing 401 path). Wired it into all 13 /jobs data-plane handlers (create, list/status, get, update, delete, pause, cancel, resume, refresh, crawls list+get, download, preview). Control-plane endpoints (api-keys CRUD, billing, integrations/OAuth, templates, webhooks, destinations) intentionally stay Clerk-only. Billing gates are unaffected: they key off user_id, which the resolver supplies for API-key callers too. TDD: 4 resolver unit tests + 2 end-to-end API-key integration tests (valid key authenticates a /jobs read; revoked key -> 401). Evidence: full backend suite 333 passed (308 unit + 25 integration), up from 327.
 - Backend red-signal fix (claude-main, pending Alex's merge to main). The backend unit suite was red: 11 failing tests (4 in `test_utils.py`, 7 in `test_ai_extractor.py`). Root causes and fixes:
   - **Real production bug in CSV URL parsing.** `parse_links_from_file`'s pandas path is dead in production (pandas is intentionally not bundled in the Lambda, so it is not in `backend/pyproject.toml` and never imports), meaning the manual `csv.reader` fallback is the ONLY path that runs in prod. That fallback did not skip the header row, did not skip empty cells, and did not support the `'default'` auto-detect column option, so every CSV-sourced job ingested the header text as a bogus URL and could not auto-detect a URL column. Rewrote the fallback to mirror the pandas semantics (row 0 = header, resolve the column against the header, skip the header row and empty cells, support `'default'` via `detect_url_column`). 3 previously-failing `TestParseLinksFromFile` tests now encode the correct behavior and pass.
   - **Stale auth test.** `test_extract_token_case_sensitive` asserted a lowercase `authorization` header yields no token, but `extract_token_from_event` deliberately accepts it (API Gateway V2 lowercases all header names). Corrected the test to match the intended, correct behavior.
@@ -118,10 +119,11 @@
 - Dashboard pages exist but display mock/placeholder data
 - No real analytics pipeline connected
 
-### API Key Authentication (Backend complete, public-endpoint auth not wired)
+### API Key Authentication (jobs data-plane wired on claude-main; control-plane still Clerk-only)
 - Backend `api_key_handler.py` and Settings → API Keys tab fully implemented (one-time-secret modal, list/create/revoke)
 - API keys can be created and managed
-- BUT: external API calls to `/jobs` etc. still require Clerk JWT -- there's no `Authorization: Bearer sk_live_...` middleware yet
+- DONE (claude-main, 2026-06-06): `Authorization: Bearer sk_live_...` now authenticates the entire `/jobs` data-plane via `resolve_user_id` (create, list, get, update, delete, pause, cancel, resume, refresh, crawls, download, preview)
+- Remaining: decide whether to extend API-key auth to the other data endpoints (templates, webhooks, export destinations); the control-plane (api-keys CRUD, billing, integrations/OAuth) stays Clerk-only by design. Public API docs / a quickstart for programmatic use would also help.
 - Sub-project #2 of launch sequence
 
 ### Notification System (Partial)
@@ -142,7 +144,7 @@
 | Work Item | Estimate | Priority |
 |-----------|----------|----------|
 | First real $0 trial signup as final live smoke | hours | CRITICAL -- final acceptance |
-| API key auth on public endpoints | 1 week | MEDIUM |
+| API key auth on public endpoints | jobs data-plane DONE (2026-06-06); optional: extend to templates/webhooks/destinations + write API docs | MEDIUM |
 | Real analytics data pipeline | 2-3 weeks | HIGH |
 | Email notifications | 1 week | MEDIUM |
 | In-app notification center | 1 week | LOW |
