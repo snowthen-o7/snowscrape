@@ -687,3 +687,59 @@ class TestParseLinksFromFile:
 		result = parse_links_from_file(file_mapping, url)
 		assert 'http://test1.com' in result
 		assert 'http://test2.com' in result
+
+
+class TestLazyAwsResourceResolution:
+	"""Regression tests for the import-time AWS resource binding bug (issue #16).
+
+	utils.py used to bind ``s3``, ``job_table`` and ``url_table`` to connection-pool
+	resources at module import time. That pinned each resource to whatever
+	credentials resolved during import, which broke the backend integration suite on
+	CI (no ambient AWS credentials at import; moto/test credentials are set up
+	per-test, after import) with NoCredentialsError, and defeated the per-test
+	connection-pool reset in conftest. The fix fetches the table/client lazily at
+	call time. These tests fail against the old import-time-binding code.
+	"""
+
+	def test_no_import_time_aws_resources_bound(self):
+		"""The fragile import-time globals must not exist on the module."""
+		import utils
+		for name in ('url_table', 'job_table', 's3'):
+			assert not hasattr(utils, name), (
+				f"utils.{name} is bound at import time; resolve it lazily at call time"
+			)
+
+	def test_url_helpers_resolve_table_at_call_time(self):
+		"""Each URL helper must fetch the URLs table via get_table when invoked."""
+		import os
+		import utils
+		# pytest-env seeds this, but conftest's mock_env_vars fixture deletes it on
+		# teardown, so set it explicitly to stay order-independent in the full suite.
+		os.environ['DYNAMODB_URLS_TABLE'] = 'SnowscrapeUrls-test'
+		expected_table = 'SnowscrapeUrls-test'
+
+		fake_table = MagicMock()
+		fake_table.query.return_value = {'Items': []}
+		with patch('utils.get_table', return_value=fake_table) as mock_get_table:
+			utils.delete_job_links('job-1')
+			utils.fetch_urls_for_job('job-1')
+			utils.update_url_status('job-1', 'http://x.test', 'done')
+			utils.refresh_job_urls('job-1', ['http://x.test'])
+
+		assert mock_get_table.call_count >= 4
+		for call in mock_get_table.call_args_list:
+			assert call.args[0] == expected_table
+
+	def test_delete_s3_result_file_resolves_client_at_call_time(self):
+		"""delete_s3_result_file must fetch the S3 client via get_s3_client when invoked."""
+		import os
+		import utils
+		# Set explicitly: conftest's mock_env_vars fixture deletes S3_BUCKET on teardown.
+		os.environ['S3_BUCKET'] = 'snowscrape-results-test'
+
+		fake_s3 = MagicMock()
+		with patch('utils.get_s3_client', return_value=fake_s3) as mock_get_s3:
+			utils.delete_s3_result_file('job-1')
+
+		mock_get_s3.assert_called_once()
+		fake_s3.delete_object.assert_called_once()
