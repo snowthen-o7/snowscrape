@@ -45,7 +45,6 @@ export default function GoogleCallbackPage() {
           setError(e instanceof Error ? e.message : 'Connection failed'),
       },
     );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params, router]);
 
   if (error) {
