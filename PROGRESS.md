@@ -1,9 +1,16 @@
 # SnowScrape -- Progress & Launch Readiness
 
-**Last Updated:** 2026-06-02
-**Launch Readiness:** ~98% (live, Google Docs destination complete)
+**Last Updated:** 2026-06-05
+**Launch Readiness:** ~98% (live; Google Docs destination backend complete, awaiting Alex's Google Cloud OAuth client + deploy)
 **Build Status:** PASSES
 **Test Coverage:** ~60-70% (unit + integration; Playwright setup present)
+
+### Recent -- 2026-06-05
+- Frontend: wired the export-destination selector into the AI-assisted and Visual builder job-creation flows. Previously only the manual form rendered `DestinationSelector`; jobs created via AI/Visual silently dropped any chosen destinations and could never auto-export. Added `export_destination_ids` (plus `source_type`, `url_template`) to `CreateJobDTO`, extracted the `buildAiJobPayload` pure helper with 6 unit tests, and rendered `DestinationSelector` in both flows. Frontend suite 51/51 green. Merged to `claude-main` via PR #6; awaiting Alex's `claude-main -> main` review.
+
+### Recent -- 2026-06-03
+- Backend fix: `job_manager.py` now propagates `results_s3_key` into `job_data` before the docs-export fan-out (without it, the export Lambda had no S3 results to read). Committed + pushed to `main`, alongside the Google Docs destination implementation plan and a user-action checklist (`docs/superpowers/plans/2026-06-01-google-docs-destination.md`, `2026-06-02-google-docs-destination-user-checklist.md`).
+- Walked Alex through the Google Cloud Console OAuth setup (create project, enable Drive + Docs APIs, configure consent screen, create OAuth client). This is step 1 of the user checklist and the active remaining blocker before the Google Docs destination is live in prod. Context: scoped while evaluating a LinkedIn-post-scraping freelance gig.
 
 ---
 
@@ -78,7 +85,7 @@
 - 50+ backend unit + integration tests covering OAuth, destinations, dispatcher, and export Lambda
 - Deploy + Doppler secrets + Google Cloud Console OAuth client setup are user-action follow-ups
 - Drive folder picker UI deferred to v1.1 (users paste folder ID for now)
-- AI/Visual job creation forms not yet wired with destinations (follow-up)
+- AI/Visual job creation forms now wired with destinations (2026-06-05, PR #6); manual form already had it
 
 ### Billing / Stripe Integration (Live in production)
 
