@@ -35,6 +35,7 @@ import {
 } from 'lucide-react';
 import { toast } from '@/lib/toast';
 import { jobsAPI } from '@/lib/api';
+import { DestinationSelector } from '@/components/destinations/DestinationSelector';
 import { useWebSocket } from '@/lib/useWebSocket';
 
 interface ExtractedField {
@@ -58,6 +59,7 @@ export default function VisualBuilderPage() {
   const [pageStructure, setPageStructure] = useState<any>(null);
   const [isTesting, setIsTesting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [destinationIds, setDestinationIds] = useState<string[]>([]);
 
   // Async scraper state
   const [asyncTaskId, setAsyncTaskId] = useState<string | null>(null);
@@ -375,6 +377,7 @@ export default function VisualBuilderPage() {
           source: targetUrl,
           queries,
           rate_limit: 10, // Default rate limit
+          export_destination_ids: destinationIds,
         },
         token
       );
@@ -751,7 +754,14 @@ export default function VisualBuilderPage() {
         {/* Save Actions */}
         {pageLoaded && extractedFields.length > 0 && (
           <Card className="border-accent">
-            <CardContent className="pt-6">
+            <CardContent className="pt-6 space-y-4">
+              <div className="space-y-2">
+                <Label>Export Destinations (optional)</Label>
+                <p className="text-sm text-muted-foreground">
+                  Pick saved destinations to auto-export results to Google Docs after each successful run.
+                </p>
+                <DestinationSelector value={destinationIds} onChange={setDestinationIds} />
+              </div>
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-lg font-semibold mb-1">Save Your Configuration</h3>

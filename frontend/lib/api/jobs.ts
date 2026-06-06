@@ -9,7 +9,10 @@ import { Job } from '@/lib/types';
 export interface CreateJobDTO {
   name: string;
   source: string;
+  source_type?: string;
+  url_template?: string;
   rate_limit?: number;
+  export_destination_ids?: string[];
   queries: Array<{
     name: string;
     type: string;
