@@ -19,6 +19,8 @@ import {
   Pencil,
 } from 'lucide-react';
 import { jobsAPI, type AISuggestResponse } from '@/lib/api/jobs';
+import { buildAiJobPayload } from '@/lib/jobs/buildAiJobPayload';
+import { DestinationSelector } from '@/components/destinations/DestinationSelector';
 import { toast } from '@/lib/toast';
 
 type Step = 'describe' | 'review' | 'configure';
@@ -46,6 +48,7 @@ export default function AIJobCreationPage() {
   // Configure step
   const [jobName, setJobName] = useState('');
   const [rateLimit, setRateLimit] = useState(2);
+  const [destinationIds, setDestinationIds] = useState<string[]>([]);
 
   const handleAnalyze = async () => {
     if (!url || !description) {
@@ -93,22 +96,14 @@ export default function AIJobCreationPage() {
       const token = await getToken();
       if (!token) throw new Error('Not authenticated');
 
-      const queries = acceptedFields.map((field) => ({
-        name: field.name,
-        type: field.useAi ? ('ai' as const) : (field.type === 'css' ? 'xpath' as const : field.type as 'xpath' | 'regex' | 'ai'),
-        query: field.useAi ? field.description : field.query,
-        join: false,
-      }));
-
       await jobsAPI.create(
-        {
+        buildAiJobPayload({
           name: jobName,
-          source: url,
-          source_type: 'direct_url',
-          url_template: url,
-          rate_limit: rateLimit,
-          queries,
-        } as any,
+          url,
+          rateLimit,
+          fields: suggestions,
+          destinationIds,
+        }),
         token
       );
 
@@ -333,6 +328,14 @@ export default function AIJobCreationPage() {
                   value={rateLimit}
                   onChange={(e) => setRateLimit(Number(e.target.value))}
                 />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Export Destinations (optional)</Label>
+                <p className="text-xs text-muted-foreground">
+                  Pick saved destinations to auto-export results to Google Docs after each successful run.
+                </p>
+                <DestinationSelector value={destinationIds} onChange={setDestinationIds} />
               </div>
 
               <div className="bg-muted/50 rounded-lg p-4 space-y-2">
