@@ -297,7 +297,12 @@ def resolve_user_id(token):
 		return key_record["user_id"]
 
 	user_data = validate_clerk_token(token)
-	return user_data.get("sub")
+	user_id = user_data.get("sub")
+	if not user_id:
+		# A token can decode yet lack a subject; treat it as unauthenticated
+		# rather than returning a None user_id that ownership checks would honor.
+		raise Exception("Invalid token: missing subject")
+	return user_id
 
 # Use this function for each URL request, and pass the session across requests within the job
 def fetch_url_with_session(url: str, session: Session, job_id: str, proxy_config: dict = None, render_config: dict = None) -> dict:

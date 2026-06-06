@@ -263,6 +263,13 @@ class TestResolveUserId:
 			with pytest.raises(Exception, match='Token expired.'):
 				resolve_user_id('eyJ.bad.jwt')
 
+	def test_clerk_jwt_without_sub_raises(self):
+		"""A token that decodes but carries no 'sub' must NOT resolve to a None
+		user_id (which ownership checks would otherwise honor); it must raise."""
+		with patch('utils.validate_clerk_token', return_value={'foo': 'bar'}):
+			with pytest.raises(Exception, match='[Mm]issing subject'):
+				resolve_user_id('eyJ.subless.jwt')
+
 	def test_api_key_returns_owner_user_id(self):
 		"""An sk_live_ key is validated via validate_api_key; user_id comes from the key record."""
 		with patch('api_key_handler.validate_api_key', return_value={'user_id': 'user_api_1', 'api_key_id': 'ak_1'}) as mock_key, \

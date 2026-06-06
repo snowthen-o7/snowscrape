@@ -138,11 +138,19 @@ class TestHandlers:
 			'is_active': True,
 		})
 
+		# Seed one job owned by the key's user and one owned by someone else, to
+		# prove the API key resolves to the right user_id AND that ownership scoping holds.
+		jobs_table = dynamodb_client.Table('SnowscrapeJobs-test')
+		jobs_table.put_item(Item={'job_id': 'job-mine', 'user_id': 'user-apikey-1', 'status': 'completed', 'name': 'Mine'})
+		jobs_table.put_item(Item={'job_id': 'job-theirs', 'user_id': 'user-other', 'status': 'completed', 'name': 'Theirs'})
+
 		event = {'headers': {'Authorization': f'Bearer {raw_key}'}}
 		response = get_all_job_statuses_handler(event, lambda_context)
 
-		# Read access is granted via the API key; this user has no jobs yet.
 		assert response['statusCode'] == 200
+		body = json.loads(response['body'])
+		returned_ids = {job['job_id'] for job in body['jobs']}
+		assert returned_ids == {'job-mine'}  # scoped to the key's user, never job-theirs
 
 	@mock_aws
 	def test_jobs_handler_rejects_inactive_api_key(self, dynamodb_client, mock_env_vars, lambda_context):
