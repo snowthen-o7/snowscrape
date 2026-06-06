@@ -206,15 +206,16 @@ class TestExtractTokenFromEvent:
 		result = extract_token_from_event(event)
 		assert result == 'test-token-123'
 
-	def test_extract_token_case_sensitive(self):
-		"""Test that Authorization header is case-sensitive."""
+	def test_extract_token_lowercase_header(self):
+		"""API Gateway V2 lowercases header names, so a lowercase
+		'authorization' header must still yield the token."""
 		event = {
 			'headers': {
 				'authorization': 'Bearer test-token-123'
 			}
 		}
 		result = extract_token_from_event(event)
-		assert result is None
+		assert result == 'test-token-123'
 
 	def test_no_authorization_header(self):
 		"""Test extraction when Authorization header is missing."""

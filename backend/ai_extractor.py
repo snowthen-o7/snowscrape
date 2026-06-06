@@ -11,6 +11,8 @@ import os
 import re
 from typing import Any, Dict, List, Optional
 
+import anthropic
+
 from logger import get_logger
 
 logger = get_logger(__name__)
@@ -35,7 +37,9 @@ def _get_client():
                 "ANTHROPIC_API_KEY environment variable is required for AI extraction. "
                 "Set it via: npx sst secret set AnthropicApiKey <key>"
             )
-        import anthropic
+        # `anthropic` is imported at module scope so tests can patch
+        # `ai_extractor.anthropic`; only client construction stays lazy
+        # (it needs the API key, absent at import time).
         _anthropic_client = anthropic.Anthropic(api_key=api_key)
     return _anthropic_client
 

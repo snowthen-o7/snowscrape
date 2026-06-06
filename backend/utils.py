@@ -769,30 +769,43 @@ def parse_links_from_file(file_mapping, file_url):
 		# Step 2: If pandas fails, fallback to csv with manual file_mapping settings
 		logger.warning("Pandas failed to parse file, falling back to manual parsing", error=str(e))
 
-		# Manual parsing using csv.reader
+		# Manual parsing using csv.reader. Pandas is intentionally NOT bundled in the
+		# Lambda, so this fallback is the real production path. It must mirror the
+		# pandas-path semantics: row 0 is the header, the URL column is resolved
+		# against that header, and the header row plus any empty cells are skipped.
 		delimiter = file_mapping.get('delimiter', ',')
 		quotechar = None if file_mapping.get('enclosure') == 'none' else file_mapping.get('enclosure', None)
 		escapechar = None if file_mapping.get('escape') == 'none' else file_mapping.get('escape', None)
-		
+
 		reader = csv.reader(file_content.splitlines(), delimiter=delimiter, quotechar=quotechar, escapechar=escapechar)
-		
+		rows = list(reader)
+		if not rows:
+			return []
+
+		header = rows[0]
+		url_column = file_mapping['url_column']
+
+		# Resolve the URL column index against the header row.
+		if url_column == 'default':
+			url_column_index = detect_url_column(header)  # regex-detect a 'link'/'url' column
+			if url_column_index is None:
+				raise ValueError("No suitable URL column found matching 'link' or 'url'.")
+		elif isinstance(url_column, str):
+			if url_column in header:
+				url_column_index = header.index(url_column)
+			else:
+				raise Exception(f"Column '{url_column}' not found in header")
+		else:
+			url_column_index = url_column  # integer index
+
+		# Row 0 is the header; only data rows contribute URLs, and empty cells are skipped.
 		links = []
-		url_column_index = None  # Initialize the url_column_index variable
+		for row in rows[1:]:
+			if len(row) > url_column_index:
+				value = row[url_column_index].strip()
+				if value:
+					links.append(value)
 
-		for row_num, row in enumerate(reader):
-			# Handle the first row (header) if url_column is a string (header name)
-			if row_num == 0 and isinstance(file_mapping['url_column'], str):
-				if file_mapping['url_column'] in row:
-					url_column_index = row.index(file_mapping['url_column'])  # Find the index of the header
-				else:
-					raise Exception(f"Column '{file_mapping['url_column']}' not found in header")
-			elif isinstance(file_mapping['url_column'], int):
-				url_column_index = file_mapping['url_column']  # Use the integer as the column index
-
-			# Ensure url_column_index is set and the row has enough columns
-			if url_column_index is not None and len(row) > url_column_index:
-				links.append(row[url_column_index].strip())
-						
 		return links
 
 def refresh_job_urls(job_id, links):

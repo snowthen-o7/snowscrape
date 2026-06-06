@@ -1,9 +1,16 @@
 # SnowScrape -- Progress & Launch Readiness
 
-**Last Updated:** 2026-06-05
+**Last Updated:** 2026-06-06
 **Launch Readiness:** ~98% (live; Google Docs destination backend complete, awaiting Alex's Google Cloud OAuth client + deploy)
-**Build Status:** PASSES
+**Build Status:** PASSES (backend unit suite 304/304 green as of 2026-06-06; was 11 red before today's fix)
 **Test Coverage:** ~60-70% (unit + integration; Playwright setup present)
+
+### Recent -- 2026-06-06
+- Backend red-signal fix (claude-main, pending Alex's merge to main). The backend unit suite was red: 11 failing tests (4 in `test_utils.py`, 7 in `test_ai_extractor.py`). Root causes and fixes:
+  - **Real production bug in CSV URL parsing.** `parse_links_from_file`'s pandas path is dead in production (pandas is intentionally not bundled in the Lambda, so it is not in `backend/pyproject.toml` and never imports), meaning the manual `csv.reader` fallback is the ONLY path that runs in prod. That fallback did not skip the header row, did not skip empty cells, and did not support the `'default'` auto-detect column option, so every CSV-sourced job ingested the header text as a bogus URL and could not auto-detect a URL column. Rewrote the fallback to mirror the pandas semantics (row 0 = header, resolve the column against the header, skip the header row and empty cells, support `'default'` via `detect_url_column`). 3 previously-failing `TestParseLinksFromFile` tests now encode the correct behavior and pass.
+  - **Stale auth test.** `test_extract_token_case_sensitive` asserted a lowercase `authorization` header yields no token, but `extract_token_from_event` deliberately accepts it (API Gateway V2 lowercases all header names). Corrected the test to match the intended, correct behavior.
+  - **AI-extractor test mock drift.** `test_ai_extractor.py` patches `ai_extractor.anthropic`, but the module lazy-imported `anthropic` inside `_get_client`, so the attribute did not exist at patch time (7 failures). Moved `import anthropic` to module scope (it is already a hard dependency); client construction stays lazy. No behavior change.
+  - Evidence: backend unit suite 304 passed / 0 failed (was 293 passed, 11 failed); integration suite 23 passed.
 
 ### Recent -- 2026-06-05
 - Frontend: wired the export-destination selector into the AI-assisted and Visual builder job-creation flows. Previously only the manual form rendered `DestinationSelector`; jobs created via AI/Visual silently dropped any chosen destinations and could never auto-export. Added `export_destination_ids` (plus `source_type`, `url_template`) to `CreateJobDTO`, extracted the `buildAiJobPayload` pure helper with 6 unit tests, and rendered `DestinationSelector` in both flows. Frontend suite 51/51 green. Merged to `claude-main` via PR #6; awaiting Alex's `claude-main -> main` review.
