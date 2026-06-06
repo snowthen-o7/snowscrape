@@ -713,7 +713,10 @@ class TestLazyAwsResourceResolution:
 		"""Each URL helper must fetch the URLs table via get_table when invoked."""
 		import os
 		import utils
+		# pytest-env seeds this, but conftest's mock_env_vars fixture deletes it on
+		# teardown, so set it explicitly to stay order-independent in the full suite.
 		os.environ['DYNAMODB_URLS_TABLE'] = 'SnowscrapeUrls-test'
+		expected_table = 'SnowscrapeUrls-test'
 
 		fake_table = MagicMock()
 		fake_table.query.return_value = {'Items': []}
@@ -725,12 +728,13 @@ class TestLazyAwsResourceResolution:
 
 		assert mock_get_table.call_count >= 4
 		for call in mock_get_table.call_args_list:
-			assert call.args[0] == 'SnowscrapeUrls-test'
+			assert call.args[0] == expected_table
 
 	def test_delete_s3_result_file_resolves_client_at_call_time(self):
 		"""delete_s3_result_file must fetch the S3 client via get_s3_client when invoked."""
 		import os
 		import utils
+		# Set explicitly: conftest's mock_env_vars fixture deletes S3_BUCKET on teardown.
 		os.environ['S3_BUCKET'] = 'snowscrape-results-test'
 
 		fake_s3 = MagicMock()
