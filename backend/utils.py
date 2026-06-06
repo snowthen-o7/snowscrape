@@ -36,10 +36,10 @@ from validators import validate_scrape_url, ValidationError as ScrapeValidationE
 
 logger = get_logger(__name__)
 
-# Use connection pool for AWS services
-s3 = get_s3_client()
-job_table = get_table(os.environ['DYNAMODB_JOBS_TABLE'])
-url_table = get_table(os.environ['DYNAMODB_URLS_TABLE'])
+# AWS service clients/tables are fetched lazily at call time via the connection
+# pool (get_s3_client / get_table). Binding them at import time pins the resource
+# to whatever credentials resolved during import, which breaks under test (moto
+# credentials are set up per-test, after import) and defeats the pool reset.
 
 # Define a list of common user agents and referrers
 REFERRERS = [
@@ -189,6 +189,7 @@ def decimal_to_float(obj):
 # Helper function to delete all URLs associated with the job
 def delete_job_links(job_id):
 	try:
+		url_table = get_table(os.environ['DYNAMODB_URLS_TABLE'])
 		# Query the url_table to get all links for the given job_id
 		response = url_table.query(
 			KeyConditionExpression=boto3.dynamodb.conditions.Key('job_id').eq(job_id)
@@ -214,6 +215,7 @@ def delete_job_links(job_id):
 # Helper function to delete the S3 result file for the job
 def delete_s3_result_file(job_id):
 	try:
+		s3 = get_s3_client()
 		s3.delete_object(Bucket=os.environ['S3_BUCKET'], Key=f'jobs/{job_id}/result.json')
 		logger.info("Deleted result file from S3", job_id=job_id)
 	
@@ -487,6 +489,7 @@ def fetch_urls_for_job(job_id: str) -> list:
 	Query DynamoDB to fetch all URLs associated with the given job_id.
 	"""
 	try:
+		url_table = get_table(os.environ['DYNAMODB_URLS_TABLE'])
 		response = url_table.query(
 			KeyConditionExpression=boto3.dynamodb.conditions.Key('job_id').eq(job_id)
 		)
@@ -844,6 +847,7 @@ def refresh_job_urls(job_id, links):
 	If the job already has URLs, they will be replaced with the new links.
 	"""
 	try:
+		url_table = get_table(os.environ['DYNAMODB_URLS_TABLE'])
 		# First, delete existing URLs for the job
 		existing_urls = url_table.query(
 			KeyConditionExpression=Key('job_id').eq(job_id)
@@ -998,6 +1002,7 @@ def update_url_status(job_id: str, url: str, status: str) -> None:
 	- status (str): The new status for the URL.
 	"""
 	try:
+		url_table = get_table(os.environ['DYNAMODB_URLS_TABLE'])
 		url_table.update_item(
 			Key={'job_id': job_id, 'url': url},
 			UpdateExpression="SET #status = :status",
