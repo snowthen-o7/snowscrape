@@ -9,6 +9,7 @@ from utils import (
 	detect_url_column,
 	extract_token_from_event,
 	parse_links_from_file,
+	resolve_user_id,
 	validate_job_data,
 	fetch_file_content
 )
@@ -242,6 +243,50 @@ class TestExtractTokenFromEvent:
 		}
 		result = extract_token_from_event(event)
 		assert result == ''
+
+
+class TestResolveUserId:
+	"""Unit tests for resolve_user_id: the unified auth resolver that accepts
+	either a SnowScrape API key (sk_live_...) or a Clerk session JWT and returns
+	the owning user_id, raising on an invalid credential."""
+
+	def test_clerk_jwt_returns_sub(self):
+		"""A non-API-key token is validated as a Clerk JWT; user_id is its 'sub'."""
+		with patch('utils.validate_clerk_token', return_value={'sub': 'user_clerk_1'}) as mock_clerk:
+			result = resolve_user_id('eyJ.clerk.jwt')
+		assert result == 'user_clerk_1'
+		mock_clerk.assert_called_once_with('eyJ.clerk.jwt')
+
+	def test_invalid_clerk_jwt_propagates(self):
+		"""An invalid Clerk JWT raises, so callers keep their existing 401 path."""
+		with patch('utils.validate_clerk_token', side_effect=Exception('Token expired.')):
+			with pytest.raises(Exception, match='Token expired.'):
+				resolve_user_id('eyJ.bad.jwt')
+
+	def test_clerk_jwt_without_sub_raises(self):
+		"""A token that decodes but carries no 'sub' must NOT resolve to a None
+		user_id (which ownership checks would otherwise honor); it must raise."""
+		with patch('utils.validate_clerk_token', return_value={'foo': 'bar'}):
+			with pytest.raises(Exception, match='[Mm]issing subject'):
+				resolve_user_id('eyJ.subless.jwt')
+
+	def test_api_key_returns_owner_user_id(self):
+		"""An sk_live_ key is validated via validate_api_key; user_id comes from the key record."""
+		with patch('api_key_handler.validate_api_key', return_value={'user_id': 'user_api_1', 'api_key_id': 'ak_1'}) as mock_key, \
+				patch('utils.validate_clerk_token') as mock_clerk:
+			result = resolve_user_id('sk_live_abc123')
+		assert result == 'user_api_1'
+		mock_key.assert_called_once_with('sk_live_abc123')
+		# An API key must NOT fall through to Clerk validation.
+		mock_clerk.assert_not_called()
+
+	def test_invalid_api_key_raises(self):
+		"""An sk_live_ key that does not resolve raises and never falls back to Clerk."""
+		with patch('api_key_handler.validate_api_key', return_value=None), \
+				patch('utils.validate_clerk_token') as mock_clerk:
+			with pytest.raises(Exception, match='[Ii]nvalid API key'):
+				resolve_user_id('sk_live_revoked')
+		mock_clerk.assert_not_called()
 
 
 class TestValidateJobData:

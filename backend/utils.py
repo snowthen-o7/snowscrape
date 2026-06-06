@@ -274,6 +274,36 @@ def extract_token_from_event(event):
 		return authorization_header[len("Bearer "):]
 	return None
 
+def resolve_user_id(token):
+	"""Resolve a bearer token to the owning user_id.
+
+	Accepts either a SnowScrape API key (sk_live_...) for programmatic access or
+	a Clerk session JWT from the dashboard. API keys are detected by prefix and
+	checked first; on a missing/revoked key this raises rather than falling
+	through to Clerk validation (which would always fail for a non-JWT anyway).
+	Anything without the API-key prefix is validated as a Clerk JWT.
+
+	Raises on an invalid credential, mirroring validate_clerk_token's contract so
+	callers keep their existing 401 handling.
+	"""
+	# Lazy import: api_key_handler imports from utils at module load, so importing
+	# it at module scope here would create a circular import.
+	from api_key_handler import API_KEY_PREFIX, validate_api_key
+
+	if token and token.startswith(API_KEY_PREFIX):
+		key_record = validate_api_key(token)
+		if not key_record:
+			raise Exception("Invalid API key")
+		return key_record["user_id"]
+
+	user_data = validate_clerk_token(token)
+	user_id = user_data.get("sub")
+	if not user_id:
+		# A token can decode yet lack a subject; treat it as unauthenticated
+		# rather than returning a None user_id that ownership checks would honor.
+		raise Exception("Invalid token: missing subject")
+	return user_id
+
 # Use this function for each URL request, and pass the session across requests within the job
 def fetch_url_with_session(url: str, session: Session, job_id: str, proxy_config: dict = None, render_config: dict = None) -> dict:
 	"""

@@ -20,12 +20,12 @@ class TestHandlers:
 		_conc_ok = {'allowed': True, 'plan': 'pro', 'status': 'trialing', 'active_jobs': 0, 'limit': 5}
 
 		with patch('utils.parse_links_from_file') as mock_parse:
-			with patch('handler.validate_clerk_token') as mock_validate:
+			with patch('handler.resolve_user_id') as mock_validate:
 				with patch('billing.get_subscription', return_value=_sub_active):
 					with patch('billing.check_usage_quota', return_value=_quota_ok):
 						with patch('billing.check_concurrent_job_limit', return_value=_conc_ok):
 							mock_parse.return_value = ['http://test1.com', 'http://test2.com']
-							mock_validate.return_value = {'sub': 'user-123'}
+							mock_validate.return_value = 'user-123'
 
 							event = {
 								'headers': {
@@ -92,7 +92,7 @@ class TestHandlers:
 		"""Test job creation with invalid authentication token."""
 		from handler import create_job_handler
 
-		with patch('handler.validate_clerk_token') as mock_validate:
+		with patch('handler.resolve_user_id') as mock_validate:
 			mock_validate.side_effect = Exception('Invalid token.')
 
 			event = {
@@ -122,6 +122,58 @@ class TestHandlers:
 			assert response['statusCode'] == 401
 
 	@mock_aws
+	def test_jobs_handler_accepts_api_key(self, dynamodb_client, mock_env_vars, lambda_context):
+		"""An sk_live_ API key authenticates a /jobs data-plane request end to end
+		(no auth mocking: this exercises resolve_user_id -> validate_api_key)."""
+		import hashlib
+		from handler import get_all_job_statuses_handler
+
+		raw_key = 'sk_live_' + 'k' * 32
+		key_hash = hashlib.sha256(raw_key.encode('utf-8')).hexdigest()
+		dynamodb_client.Table('SnowscrapeApiKeys-test').put_item(Item={
+			'api_key_id': 'ak_test_1',
+			'user_id': 'user-apikey-1',
+			'key_hash': key_hash,
+			'key_prefix': raw_key[:12],
+			'is_active': True,
+		})
+
+		# Seed one job owned by the key's user and one owned by someone else, to
+		# prove the API key resolves to the right user_id AND that ownership scoping holds.
+		jobs_table = dynamodb_client.Table('SnowscrapeJobs-test')
+		jobs_table.put_item(Item={'job_id': 'job-mine', 'user_id': 'user-apikey-1', 'status': 'completed', 'name': 'Mine'})
+		jobs_table.put_item(Item={'job_id': 'job-theirs', 'user_id': 'user-other', 'status': 'completed', 'name': 'Theirs'})
+
+		event = {'headers': {'Authorization': f'Bearer {raw_key}'}}
+		response = get_all_job_statuses_handler(event, lambda_context)
+
+		assert response['statusCode'] == 200
+		body = json.loads(response['body'])
+		returned_ids = {job['job_id'] for job in body['jobs']}
+		assert returned_ids == {'job-mine'}  # scoped to the key's user, never job-theirs
+
+	@mock_aws
+	def test_jobs_handler_rejects_inactive_api_key(self, dynamodb_client, mock_env_vars, lambda_context):
+		"""A revoked (is_active=False) API key is rejected with 401."""
+		import hashlib
+		from handler import get_all_job_statuses_handler
+
+		raw_key = 'sk_live_' + 'r' * 32
+		key_hash = hashlib.sha256(raw_key.encode('utf-8')).hexdigest()
+		dynamodb_client.Table('SnowscrapeApiKeys-test').put_item(Item={
+			'api_key_id': 'ak_test_revoked',
+			'user_id': 'user-apikey-2',
+			'key_hash': key_hash,
+			'key_prefix': raw_key[:12],
+			'is_active': False,
+		})
+
+		event = {'headers': {'Authorization': f'Bearer {raw_key}'}}
+		response = get_all_job_statuses_handler(event, lambda_context)
+
+		assert response['statusCode'] == 401
+
+	@mock_aws
 	def test_delete_job_handler_success(self, dynamodb_client, mock_env_vars, lambda_context):
 		"""Test successful job deletion via handler."""
 		from handler import create_job_handler, delete_job_handler
@@ -132,12 +184,12 @@ class TestHandlers:
 
 		# First create a job
 		with patch('utils.parse_links_from_file') as mock_parse:
-			with patch('handler.validate_clerk_token') as mock_validate:
+			with patch('handler.resolve_user_id') as mock_validate:
 				with patch('billing.get_subscription', return_value=_sub_active):
 					with patch('billing.check_usage_quota', return_value=_quota_ok):
 						with patch('billing.check_concurrent_job_limit', return_value=_conc_ok):
 							mock_parse.return_value = ['http://test1.com']
-							mock_validate.return_value = {'sub': 'user-123'}
+							mock_validate.return_value = 'user-123'
 
 							create_event = {
 								'headers': {'Authorization': 'Bearer test-token'},
@@ -201,12 +253,12 @@ class TestHandlers:
 
 		# First create a job
 		with patch('utils.parse_links_from_file') as mock_parse:
-			with patch('handler.validate_clerk_token') as mock_validate:
+			with patch('handler.resolve_user_id') as mock_validate:
 				with patch('billing.get_subscription', return_value=_sub_active):
 					with patch('billing.check_usage_quota', return_value=_quota_ok):
 						with patch('billing.check_concurrent_job_limit', return_value=_conc_ok):
 							mock_parse.return_value = ['http://test1.com']
-							mock_validate.return_value = {'sub': 'user-123'}
+							mock_validate.return_value = 'user-123'
 
 							create_event = {
 								'headers': {'Authorization': 'Bearer test-token'},
@@ -249,8 +301,8 @@ class TestHandlers:
 		"""Test retrieving non-existent job details."""
 		from handler import get_job_details_handler
 
-		with patch('handler.validate_clerk_token') as mock_validate:
-			mock_validate.return_value = {'sub': 'user-123'}
+		with patch('handler.resolve_user_id') as mock_validate:
+			mock_validate.return_value = 'user-123'
 
 			event = {
 				'headers': {'Authorization': 'Bearer test-token'},
@@ -274,12 +326,12 @@ class TestHandlers:
 
 		# First create a job
 		with patch('utils.parse_links_from_file') as mock_parse:
-			with patch('handler.validate_clerk_token') as mock_validate:
+			with patch('handler.resolve_user_id') as mock_validate:
 				with patch('billing.get_subscription', return_value=_sub_active):
 					with patch('billing.check_usage_quota', return_value=_quota_ok):
 						with patch('billing.check_concurrent_job_limit', return_value=_conc_ok):
 							mock_parse.return_value = ['http://test1.com']
-							mock_validate.return_value = {'sub': 'user-123'}
+							mock_validate.return_value = 'user-123'
 
 							create_event = {
 								'headers': {'Authorization': 'Bearer test-token'},
@@ -327,12 +379,12 @@ class TestHandlers:
 
 		# First create a job
 		with patch('utils.parse_links_from_file') as mock_parse:
-			with patch('handler.validate_clerk_token') as mock_validate:
+			with patch('handler.resolve_user_id') as mock_validate:
 				with patch('billing.get_subscription', return_value=_sub_active):
 					with patch('billing.check_usage_quota', return_value=_quota_ok):
 						with patch('billing.check_concurrent_job_limit', return_value=_conc_ok):
 							mock_parse.return_value = ['http://test1.com']
-							mock_validate.return_value = {'sub': 'user-123'}
+							mock_validate.return_value = 'user-123'
 
 							create_event = {
 								'headers': {'Authorization': 'Bearer test-token'},
@@ -380,12 +432,12 @@ class TestHandlers:
 
 		# Create multiple jobs
 		with patch('utils.parse_links_from_file') as mock_parse:
-			with patch('handler.validate_clerk_token') as mock_validate:
+			with patch('handler.resolve_user_id') as mock_validate:
 				with patch('billing.get_subscription', return_value=_sub_active):
 					with patch('billing.check_usage_quota', return_value=_quota_ok):
 						with patch('billing.check_concurrent_job_limit', return_value=_conc_ok):
 							mock_parse.return_value = ['http://test1.com']
-							mock_validate.return_value = {'sub': 'user-123'}
+							mock_validate.return_value = 'user-123'
 
 							for i in range(3):
 								create_event = {
@@ -433,12 +485,12 @@ class TestHandlers:
 
 		# First create a job
 		with patch('utils.parse_links_from_file') as mock_parse:
-			with patch('handler.validate_clerk_token') as mock_validate:
+			with patch('handler.resolve_user_id') as mock_validate:
 				with patch('billing.get_subscription', return_value=_sub_active):
 					with patch('billing.check_usage_quota', return_value=_quota_ok):
 						with patch('billing.check_concurrent_job_limit', return_value=_conc_ok):
 							mock_parse.return_value = ['http://test1.com']
-							mock_validate.return_value = {'sub': 'user-123'}
+							mock_validate.return_value = 'user-123'
 
 							create_event = {
 								'headers': {'Authorization': 'Bearer test-token'},
