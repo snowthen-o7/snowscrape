@@ -4,8 +4,11 @@
  */
 
 import { test, expect } from '@playwright/test';
+import { runAuthedE2E } from './helpers/test-env';
 
 test.describe('Notification Center', () => {
+  test.skip(!runAuthedE2E, 'Drives Clerk-gated /dashboard; needs a Clerk test user');
+
   test('should display notification bell in navigation', async ({ page }) => {
     await page.goto('/dashboard');
 

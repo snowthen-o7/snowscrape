@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { runAuthedE2E } from './helpers/test-env';
 
 /**
  * NOTE: Requires a Clerk test user pre-seeded for the test environment.
@@ -7,6 +8,8 @@ import { test, expect } from '@playwright/test';
  */
 
 test.describe('Billing flow E2E', () => {
+  test.skip(!runAuthedE2E, 'Requires Clerk test user (CLERK_TEST_EMAIL/_PASSWORD)');
+
   test('signed-in user with no subscription is redirected to /onboarding/checkout', async ({
     page,
   }) => {

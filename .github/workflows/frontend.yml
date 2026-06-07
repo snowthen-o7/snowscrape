@@ -117,6 +117,16 @@ jobs:
         run: pnpm test:e2e
         env:
           CI: true
+          # <ClerkProvider> wraps the root layout, so every route (including the
+          # public homepage smoke) needs valid Clerk keys to render. Set these as
+          # repo secrets (test instance) for the smoke suite to pass in CI.
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+          NEXT_PUBLIC_API_BASE_URL: ${{ secrets.NEXT_PUBLIC_API_BASE_URL || 'https://api.snowscrape.com' }}
+          # Optional: set these (plus a seeded Clerk test user) to also run the
+          # authenticated dashboard specs; otherwise they skip (see e2e/helpers/test-env.ts).
+          CLERK_TEST_EMAIL: ${{ secrets.CLERK_TEST_EMAIL }}
+          CLERK_TEST_PASSWORD: ${{ secrets.CLERK_TEST_PASSWORD }}
 
       - name: Upload test results
         uses: actions/upload-artifact@v4
