@@ -9,8 +9,21 @@ info:
     on AWS Lambda behind API Gateway.
 
     ## Authentication
-    All endpoints (except `/health`) require a valid Clerk JWT bearer token in the
-    `Authorization` header.
+    All endpoints (except `/health`, `/validate-sftp-url`, and `/billing/webhook`) require a
+    bearer token in the `Authorization` header. Two credential types are accepted:
+
+    - **Clerk JWT** (`BearerAuth`): issued by the Clerk frontend SDK for the dashboard. Accepted
+      on every authenticated endpoint.
+    - **SnowScrape API key** (`ApiKeyAuth`): a long-lived `sk_live_...` secret created under
+      Settings -> API Keys, for programmatic access. Accepted ONLY on the `/jobs` data-plane
+      (create, list, get, update, delete, the pause/resume/cancel/refresh actions, crawls, and
+      result download/preview).
+
+    Control-plane endpoints (API key management, billing, templates, webhooks, integrations/OAuth,
+    and the scraper builder previews) remain Clerk-only by design: an API key cannot mint or revoke
+    other keys, change billing, or manage OAuth connections. Operations that accept an API key
+    advertise both schemes in their `security` block; pass either credential as
+    `Authorization: Bearer <token>`. See `docs/API.md` for a programmatic quickstart.
 
     ## Rate Limiting
     API Gateway enforces a burst limit of 200 concurrent requests and a sustained rate of
@@ -116,6 +129,9 @@ paths:
     post:
       operationId: createJob
       tags: [Jobs]
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
       summary: Create a new scraping job
       description: |
         Creates a new scraping job. Supports two source types:
@@ -157,6 +173,9 @@ paths:
     get:
       operationId: getAllJobStatuses
       tags: [Jobs]
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
       summary: List all jobs for the authenticated user
       description: |
         Returns all jobs belonging to the authenticated user with pagination support.
@@ -208,6 +227,9 @@ paths:
     get:
       operationId: getJobDetails
       tags: [Jobs]
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
       summary: Get job details
       description: Returns full details of a specific job. Verifies the authenticated user owns the job.
       parameters:
@@ -234,6 +256,9 @@ paths:
     put:
       operationId: updateJob
       tags: [Jobs]
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
       summary: Update a job
       description: Updates an existing job configuration. Validates the request body and verifies ownership.
       parameters:
@@ -268,6 +293,9 @@ paths:
     delete:
       operationId: deleteJob
       tags: [Jobs]
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
       summary: Delete a job
       description: Deletes a job and all associated crawls. Verifies ownership before deletion.
       parameters:
@@ -298,6 +326,9 @@ paths:
     patch:
       operationId: pauseJob
       tags: [Job Actions]
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
       summary: Pause a job
       description: Pauses a running or scheduled job. The job will not be picked up by the scheduler until resumed.
       parameters:
@@ -326,6 +357,9 @@ paths:
     patch:
       operationId: resumeJob
       tags: [Job Actions]
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
       summary: Resume a paused job
       description: Resumes a previously paused job so it can be picked up by the scheduler again.
       parameters:
@@ -354,6 +388,9 @@ paths:
     patch:
       operationId: cancelJob
       tags: [Job Actions]
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
       summary: Cancel a job
       description: Cancels a running or queued job. If the job is currently being processed, it will be stopped.
       parameters:
@@ -384,6 +421,9 @@ paths:
     post:
       operationId: refreshJob
       tags: [Job Actions]
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
       summary: Manually refresh / re-crawl a job
       description: |
         Triggers an immediate re-crawl for the specified job, bypassing the normal schedule.
@@ -417,6 +457,9 @@ paths:
     get:
       operationId: getJobCrawls
       tags: [Crawls]
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
       summary: List crawls for a job
       description: Returns all crawl records associated with a job. Verifies ownership of the parent job.
       parameters:
@@ -446,6 +489,9 @@ paths:
     get:
       operationId: getCrawlDetails
       tags: [Crawls]
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
       summary: Get crawl details
       description: Returns details for a specific crawl within a job. Verifies ownership of the parent job.
       parameters:
@@ -480,6 +526,9 @@ paths:
     get:
       operationId: downloadResults
       tags: [Results]
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
       summary: Download job results
       description: |
         Generates a pre-signed S3 URL for downloading job results in the requested format.
@@ -537,6 +586,9 @@ paths:
     get:
       operationId: previewResults
       tags: [Results]
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
       summary: Preview job results with pagination
       description: |
         Returns a paginated subset of job results for in-app preview. Fetches the
@@ -1372,6 +1424,16 @@ components:
       description: |
         Clerk-issued JWT token. Obtain from the Clerk frontend SDK and pass in
         the `Authorization: Bearer <token>` header.
+
+    ApiKeyAuth:
+      type: http
+      scheme: bearer
+      description: |
+        SnowScrape API key for programmatic access. Create one under
+        Settings -> API Keys; the full `sk_live_...` value is shown only once at
+        creation. Pass it in the `Authorization: Bearer sk_live_...` header.
+        Accepted ONLY on the `/jobs` data-plane (jobs CRUD, job actions, crawls,
+        and result download/preview); control-plane endpoints stay Clerk-only.
 
   # ---------------------------------------------------------------------------
   # Parameters
