@@ -1,9 +1,12 @@
 # SnowScrape -- Progress & Launch Readiness
 
-**Last Updated:** 2026-06-06
+**Last Updated:** 2026-06-07
 **Launch Readiness:** ~98% (live; Google Docs destination backend complete, awaiting Alex's Google Cloud OAuth client + deploy)
-**Build Status:** PASSES (backend full suite 337 passed green as of 2026-06-06; frontend lint + vitest 51/51 + prod build green on claude-main after the 2026-06-06 frontend CI fix)
+**Build Status:** PASSES (backend full suite 360 passed green as of 2026-06-07; frontend lint + vitest 51/51 + prod build green on claude-main after the 2026-06-06 frontend CI fix)
 **Test Coverage:** ~60-70% (unit + integration; Playwright setup present)
+
+### Recent -- 2026-06-07
+- Programmatic API: documented and spec-pinned the API-key auth that shipped on 2026-06-06 (claude/snowscrape/openapi-apikey-auth-docs, PR into claude-main). The `/jobs` data-plane accepts an `sk_live_...` API key OR a Clerk JWT (via `resolve_user_id`), but `backend/openapi.yml` still said "All endpoints require a valid Clerk JWT" and defined only the `BearerAuth` scheme, so the launch feature (sub-project #2, programmatic access) was undocumented. Changes: (1) rewrote the `info` Authentication section to describe both credential types and which surface accepts each; (2) added an `ApiKeyAuth` security scheme; (3) added `security: [BearerAuth, ApiKeyAuth]` to the 13 data-plane operations (createJob, getAllJobStatuses, getJobDetails, updateJob, deleteJob, pause/resume/cancel/refreshJob, getJobCrawls, getCrawlDetails, downloadResults, previewResults), leaving the control-plane Clerk-only by design; (4) wrote `docs/API.md`, a programmatic quickstart (create key, authenticate, job lifecycle, download, actions, rate limits); (5) added `backend/tests/unit/test_openapi_spec.py`, a drift guard that pins the spec to the real auth model (data-plane ops advertise ApiKeyAuth; control-plane ops do not), plus `pyyaml` as a dev dep. Evidence: full backend suite 360 passed / 0 failed (was 337; +23 from the new guard). No runtime code changed; frontend untouched.
 
 ### Recent -- 2026-06-06
 - Backend CI red-signal fix (claude-main, pending Alex's merge to main). The `claude-main -> main` PR (#7) `Backend Tests` job failed on `test_delete_job_handler_success` with `NoCredentialsError` (issue #16). Root cause: `utils.py` bound `s3`, `job_table` and `url_table` to connection-pool resources at module IMPORT time, pinning each resource to whatever credentials resolved during import. On CI there are no ambient AWS credentials at import (moto/test creds are set up per-test, after import), so `delete_job_links -> url_table.query` reached real boto3 with no creds. It passed locally only because the dev machine has ambient creds; the import-time binding also defeated the per-test connection-pool reset in conftest. Fix: fetch the URLs table and S3 client lazily at call time via `get_table`/`get_s3_client` (the pattern the rest of the code already uses) in `delete_job_links`, `fetch_urls_for_job`, `update_url_status`, `refresh_job_urls`, `delete_s3_result_file`; removed the dead import-time `job_table` global. Added `TestLazyAwsResourceResolution` regression tests (no import-time AWS globals; helpers resolve their resource at call time). Evidence (local): full backend suite 337 passed (was 334). Decisive verification is PR #7's Backend Tests CI re-run. Merged to claude-main via PR #19. Remaining frontend red signal on PR #7: `E2E Tests` (Playwright, issue #18).
@@ -128,7 +131,8 @@
 - Backend `api_key_handler.py` and Settings → API Keys tab fully implemented (one-time-secret modal, list/create/revoke)
 - API keys can be created and managed
 - DONE (claude-main, 2026-06-06): `Authorization: Bearer sk_live_...` now authenticates the entire `/jobs` data-plane via `resolve_user_id` (create, list, get, update, delete, pause, cancel, resume, refresh, crawls, download, preview)
-- Remaining: decide whether to extend API-key auth to the other data endpoints (templates, webhooks, export destinations); the control-plane (api-keys CRUD, billing, integrations/OAuth) stays Clerk-only by design. Public API docs / a quickstart for programmatic use would also help.
+- DONE (claude-main, 2026-06-07): public API docs + programmatic quickstart at `docs/API.md`, and `backend/openapi.yml` now documents the dual auth model (`ApiKeyAuth` scheme + `security` on the 13 data-plane ops), guarded by `test_openapi_spec.py`
+- Remaining: decide whether to extend API-key auth to the other data endpoints (templates, webhooks, export destinations); the control-plane (api-keys CRUD, billing, integrations/OAuth) stays Clerk-only by design.
 - Sub-project #2 of launch sequence
 
 ### Notification System (Partial)
@@ -149,7 +153,7 @@
 | Work Item | Estimate | Priority |
 |-----------|----------|----------|
 | First real $0 trial signup as final live smoke | hours | CRITICAL -- final acceptance |
-| API key auth on public endpoints | jobs data-plane DONE (2026-06-06); optional: extend to templates/webhooks/destinations + write API docs | MEDIUM |
+| API key auth on public endpoints | jobs data-plane DONE (2026-06-06); API docs + openapi spec DONE (2026-06-07); optional: extend to templates/webhooks/destinations | MEDIUM |
 | Real analytics data pipeline | 2-3 weeks | HIGH |
 | Email notifications | 1 week | MEDIUM |
 | In-app notification center | 1 week | LOW |

@@ -261,6 +261,7 @@ done
 
 ## Documentation
 
+- **[docs/API.md](./docs/API.md)** - Programmatic API quickstart (API-key auth, job lifecycle)
 - **[FEATURES.md](./FEATURES.md)** - Detailed guide to Phase 1 features (Export, Webhooks, Proxies, JS Rendering)
 - **[DEPLOYMENT.md](./DEPLOYMENT.md)** - Complete deployment guide for all features
 - **[IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md)** - 11-phase development roadmap
