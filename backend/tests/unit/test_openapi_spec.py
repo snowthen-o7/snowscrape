@@ -68,11 +68,27 @@ def operations(spec):
 
 
 def _schemes_for(operation):
-    """The set of security scheme names accepted by an operation."""
+    """The set of security scheme names declared on an operation itself."""
     schemes = set()
     for requirement in operation.get("security", []):
         schemes.update(requirement.keys())
     return schemes
+
+
+def _effective_schemes(operation, global_security):
+    """The set of accepted schemes, falling back to the global default.
+
+    OpenAPI: an operation with no `security` key inherits the document-level
+    default. Use this so the control-plane guard also catches a regression where
+    an op's entire `security` block is deleted (which would otherwise read as
+    "no auth" instead of inheriting the Clerk-only default).
+    """
+    if "security" not in operation:
+        schemes = set()
+        for requirement in global_security:
+            schemes.update(requirement.keys())
+        return schemes
+    return _schemes_for(operation)
 
 
 def test_spec_parses(spec):
@@ -101,9 +117,13 @@ def test_data_plane_accepts_api_key(operations, operation_id):
 
 
 @pytest.mark.parametrize("operation_id", sorted(CLERK_ONLY_OPERATIONS))
-def test_control_plane_rejects_api_key(operations, operation_id):
+def test_control_plane_is_clerk_only(operations, spec, operation_id):
     assert operation_id in operations, f"missing operation {operation_id} in spec"
-    schemes = _schemes_for(operations[operation_id])
-    assert API_KEY_SCHEME not in schemes, (
-        f"{operation_id} is control-plane and must stay Clerk-only (no ApiKeyAuth)"
+    schemes = _effective_schemes(operations[operation_id], spec.get("security", []))
+    # Control-plane must resolve to Clerk-only: BearerAuth present, ApiKeyAuth absent.
+    # Using effective schemes also catches a deleted security block (which would
+    # leave the op unauthenticated rather than Clerk-gated).
+    assert schemes == {CLERK_SCHEME}, (
+        f"{operation_id} is control-plane and must stay Clerk-only "
+        f"(effective schemes were {schemes or 'none'})"
     )
