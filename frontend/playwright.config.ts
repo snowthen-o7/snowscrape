@@ -7,13 +7,13 @@ import { defineConfig, devices } from '@playwright/test';
 
 // The dev server binds port 3001 (see package.json `dev`: `next dev -p 3001`).
 // baseURL and webServer.url MUST match it, or Playwright's webServer wait times
-// out and the whole job fails before any test runs.
-const PORT = process.env.PLAYWRIGHT_PORT || '3001';
-const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || `http://localhost:${PORT}`;
+// out and the whole job fails before any test runs. The port is fixed to match
+// the `dev` script; override the whole URL with PLAYWRIGHT_BASE_URL if needed.
+const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3001';
 
-// In CI, run a single engine (chromium). The credential-free smoke suite does
-// not need cross-browser coverage, and 5 engines at workers:1 with retries was
-// slow and flaky. Local runs keep the full matrix.
+// In CI, run a single engine (chromium). The smoke suite does not need
+// cross-browser coverage, and 5 engines at workers:1 with retries was slow and
+// flaky. Local runs keep the full matrix.
 const allProjects = [
   { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
   { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
@@ -21,6 +21,7 @@ const allProjects = [
   { name: 'Mobile Chrome', use: { ...devices['Pixel 5'] } },
   { name: 'Mobile Safari', use: { ...devices['iPhone 12'] } },
 ];
+const ciProjects = allProjects.filter((p) => p.name === 'chromium');
 
 export default defineConfig({
   testDir: './e2e',
@@ -36,7 +37,7 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
 
-  projects: process.env.CI ? [allProjects[0]] : allProjects,
+  projects: process.env.CI ? ciProjects : allProjects,
 
   /* Run dev server before tests */
   webServer: {
@@ -46,12 +47,8 @@ export default defineConfig({
     // Cold Next dev start (plus building the @snowforge/ui git dependency) can
     // exceed the 60s default on CI; give it room before declaring a timeout.
     timeout: 120_000,
-    // Forward Clerk publishable key so <ClerkProvider> can mount in the spawned
-    // dev server when CI provides one.
-    env: {
-      ...(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
-        ? { NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }
-        : {}),
-    },
+    // The spawned dev server inherits process.env by default, so Clerk keys
+    // (NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY, CLERK_SECRET_KEY) set by the CI job
+    // flow through to <ClerkProvider> without an explicit env allowlist here.
   },
 });
