@@ -37,6 +37,7 @@ import { toast } from '@/lib/toast';
 import { jobsAPI } from '@/lib/api';
 import { DestinationSelector } from '@/components/destinations/DestinationSelector';
 import { useWebSocket } from '@/lib/useWebSocket';
+import { buildVisualJobPayload } from '@/lib/jobs/buildVisualJobPayload';
 
 interface ExtractedField {
   id: string;
@@ -362,23 +363,17 @@ export default function VisualBuilderPage() {
         return;
       }
 
-      // Format queries from extracted fields
-      const queries = extractedFields.map((field) => ({
-        name: field.name,
-        type: field.type,
-        query: field.selector,
-        join: false,
-      }));
-
-      // Create the job
+      // The Visual builder scrapes a single target URL, so it must create a
+      // direct_url job. Without source_type the backend defaults to 'csv' and
+      // then requires a file_mapping this flow never sends, rejecting the job.
       const job = await jobsAPI.create(
-        {
+        buildVisualJobPayload({
           name: jobName.trim(),
-          source: targetUrl,
-          queries,
-          rate_limit: 10, // Default rate limit
-          export_destination_ids: destinationIds,
-        },
+          url: targetUrl,
+          rateLimit: 10, // Default rate limit
+          fields: extractedFields,
+          destinationIds,
+        }),
         token
       );
 
