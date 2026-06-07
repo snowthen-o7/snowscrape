@@ -69,7 +69,7 @@ describe('buildVisualJobPayload', () => {
     expect(payload.export_destination_ids).toEqual(['d-1', 'd-2']);
   });
 
-  it('defaults export_destination_ids to an empty array', () => {
+  it('passes an empty export_destination_ids array through unchanged', () => {
     const payload = buildVisualJobPayload({
       name: 'Test',
       url: 'https://example.com',
