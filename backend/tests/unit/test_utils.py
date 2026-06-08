@@ -741,6 +741,31 @@ class TestParseLinksFromFileErrorSurfacing:
 			"a clean production parse must not emit any warning"
 		)
 
+	@responses.activate
+	def test_pandas_failure_falls_back_at_debug_not_warning(self):
+		"""When pandas IS available but fails, the fallback to the manual parser is a
+		benign DEBUG event (not a WARNING), and the manual result is still returned."""
+		url = 'http://example.com/urls.csv'
+		content = 'name,url,price\nProduct1,http://test1.com,99.99'
+		responses.add(responses.GET, url, body=content, status=200)
+		file_mapping = {
+			'delimiter': ',',
+			'enclosure': '"',
+			'escape': '\\',
+			'url_column': 'default'
+		}
+
+		broken_pd = MagicMock()
+		broken_pd.read_csv.side_effect = ValueError("pandas boom")
+		# pandas is not installed in this env, so utils.pd does not exist: create=True.
+		with patch('utils.PANDAS_AVAILABLE', True), patch('utils.pd', broken_pd, create=True), \
+				patch('utils.logger') as mock_logger:
+			result = parse_links_from_file(file_mapping, url)
+
+		assert result == ['http://test1.com']
+		assert mock_logger.debug.called, "a pandas failure must fall back at DEBUG"
+		assert not mock_logger.warning.called, "a pandas failure must not be a WARNING"
+
 
 class TestLazyAwsResourceResolution:
 	"""Regression tests for the import-time AWS resource binding bug (issue #16).
