@@ -11,6 +11,7 @@
  */
 
 import type { CreateJobDTO } from '@/lib/api/jobs';
+import { cssSelectorToXPath } from '@/lib/jobs/cssToXpath';
 
 export interface VisualExtractedField {
   name: string;
@@ -33,14 +34,23 @@ export function buildVisualJobPayload({
   fields,
   destinationIds,
 }: BuildVisualJobPayloadParams): CreateJobDTO {
-  const queries = fields.map((field) => ({
-    name: field.name,
-    // The backend job runner supports xpath/regex (not raw css), so a css
-    // selector is downgraded to xpath, matching the AI flow (buildAiJobPayload).
-    type: field.type === 'css' ? 'xpath' : field.type,
-    query: field.selector,
-    join: false,
-  }));
+  const queries = fields.map((field) => {
+    if (field.type === 'css') {
+      // The backend job runner only evaluates xpath/regex/jsonpath, not raw css.
+      // Translate the css selector to XPath so the field actually extracts at
+      // scrape time. If it cannot be translated faithfully, fail loudly rather
+      // than silently shipping an XPath-labeled css string that extracts nothing
+      // (issue #26).
+      const xpath = cssSelectorToXPath(field.selector);
+      if (xpath === null) {
+        throw new Error(
+          `Field "${field.name}": the CSS selector "${field.selector}" could not be converted to XPath. Rewrite it as an XPath expression and set the field type to XPath.`
+        );
+      }
+      return { name: field.name, type: 'xpath', query: xpath, join: false };
+    }
+    return { name: field.name, type: field.type, query: field.selector, join: false };
+  });
 
   return {
     name,
