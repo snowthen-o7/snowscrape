@@ -142,6 +142,7 @@ describe('cssSelectorToXPath', () => {
       ['css escape in value', '[data-x=a\\,b]'],
       ['trailing comma', 'div,'],
       ['leading comma', ',div'],
+      ['leading-hyphen tag name', '-div'],
     ])('%s', (_label, input) => {
       expect(cssSelectorToXPath(input)).toBeNull();
     });
@@ -151,6 +152,46 @@ describe('cssSelectorToXPath', () => {
       expect(cssSelectorToXPath(null)).toBeNull();
       // @ts-expect-error exercising the runtime guard
       expect(cssSelectorToXPath(undefined)).toBeNull();
+    });
+  });
+
+  describe('HTML case-normalization (lxml lowercases names; XPath is case-sensitive)', () => {
+    it('lowercases an uppercase type selector', () => {
+      expect(cssSelectorToXPath('DIV')).toBe('//div');
+    });
+
+    it('lowercases a mixed-case type + attribute name', () => {
+      expect(cssSelectorToXPath('INPUT[TYPE=text]')).toBe("//input[@type='text']");
+    });
+
+    it('lowercases an attribute name in a presence selector', () => {
+      expect(cssSelectorToXPath('[data-Foo]')).toBe('//*[@data-foo]');
+    });
+
+    it('preserves the case of a class value (HTML class values are case-sensitive)', () => {
+      expect(cssSelectorToXPath('.Card')).toBe(
+        "//*[contains(concat(' ',normalize-space(@class),' '),' Card ')]"
+      );
+    });
+
+    it('preserves the case of an attribute value', () => {
+      expect(cssSelectorToXPath('[data-id=AbC]')).toBe("//*[@data-id='AbC']");
+    });
+  });
+
+  describe('empty-value substring operators never match in CSS, so they return null', () => {
+    it.each([
+      ['prefix', '[a^=""]'],
+      ['suffix', '[a$=""]'],
+      ['substring', '[class*=""]'],
+      ['word', '[rel~=""]'],
+      ['hyphen', '[lang|=""]'],
+    ])('%s with empty value', (_label, input) => {
+      expect(cssSelectorToXPath(input)).toBeNull();
+    });
+
+    it('exact match with an empty value is still valid', () => {
+      expect(cssSelectorToXPath('[a=""]')).toBe("//*[@a='']");
     });
   });
 

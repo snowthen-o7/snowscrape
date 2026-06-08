@@ -37,7 +37,12 @@ interface Combinator {
   compound: string;
 }
 
+// id / class values: a CSS ident (may start with a single leading hyphen).
 const IDENT = /^-?[A-Za-z_][\w-]*$/;
+// element and attribute NAMES: no leading hyphen (a bare `//-div` / `@-foo` name
+// test is invalid XPath). HTML lowercases these at parse time, so we lowercase
+// before emitting; XPath name tests are case-sensitive (see issue #26 review).
+const NAME_TOKEN = /^[A-Za-z_][\w-]*$/;
 
 /** Split a string on a delimiter, ignoring delimiters inside [] or quotes. */
 function splitTopLevel(input: string, delim: string): string[] | null {
@@ -159,22 +164,24 @@ function translateAttribute(body: string): string | null {
   if (eq === -1) {
     // presence: [attr]
     const name = body.trim();
-    if (!IDENT.test(name)) return null;
-    return `@${name}`;
+    if (!NAME_TOKEN.test(name)) return null;
+    return `@${name.toLowerCase()}`;
   }
 
   const opChar = eq > 0 ? body[eq - 1] : '';
   let op: string;
-  let name: string;
+  let rawName: string;
   if (opChar === '^' || opChar === '$' || opChar === '*' || opChar === '~' || opChar === '|') {
     op = `${opChar}=`;
-    name = body.slice(0, eq - 1).trim();
+    rawName = body.slice(0, eq - 1).trim();
   } else {
     op = '=';
-    name = body.slice(0, eq).trim();
+    rawName = body.slice(0, eq).trim();
   }
   let rawVal = body.slice(eq + 1);
-  if (!IDENT.test(name)) return null;
+  if (!NAME_TOKEN.test(rawName)) return null;
+  // HTML lowercases attribute names; XPath name tests are case-sensitive.
+  const name = rawName.toLowerCase();
 
   rawVal = rawVal.trim();
   // strip matching quotes
@@ -189,6 +196,12 @@ function translateAttribute(body: string): string | null {
 
   const lit = xpathLiteral(rawVal);
   if (lit === null) return null;
+
+  // Per CSS, the substring/prefix/suffix/word/hyphen operators NEVER match an
+  // empty value, but the naive XPath (e.g. contains(@x,'')) matches every
+  // element with the attribute. Bail to null so the builder fails loudly rather
+  // than silently matching everything. Exact `=` with an empty value is fine.
+  if (op !== '=' && rawVal === '') return null;
 
   switch (op) {
     case '=':
@@ -232,8 +245,9 @@ function translateCompound(compound: string): string | null {
       tag += compound[i];
       i++;
     }
-    if (!IDENT.test(tag)) return null;
-    element = tag;
+    if (!NAME_TOKEN.test(tag)) return null;
+    // HTML lowercases element names; XPath name tests are case-sensitive.
+    element = tag.toLowerCase();
   }
 
   while (i < compound.length) {
