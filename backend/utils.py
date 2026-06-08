@@ -772,74 +772,105 @@ def fetch_file_content(file_url):
 	else:
 		raise Exception("Unsupported URL scheme. Only HTTP, HTTPS, and SFTP are supported.")
 
+def _parse_links_with_pandas(file_content, file_mapping):
+	"""Extract URLs using pandas autodetection.
+
+	Only reachable when pandas is installed (local/dev). Pandas is intentionally
+	NOT bundled in the Lambda, so this path never runs in production; its failures
+	are treated by the caller as a benign fallback to the manual parser, not an
+	error.
+	"""
+	df = pd.read_csv(StringIO(file_content), on_bad_lines="skip")  # StringIO treats the content as a file-like object
+
+	# Handle the "default" option for URL column
+	if file_mapping['url_column'] == 'default':
+		url_column_index = detect_url_column(df.columns)  # Use the regex to detect a matching column
+		if url_column_index is None:
+			raise ValueError("No suitable URL column found matching 'link' or 'url'.")
+		url_column = df.columns[url_column_index]  # Use the detected column
+	else:
+		# If 'url_column' is a string, use it as a column name. If it's an integer, use it as an index.
+		url_column = file_mapping['url_column'] if isinstance(file_mapping['url_column'], str) else df.columns[file_mapping['url_column']]
+
+	# Extract the URLs from the specified column
+	urls = df[url_column].dropna().tolist()
+
+	logger.info("Pandas auto-detection successful", url_count=len(urls))
+	return urls
+
+
+def _parse_links_manual(file_content, file_mapping):
+	"""Extract URLs with the stdlib csv reader.
+
+	Pandas is intentionally NOT bundled in the Lambda, so THIS is the real
+	production path. It mirrors the pandas-path semantics: row 0 is the header, the
+	URL column is resolved against that header, and the header row plus any empty
+	cells are skipped. A genuine parsing failure here is a real error and is allowed
+	to propagate (parse_links_from_file logs it at ERROR), never masked.
+	"""
+	delimiter = file_mapping.get('delimiter', ',')
+	quotechar = None if file_mapping.get('enclosure') == 'none' else file_mapping.get('enclosure', None)
+	escapechar = None if file_mapping.get('escape') == 'none' else file_mapping.get('escape', None)
+
+	reader = csv.reader(file_content.splitlines(), delimiter=delimiter, quotechar=quotechar, escapechar=escapechar)
+	rows = list(reader)
+	if not rows:
+		return []
+
+	header = rows[0]
+	url_column = file_mapping['url_column']
+
+	# Resolve the URL column index against the header row.
+	if url_column == 'default':
+		url_column_index = detect_url_column(header)  # regex-detect a 'link'/'url' column
+		if url_column_index is None:
+			raise ValueError("No suitable URL column found matching 'link' or 'url'.")
+	elif isinstance(url_column, str):
+		if url_column in header:
+			url_column_index = header.index(url_column)
+		else:
+			raise Exception(f"Column '{url_column}' not found in header")
+	else:
+		url_column_index = url_column  # integer index
+
+	# Row 0 is the header; only data rows contribute URLs, and empty cells are skipped.
+	links = []
+	for row in rows[1:]:
+		if len(row) > url_column_index:
+			value = row[url_column_index].strip()
+			if value:
+				links.append(value)
+
+	return links
+
+
 def parse_links_from_file(file_mapping, file_url):
+	"""Resolve the list of URLs from a CSV source file.
+
+	Pandas is intentionally NOT bundled in the Lambda, so the stdlib csv parser
+	(``_parse_links_manual``) is the real production path. When pandas IS available
+	(local/dev) we try it first for its richer autodetection, but a pandas failure
+	is a benign fallback (logged at DEBUG), never an error. A failure in the manual
+	parser, by contrast, is a genuine error: it is logged at ERROR and re-raised so
+	it is never masked as a misleading 'pandas not available' warning (issue #12).
+	"""
+	# Fetch file content from the given URL (HTTP/HTTPS or SFTP). A fetch failure is
+	# a real error and propagates directly.
+	file_content = fetch_file_content(file_url)
+
+	# Best-effort pandas autodetection (dev/local only; never present in the Lambda).
+	if PANDAS_AVAILABLE:
+		try:
+			return _parse_links_with_pandas(file_content, file_mapping)
+		except Exception as e:
+			logger.debug("Pandas parsing failed; using manual CSV parser", error=str(e))
+
+	# Manual parsing is the production path. A failure here is genuine: surface it.
 	try:
-		# Fetch file content from the given URL (HTTP/HTTPS or SFTP)
-		file_content = fetch_file_content(file_url)
-
-		# Step 1: Try using pandas to autodetect CSV structure and extract links (if available)
-		if not PANDAS_AVAILABLE:
-			raise ImportError("Pandas not available, using fallback CSV parser")
-		df = pd.read_csv(StringIO(file_content), on_bad_lines="skip")  # Using StringIO to treat file content as a file-like object
-		
-		# Handle the "default" option for URL column
-		if file_mapping['url_column'] == 'default':
-			url_column_index = detect_url_column(df.columns)  # Use the regex to detect a matching column
-			if url_column_index is None:
-				raise ValueError("No suitable URL column found matching 'link' or 'url'.")
-			url_column = df.columns[url_column_index]  # Use the detected column
-		else:
-			# If 'url_column' is a string, use it as a column name. If it's an integer, use it as an index.
-			url_column = file_mapping['url_column'] if isinstance(file_mapping['url_column'], str) else df.columns[file_mapping['url_column']]
-		
-		# Extract the URLs from the specified column
-		urls = df[url_column].dropna().tolist()
-  
-		logger.info("Pandas auto-detection successful", url_count=len(urls))
-		return urls
-
+		return _parse_links_manual(file_content, file_mapping)
 	except Exception as e:
-		# Step 2: If pandas fails, fallback to csv with manual file_mapping settings
-		logger.warning("Pandas failed to parse file, falling back to manual parsing", error=str(e))
-
-		# Manual parsing using csv.reader. Pandas is intentionally NOT bundled in the
-		# Lambda, so this fallback is the real production path. It must mirror the
-		# pandas-path semantics: row 0 is the header, the URL column is resolved
-		# against that header, and the header row plus any empty cells are skipped.
-		delimiter = file_mapping.get('delimiter', ',')
-		quotechar = None if file_mapping.get('enclosure') == 'none' else file_mapping.get('enclosure', None)
-		escapechar = None if file_mapping.get('escape') == 'none' else file_mapping.get('escape', None)
-
-		reader = csv.reader(file_content.splitlines(), delimiter=delimiter, quotechar=quotechar, escapechar=escapechar)
-		rows = list(reader)
-		if not rows:
-			return []
-
-		header = rows[0]
-		url_column = file_mapping['url_column']
-
-		# Resolve the URL column index against the header row.
-		if url_column == 'default':
-			url_column_index = detect_url_column(header)  # regex-detect a 'link'/'url' column
-			if url_column_index is None:
-				raise ValueError("No suitable URL column found matching 'link' or 'url'.")
-		elif isinstance(url_column, str):
-			if url_column in header:
-				url_column_index = header.index(url_column)
-			else:
-				raise Exception(f"Column '{url_column}' not found in header")
-		else:
-			url_column_index = url_column  # integer index
-
-		# Row 0 is the header; only data rows contribute URLs, and empty cells are skipped.
-		links = []
-		for row in rows[1:]:
-			if len(row) > url_column_index:
-				value = row[url_column_index].strip()
-				if value:
-					links.append(value)
-
-		return links
+		logger.error("Failed to parse links from CSV file", file_url=file_url, error=str(e))
+		raise
 
 def refresh_job_urls(job_id, links):
 	"""
