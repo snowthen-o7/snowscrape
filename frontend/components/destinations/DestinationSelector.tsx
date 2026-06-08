@@ -15,11 +15,22 @@ interface Props {
   onChange: (ids: string[]) => void;
 }
 
+// Mirrors the backend cap in backend/utils.py ("Maximum 10 export destinations per job").
+// Keep in sync if the server limit changes.
+const MAX_DESTINATIONS = 10;
+
 export function DestinationSelector({ value, onChange }: Props) {
   const { data: destinations, isLoading } = useDestinations();
+  const atCap = value.length >= MAX_DESTINATIONS;
 
   function toggle(id: string, checked: boolean) {
-    onChange(checked ? [...value, id] : value.filter((x) => x !== id));
+    if (checked) {
+      // Guard the cap even if a disabled control is somehow toggled.
+      if (value.includes(id) || value.length >= MAX_DESTINATIONS) return;
+      onChange([...value, id]);
+    } else {
+      onChange(value.filter((x) => x !== id));
+    }
   }
 
   if (isLoading) {
@@ -44,15 +55,33 @@ export function DestinationSelector({ value, onChange }: Props) {
 
   return (
     <div className="space-y-2">
-      {destinations.map((d) => (
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
+        <span>
+          {value.length} / {MAX_DESTINATIONS} selected
+        </span>
+        {atCap && (
+          <span role="status" aria-live="polite">
+            Maximum {MAX_DESTINATIONS} destinations per job
+          </span>
+        )}
+      </div>
+      {destinations.map((d) => {
+        const isChecked = value.includes(d.destination_id);
+        const isDisabled = atCap && !isChecked;
+        return (
         <label
           key={d.destination_id}
-          className="flex items-center gap-3 rounded-md border p-3 hover:bg-muted/50 cursor-pointer"
+          className={`flex items-center gap-3 rounded-md border p-3 ${
+            isDisabled
+              ? 'cursor-not-allowed opacity-50'
+              : 'hover:bg-muted/50 cursor-pointer'
+          }`}
           htmlFor={`dest-${d.destination_id}`}
         >
           <Checkbox
             id={`dest-${d.destination_id}`}
-            checked={value.includes(d.destination_id)}
+            checked={isChecked}
+            disabled={isDisabled}
             onCheckedChange={(c) => toggle(d.destination_id, Boolean(c))}
           />
           <div className="flex-1">
@@ -67,7 +96,8 @@ export function DestinationSelector({ value, onChange }: Props) {
             </div>
           </div>
         </label>
-      ))}
+        );
+      })}
     </div>
   );
 }
