@@ -6,6 +6,7 @@
  */
 
 import type { CreateJobDTO } from '@/lib/api/jobs';
+import { cssSelectorToXPath } from '@/lib/jobs/cssToXpath';
 
 export interface AiSuggestionField {
   name: string;
@@ -33,14 +34,27 @@ export function buildAiJobPayload({
 }: BuildAiJobPayloadParams): CreateJobDTO {
   const queries = fields
     .filter((f) => f.accepted)
-    .map((field) => ({
-      name: field.name,
-      // The backend job runner supports xpath/regex/ai, not raw css, so a css
-      // suggestion is downgraded to xpath unless the user flipped it to AI.
-      type: field.useAi ? 'ai' : field.type === 'css' ? 'xpath' : field.type,
-      query: field.useAi ? field.description : field.query,
-      join: false,
-    }));
+    .map((field) => {
+      // The user can flip any suggestion to AI (natural-language extraction),
+      // which takes precedence over the structured selector.
+      if (field.useAi) {
+        return { name: field.name, type: 'ai', query: field.description, join: false };
+      }
+      if (field.type === 'css') {
+        // The backend job runner only evaluates xpath/regex/jsonpath, not raw
+        // css. Translate the css selector to XPath so it actually extracts; if
+        // it cannot be translated faithfully, fail loudly rather than silently
+        // shipping an XPath-labeled css string that extracts nothing (issue #26).
+        const xpath = cssSelectorToXPath(field.query);
+        if (xpath === null) {
+          throw new Error(
+            `Field "${field.name}": the CSS selector "${field.query}" could not be converted to XPath. Edit it to an XPath expression, or switch the field to AI extraction.`
+          );
+        }
+        return { name: field.name, type: 'xpath', query: xpath, join: false };
+      }
+      return { name: field.name, type: field.type, query: field.query, join: false };
+    });
 
   return {
     name,

@@ -45,16 +45,31 @@ describe('buildVisualJobPayload', () => {
     expect(payload.queries[1]).toMatchObject({ name: 'title', type: 'regex', query: 'h1.title', join: false });
   });
 
-  it('downgrades css selectors to xpath (backend job runner does not support raw css)', () => {
+  it('translates css selectors to real XPath (backend job runner does not support raw css)', () => {
     const payload = buildVisualJobPayload({
       name: 'Test',
       url: 'https://example.com',
       rateLimit: 10,
-      fields: [field({ type: 'css' })],
+      fields: [field({ type: 'css', selector: 'div.card > a' })],
       destinationIds: [],
     });
 
     expect(payload.queries[0].type).toBe('xpath');
+    expect(payload.queries[0].query).toBe(
+      "//div[contains(concat(' ',normalize-space(@class),' '),' card ')]/a"
+    );
+  });
+
+  it('throws a clear error when a css selector cannot be translated to XPath', () => {
+    expect(() =>
+      buildVisualJobPayload({
+        name: 'Test',
+        url: 'https://example.com',
+        rateLimit: 10,
+        fields: [field({ name: 'odd', type: 'css', selector: 'a:hover' })],
+        destinationIds: [],
+      })
+    ).toThrow(/could not be converted to XPath/);
   });
 
   it('passes export_destination_ids through to the payload', () => {
