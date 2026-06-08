@@ -59,7 +59,11 @@ export function DestinationSelector({ value, onChange }: Props) {
         <span>
           {value.length} / {MAX_DESTINATIONS} selected
         </span>
-        {atCap && <span>Maximum {MAX_DESTINATIONS} destinations per job</span>}
+        {atCap && (
+          <span role="status" aria-live="polite">
+            Maximum {MAX_DESTINATIONS} destinations per job
+          </span>
+        )}
       </div>
       {destinations.map((d) => {
         const isChecked = value.includes(d.destination_id);
