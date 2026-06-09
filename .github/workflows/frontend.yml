@@ -52,7 +52,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.SNOWFORGE_UI_PAT }}
 
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile --prod=false
+        run: pnpm install --frozen-lockfile --prod=false
 
       - name: Run unit tests
         run: pnpm test -- --run
@@ -108,7 +108,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.SNOWFORGE_UI_PAT }}
 
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile --prod=false
+        run: pnpm install --frozen-lockfile --prod=false
 
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps
@@ -165,7 +165,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.SNOWFORGE_UI_PAT }}
 
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile --prod=false
+        run: pnpm install --frozen-lockfile --prod=false
 
       - name: Run linter
         run: pnpm lint
@@ -209,7 +209,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.SNOWFORGE_UI_PAT }}
 
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile --prod=false
+        run: pnpm install --frozen-lockfile --prod=false
 
       - name: Build application
         run: pnpm build
