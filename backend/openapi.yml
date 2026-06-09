@@ -38,21 +38,18 @@ info:
     name: Proprietary
 
 servers:
-  - url: http://localhost:3000/{stage}
-    description: Local development
-    variables:
-      stage:
-        default: dev
-        enum: [dev]
-  - url: https://{apiId}.execute-api.us-east-2.amazonaws.com/{stage}
-    description: AWS API Gateway (stage-prefixed)
-    variables:
-      apiId:
-        default: REPLACE_ME
-        description: The API Gateway REST API ID
-      stage:
-        default: dev
-        enum: [dev, staging, prod]
+  # Concrete API Gateway URLs (us-east-2) so SDK generators and Swagger UI's
+  # "Try it out" resolve to a working host. Production is listed first so it is
+  # the default. These are HTTP API (V2) gateways on the auto `$default` stage,
+  # so routes are served at the host root with NO stage path prefix (e.g.
+  # POST https://<host>/jobs, matching frontend/.env.example NEXT_PUBLIC_API_BASE_URL).
+  # The backend is only reachable via API Gateway, so there is no localhost
+  # server. IDs are stable per stage; if a gateway is recreated, update these
+  # (and the guard in tests/unit/test_openapi_spec.py).
+  - url: https://2pg2gj4048.execute-api.us-east-2.amazonaws.com
+    description: Production
+  - url: https://g5vmashyda.execute-api.us-east-2.amazonaws.com
+    description: Development
 
 security:
   - BearerAuth: []

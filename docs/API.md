@@ -26,10 +26,11 @@ Pass the key as a bearer token on every request:
 Authorization: Bearer sk_live_YOUR_API_KEY_HERE
 ```
 
-The production base URL is the API Gateway stage URL for your environment, for example:
+The production base URL is the API Gateway host for your environment (routes are
+served at the host root, with no stage path prefix), for example:
 
 ```
-https://2pg2gj4048.execute-api.us-east-2.amazonaws.com/prod
+https://2pg2gj4048.execute-api.us-east-2.amazonaws.com
 ```
 
 A revoked or invalid key returns `401 Unauthorized`. Requesting a job you do not own
