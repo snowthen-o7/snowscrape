@@ -1812,14 +1812,16 @@ def download_results_handler(event, context):
 				response = s3.get_object(Bucket=os.environ['S3_BUCKET'], Key=original_s3_key)
 				results_data = json.loads(response['Body'].read().decode('utf-8'))
 
-				# Import FormatConverter
-				from format_converter import FormatConverter
-
-				# Create converter and convert
-				converter = FormatConverter(job_id, results_data, os.environ['S3_BUCKET'])
-				converter.prepare_dataframe(flatten=flatten)
-
 				try:
+					# Import + prepare are inside the guard: a converter import
+					# failure (e.g. an optional dep like pyarrow missing) or a
+					# malformed-results error must surface as a clean 500, not an
+					# unhandled exception (issue #32).
+					from format_converter import FormatConverter
+
+					converter = FormatConverter(job_id, results_data, os.environ['S3_BUCKET'])
+					converter.prepare_dataframe(flatten=flatten)
+
 					if file_format == 'csv':
 						converter.convert_to_csv(result_s3_key)
 					elif file_format == 'xlsx':
