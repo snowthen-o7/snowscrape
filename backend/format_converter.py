@@ -45,6 +45,27 @@ def _scalarize(value) -> str:
     return str(value)
 
 
+# Leading characters that Excel / Google Sheets / LibreOffice may interpret as
+# the start of a formula. Scraped cell values are attacker-influenced, so a value
+# beginning with one of these is prefixed with a single quote to force literal
+# text rendering (spreadsheet/CSV formula injection, CWE-1236; issue #34).
+_FORMULA_TRIGGERS = ('=', '+', '-', '@', '\t', '\r')
+
+
+def _sanitize_spreadsheet_text(text: str) -> str:
+    """Neutralize spreadsheet formula injection in an already-stringified cell.
+
+    Prefixes a single quote when the value begins with a formula trigger so the
+    spreadsheet renders it as text instead of evaluating it. Applied only to the
+    CSV and XLSX (string) write paths; SQL and Parquet are intentionally
+    unaffected (SQL emits single-quote-escaped string literals, Parquet is a
+    binary data format, neither is formula-evaluated by a spreadsheet app).
+    """
+    if text and text[0] in _FORMULA_TRIGGERS:
+        return "'" + text
+    return text
+
+
 def _sql_ident(name) -> str:
     """Backtick-quote a SQL identifier, escaping embedded backticks.
 
@@ -57,16 +78,23 @@ def _sql_ident(name) -> str:
 def _xlsx_cell(value):
     """Coerce a value into something openpyxl can write to a cell.
 
-    Scalars (str/int/float/bool) pass through so numbers stay numbers; None
-    becomes '' and nested values are scalarized to a stable string.
+    Numbers/bools stay native so they remain numeric in Excel; None becomes ''
+    and nested values are scalarized to a stable string. String cells (including
+    scalarized nested values) are run through the formula-injection guard so a
+    scraped string like "=1+1" is written as literal text, not a formula
+    (openpyxl would otherwise store a leading-'=' string as a formula cell).
     """
     if value is None:
         return ''
     if isinstance(value, (list, dict)):
-        return _scalarize(value)
-    if isinstance(value, (str, int, float, bool)):
+        return _sanitize_spreadsheet_text(_scalarize(value))
+    if isinstance(value, bool):
         return value
-    return str(value)
+    if isinstance(value, (int, float)):
+        return value
+    if isinstance(value, str):
+        return _sanitize_spreadsheet_text(value)
+    return _sanitize_spreadsheet_text(str(value))
 
 
 class FormatConverter:
@@ -162,9 +190,14 @@ class FormatConverter:
         writer = csv.DictWriter(
             buffer, fieldnames=self.columns, extrasaction='ignore', lineterminator='\n'
         )
-        writer.writeheader()
+        # Header cells come from scraped/AI-derived JSON keys too, so they get
+        # the same formula-injection guard as data cells (not writer.writeheader).
+        writer.writerow({col: _sanitize_spreadsheet_text(col) for col in self.columns})
         for row in self.rows:
-            writer.writerow({col: _scalarize(row.get(col)) for col in self.columns})
+            writer.writerow(
+                {col: _sanitize_spreadsheet_text(_scalarize(row.get(col)))
+                 for col in self.columns}
+            )
 
         body = buffer.getvalue().encode('utf-8')
 
@@ -215,7 +248,9 @@ class FormatConverter:
         header_alignment = Alignment(horizontal="center", vertical="center")
 
         for col_idx, column in enumerate(self.columns, 1):
-            cell = ws.cell(row=1, column=col_idx, value=column)
+            # Header text is scraped/AI-derived too -> same formula guard.
+            cell = ws.cell(row=1, column=col_idx,
+                           value=_sanitize_spreadsheet_text(str(column)))
             cell.fill = header_fill
             cell.font = header_font
             cell.alignment = header_alignment

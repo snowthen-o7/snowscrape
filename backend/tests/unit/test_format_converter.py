@@ -141,6 +141,96 @@ def test_csv_without_explicit_prepare_flattens(s3):
 
 
 # ---------------------------------------------------------------------------
+# CSV / XLSX formula-injection sanitization (issue #34, CWE-1236)
+#
+# Scraped cell values are attacker-influenced. A cell beginning with =, +, -, @,
+# tab, or CR is treated as a formula by Excel / Google Sheets / LibreOffice, so
+# an export can carry an active payload to whoever opens it. The fix prefixes a
+# single quote so the value renders as literal text. SQL/Parquet are unaffected.
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("payload", [
+    "=1+1",
+    '=HYPERLINK("http://evil","click")',
+    "+1+1",
+    "-1+1",
+    "@SUM(A1)",
+    "\tinjected",
+    "\rinjected",
+])
+def test_csv_sanitizes_formula_injection(s3, payload):
+    conv = _make([{"v": payload}], flatten=False)
+    conv.convert_to_csv("jobs/j/result.csv")
+
+    body = _get_body(s3, "jobs/j/result.csv").decode("utf-8")
+    row = list(csv.DictReader(io.StringIO(body)))[0]
+    # The stored value is the original prefixed with a single quote (no eval).
+    assert row["v"] == "'" + payload
+
+
+def test_csv_leaves_benign_values_unquoted(s3):
+    results = [{"a": "hello", "b": "a=b=c", "c": "1.5", "d": "", "e": "http://x"}]
+    conv = _make(results, flatten=False)
+    conv.convert_to_csv("jobs/j/result.csv")
+
+    body = _get_body(s3, "jobs/j/result.csv").decode("utf-8")
+    row = list(csv.DictReader(io.StringIO(body)))[0]
+    assert row["a"] == "hello"
+    assert row["b"] == "a=b=c"     # '=' not leading -> untouched
+    assert row["c"] == "1.5"
+    assert row["d"] == ""          # empty stays empty (no stray quote)
+    assert row["e"] == "http://x"
+
+
+def test_xlsx_sanitizes_formula_injection(s3):
+    openpyxl = pytest.importorskip("openpyxl")
+    results = [{"formula": "=1+1", "num": 42, "neg": -7, "text": "hello"}]
+    conv = _make(results, flatten=False)
+    conv.convert_to_xlsx("jobs/j/result.xlsx")
+
+    wb = openpyxl.load_workbook(io.BytesIO(_get_body(s3, "jobs/j/result.xlsx")))
+    ws = wb.active
+    header = [c.value for c in ws[1]]
+    formula_cell = ws.cell(row=2, column=header.index("formula") + 1)
+    # Quote-prefixed text, and NOT stored as an openpyxl formula cell.
+    assert formula_cell.value == "'=1+1"
+    assert formula_cell.data_type != "f"
+    # Genuine numbers stay native numeric (not quoted / stringified).
+    assert ws.cell(row=2, column=header.index("num") + 1).value == 42
+    assert ws.cell(row=2, column=header.index("neg") + 1).value == -7
+    assert ws.cell(row=2, column=header.index("text") + 1).value == "hello"
+
+
+def test_csv_header_is_sanitized(s3):
+    """Column names (scraped/AI-derived JSON keys) are guarded like data cells."""
+    conv = _make([{"=cmd|'/c calc'!A1": "v"}], flatten=False)
+    conv.convert_to_csv("jobs/j/result.csv")
+    body = _get_body(s3, "jobs/j/result.csv").decode("utf-8")
+    header_line = body.splitlines()[0]
+    # The header field is quote-prefixed; the raw "=cmd..." is never bare.
+    assert "'=cmd|" in header_line
+
+
+def test_xlsx_header_is_sanitized(s3):
+    openpyxl = pytest.importorskip("openpyxl")
+    conv = _make([{"=1+1": "v"}], flatten=False)
+    conv.convert_to_xlsx("jobs/j/result.xlsx")
+    wb = openpyxl.load_workbook(io.BytesIO(_get_body(s3, "jobs/j/result.xlsx")))
+    ws = wb.active
+    assert ws.cell(row=1, column=1).value == "'=1+1"
+
+
+def test_sql_is_not_spreadsheet_sanitized(s3):
+    """Scope guard: SQL emits quoted string literals, NOT spreadsheet-quoted text."""
+    conv = _make([{"v": "=1+1"}], flatten=False)
+    conv.convert_to_sql("jobs/j/result.sql", table_name="t")
+    sql = _get_body(s3, "jobs/j/result.sql").decode("utf-8")
+    # The value is a plain SQL string literal '=1+1' with NO extra leading quote.
+    assert "('=1+1')" in sql
+    assert "''=1+1" not in sql
+
+
+# ---------------------------------------------------------------------------
 # SQL
 # ---------------------------------------------------------------------------
 
