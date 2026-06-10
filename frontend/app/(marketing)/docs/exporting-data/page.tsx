@@ -45,14 +45,6 @@ export default function ExportingDataPage() {
           </div>
 
           <div className="rounded-lg border border-border p-4 bg-card">
-            <h4 className="font-semibold text-accent-foreground">Parquet</h4>
-            <p className="text-sm text-muted-foreground mt-2">
-              Columnar format for big data. Efficient for analytics and data warehouses.
-            </p>
-            <code className="text-xs bg-muted px-2 py-1 rounded mt-2 block">.parquet</code>
-          </div>
-
-          <div className="rounded-lg border border-border p-4 bg-card">
             <h4 className="font-semibold text-accent-foreground">SQL</h4>
             <p className="text-sm text-muted-foreground mt-2">
               SQL INSERT statements for direct database import. Supports MySQL, PostgreSQL, SQLite.
@@ -82,7 +74,7 @@ export default function ExportingDataPage() {
 
 # Response: File download with appropriate content-type
 
-# Available formats: json, csv, xlsx, parquet, sql`}
+# Available formats: json, csv, xlsx, sql`}
           </pre>
         </div>
         <p className="text-sm text-muted-foreground mt-2">
@@ -121,12 +113,6 @@ export default function ExportingDataPage() {
                 <td className="p-3 text-muted-foreground">Medium</td>
                 <td className="p-3 text-muted-foreground">Medium</td>
                 <td className="p-3 text-muted-foreground">Business reports, sharing</td>
-              </tr>
-              <tr className="border-b border-border">
-                <td className="p-3 font-mono">Parquet</td>
-                <td className="p-3 text-muted-foreground">Smallest</td>
-                <td className="p-3 text-muted-foreground">Fastest</td>
-                <td className="p-3 text-muted-foreground">Big data, analytics</td>
               </tr>
               <tr className="border-b border-border">
                 <td className="p-3 font-mono">SQL</td>

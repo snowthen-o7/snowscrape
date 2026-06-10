@@ -67,7 +67,7 @@ export default function Home() {
             <FeatureCard
               icon={Download}
               title="Multiple Export Formats"
-              description="Download results as JSON, CSV, Excel, Parquet, or SQL. Perfect for any data pipeline."
+              description="Download results as JSON, CSV, Excel, or SQL. Perfect for any data pipeline."
             />
             <FeatureCard
               icon={Webhook}

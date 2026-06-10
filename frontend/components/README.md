@@ -124,7 +124,7 @@ import { JobCard } from '@/components/JobCard';
 - Hover effects with accent color
 - Dropdown menu for actions
 - Delete confirmation dialog
-- Export format selection (JSON, CSV, Excel, Parquet, SQL)
+- Export format selection (JSON, CSV, Excel, SQL)
 
 #### `StatCard`
 Displays a metric with optional trend indicator.

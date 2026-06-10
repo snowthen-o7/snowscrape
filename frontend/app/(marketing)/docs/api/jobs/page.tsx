@@ -231,7 +231,7 @@ export default function JobsAPIPage() {
           </p>
           <h5 className="font-semibold text-sm mb-2">Query Parameters</h5>
           <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground ml-4">
-            <li><code className="bg-muted px-1 rounded">format</code>: json, csv, xlsx, parquet, sql</li>
+            <li><code className="bg-muted px-1 rounded">format</code>: json, csv, xlsx, sql</li>
           </ul>
         </div>
 

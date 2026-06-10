@@ -372,7 +372,7 @@ export default function Features() {
             <FeatureCard
               icon={Download}
               title="Multiple Formats"
-              description="Export to JSON, CSV, Excel, Parquet, or SQL. Choose the format that works best for your workflow."
+              description="Export to JSON, CSV, Excel, or SQL. Choose the format that works best for your workflow."
             />
             <FeatureCard
               icon={Webhook}

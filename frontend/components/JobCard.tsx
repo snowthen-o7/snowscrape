@@ -22,6 +22,7 @@ import { Button } from '@snowforge/ui';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel } from '@snowforge/ui';
 import { StatusBadge } from '@/components/StatusBadge';
 import { ConfirmDialog } from '@snowforge/ui';
+import { EXPORT_FORMATS } from '@/lib/jobs/exportFormats';
 
 export function JobCard({
   job,
@@ -38,21 +39,7 @@ export function JobCard({
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const exportFormats = [
-    { value: 'json', label: 'JSON', description: 'JavaScript Object Notation' },
-    { value: 'csv', label: 'CSV', description: 'Comma-Separated Values' },
-    {
-      value: 'xlsx',
-      label: 'Excel (XLSX)',
-      description: 'Microsoft Excel format',
-    },
-    {
-      value: 'parquet',
-      label: 'Parquet',
-      description: 'Apache Parquet (analytics)',
-    },
-    { value: 'sql', label: 'SQL', description: 'SQL INSERT statements' },
-  ];
+  const exportFormats = EXPORT_FORMATS;
 
   const handleDelete = async () => {
     setIsDeleting(true);

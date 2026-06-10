@@ -529,7 +529,7 @@ paths:
       summary: Download job results
       description: |
         Generates a pre-signed S3 URL for downloading job results in the requested format.
-        Supported formats: JSON, CSV, XLSX, Parquet, SQL. Non-JSON formats are converted
+        Supported formats: JSON, CSV, XLSX, SQL. Non-JSON formats are converted
         on-the-fly and cached on S3 for subsequent requests.
       parameters:
         - $ref: "#/components/parameters/JobId"
@@ -538,7 +538,7 @@ paths:
           description: Output file format
           schema:
             type: string
-            enum: [json, csv, xlsx, parquet, sql]
+            enum: [json, csv, xlsx, sql]
             default: json
         - name: flatten
           in: query
@@ -2183,7 +2183,7 @@ components:
           example: 3600
         format:
           type: string
-          enum: [json, csv, xlsx, parquet, sql]
+          enum: [json, csv, xlsx, sql]
         file_size_bytes:
           type: integer
           description: File size in bytes

@@ -82,7 +82,7 @@ Force an immediate crawl (outside the schedule), then download once it completes
 curl -X POST "$BASE_URL/jobs/$JOB_ID/refresh" \
   -H "Authorization: Bearer $SNOWSCRAPE_API_KEY"
 
-# Get a pre-signed download URL (json, csv, xlsx, parquet, or sql)
+# Get a pre-signed download URL (json, csv, xlsx, or sql)
 curl "$BASE_URL/jobs/$JOB_ID/download?format=csv" \
   -H "Authorization: Bearer $SNOWSCRAPE_API_KEY"
 ```

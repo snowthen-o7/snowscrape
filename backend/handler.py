@@ -1696,7 +1696,7 @@ def preview_url_variables_handler(event, context):
 def download_results_handler(event, context):
 	"""
 	Generate a pre-signed S3 URL for downloading job results.
-	Supports multiple formats: JSON, CSV, XLSX, Parquet, SQL.
+	Supports multiple formats: JSON, CSV, XLSX, SQL.
 	"""
 	start_time = time.time()
 	log_lambda_invocation(event, context, logger)
@@ -1764,7 +1764,13 @@ def download_results_handler(event, context):
 		sql_table_name = query_params.get('sql_table_name', 'scraped_data')
 
 		# Validate format
-		valid_formats = ['json', 'csv', 'xlsx', 'parquet', 'sql']
+		# Parquet is intentionally NOT offered: it needs pyarrow, which is not
+		# bundled in the Lambda (size / cold-start cost), so it would always fail.
+		# Reject it here with a clean 400 instead of reaching the converter's
+		# handled RuntimeError -> 500. convert_to_parquet stays in
+		# format_converter.py as dormant code so re-enabling is just bundling
+		# pyarrow + re-adding 'parquet' here and in the UI.
+		valid_formats = ['json', 'csv', 'xlsx', 'sql']
 		if file_format not in valid_formats:
 			return {
 				"statusCode": 400,
@@ -1826,8 +1832,6 @@ def download_results_handler(event, context):
 						converter.convert_to_csv(result_s3_key)
 					elif file_format == 'xlsx':
 						converter.convert_to_xlsx(result_s3_key)
-					elif file_format == 'parquet':
-						converter.convert_to_parquet(result_s3_key)
 					elif file_format == 'sql':
 						converter.convert_to_sql(result_s3_key, sql_table_name)
 

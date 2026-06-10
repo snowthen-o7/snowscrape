@@ -139,7 +139,7 @@ export class JobsAPI {
    */
   async download(
     id: string,
-    format: 'csv' | 'json' | 'xlsx' | 'parquet' | 'sql',
+    format: 'csv' | 'json' | 'xlsx' | 'sql',
     token: string
   ): Promise<DownloadResponse> {
     return this.client.request<DownloadResponse>(

@@ -76,8 +76,8 @@ export default function GettingStartedPage() {
         <p className="text-muted-foreground">
           Once your job completes, download results in your preferred format:
         </p>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-4">
-          {['JSON', 'CSV', 'Excel', 'Parquet', 'SQL'].map((format) => (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+          {['JSON', 'CSV', 'Excel', 'SQL'].map((format) => (
             <div key={format} className="rounded-lg border border-border p-3 text-center bg-card">
               <span className="font-mono text-sm">{format}</span>
             </div>

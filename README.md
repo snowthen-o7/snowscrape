@@ -46,7 +46,7 @@ SnowScrape enables users to:
 - 📈 **Monitoring Integration** - Snowglobe metrics and monitoring
 
 #### Phase 1 Competitive Features ✨ NEW
-- 📦 **Multi-Format Export** - Download results in JSON, CSV, XLSX, Parquet, or SQL formats
+- 📦 **Multi-Format Export** - Download results in JSON, CSV, XLSX, or SQL formats
 - 🔔 **Webhook System** - Event-driven notifications for job lifecycle events (created, started, completed, failed, cancelled)
 - 🌐 **AWS Proxy Pool** - Self-hosted proxy infrastructure with geo-targeting (US, EU, Asia) and automatic health checking
 - 🎭 **JavaScript Rendering** - Playwright-powered headless browser for scraping SPAs (React, Vue, Angular)
@@ -279,7 +279,7 @@ SnowScrape is currently in **active development**.
 ### ✅ Completed - Phase 1: Core Competitive Features
 
 **Feature 1: Multi-Format Export** ✅
-- JSON, CSV, XLSX, Parquet, SQL export formats
+- JSON, CSV, XLSX, SQL export formats (Parquet deferred: needs pyarrow, not bundled in the Lambda)
 - Server-side conversion with streaming for large datasets
 - S3 caching to avoid redundant conversions
 - Frontend dropdown for format selection
