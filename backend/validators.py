@@ -502,6 +502,10 @@ class InputValidator:
 
 		# Validate url_column
 		url_column = file_mapping['url_column']
+		if isinstance(url_column, bool):
+			# isinstance(True, int) is True in Python, so reject bools explicitly
+			# before the int branch (a bool is not a real column index).
+			raise ValidationError("URL column must be an integer index or string name")
 		if isinstance(url_column, int):
 			if url_column < 0 or url_column > 100:
 				raise ValidationError("URL column index must be between 0 and 100")
@@ -590,7 +594,7 @@ class InputValidator:
 		# Trim whitespace
 		value = value.strip()
 
-		if max_length and len(value) > max_length:
+		if max_length is not None and len(value) > max_length:
 			raise ValidationError(f"String exceeds maximum length of {max_length}")
 
 		return value

@@ -137,12 +137,13 @@ class TestValidateFileMapping:
 		with pytest.raises(ValidationError, match="integer index or string name"):
 			InputValidator.validate_file_mapping(_valid_mapping(url_column=1.5))
 
-	def test_bool_url_column_is_treated_as_int_index(self):
-		# Python gotcha: isinstance(True, int) is True, so a bool falls into the
-		# 0-100 index branch (True -> 1, False -> 0) rather than being rejected.
-		# Pinned to characterize the current behavior, not to bless it.
-		assert InputValidator.validate_file_mapping(_valid_mapping(url_column=True))["url_column"] is True
-		assert InputValidator.validate_file_mapping(_valid_mapping(url_column=False))["url_column"] is False
+	@pytest.mark.parametrize("col", [True, False])
+	def test_rejects_bool_url_column(self, col):
+		# Python gotcha: isinstance(True, int) is True, so a bool would otherwise
+		# fall into the 0-100 index branch (True -> 1, False -> 0). A bool is not a
+		# real column index, so it is rejected as a wrong type (#35).
+		with pytest.raises(ValidationError, match="integer index or string name"):
+			InputValidator.validate_file_mapping(_valid_mapping(url_column=col))
 
 
 # ---------------------------------------------------------------------------
@@ -183,10 +184,15 @@ class TestSanitizeString:
 		long_value = "x" * 10000
 		assert InputValidator.sanitize_string(long_value) == long_value
 
-	def test_max_length_zero_is_falsy_and_disables_the_check(self):
-		# Python gotcha: the guard is `if max_length and ...`, so max_length=0 is
-		# falsy and disables the length check entirely (does NOT reject all input).
-		assert InputValidator.sanitize_string("abc", max_length=0) == "abc"
+	def test_max_length_zero_rejects_non_empty_input(self):
+		# max_length=0 means "no characters allowed": the guard uses
+		# `max_length is not None` so 0 is honored rather than treated as falsy (#35).
+		with pytest.raises(ValidationError, match="maximum length of 0"):
+			InputValidator.sanitize_string("abc", max_length=0)
+
+	def test_max_length_zero_allows_empty_string(self):
+		# An empty string is within a 0-length limit (len 0 is not > 0).
+		assert InputValidator.sanitize_string("", max_length=0) == ""
 
 
 # ---------------------------------------------------------------------------
