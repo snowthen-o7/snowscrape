@@ -259,7 +259,7 @@ Subscribed Stripe events:
 |----------|-------------|
 | GOOGLE_OAUTH_CLIENT_ID | Google Cloud OAuth 2.0 client ID |
 | GOOGLE_OAUTH_CLIENT_SECRET | Google Cloud OAuth 2.0 client secret |
-| GOOGLE_OAUTH_REDIRECT_URI | Backend callback URL (e.g., `https://2pg2gj4048.execute-api.us-east-2.amazonaws.com/integrations/google/callback`) |
+| GOOGLE_OAUTH_REDIRECT_URI | Frontend callback page URL registered on the OAuth client (prod `https://scrape.snowforge.dev/dashboard/integrations/google/callback`, dev `http://localhost:3001/dashboard/integrations/google/callback`). NOT a backend `execute-api` URL: Google redirects the browser to the frontend page, which reads `?code=&state=` and POSTs them to the backend `/integrations/google/callback` exchange route. |
 
 ### Frontend (Vercel)
 
@@ -279,7 +279,8 @@ Subscribed Stripe events:
 - **Token storage**: Refresh tokens KMS-encrypted (alias/snowscrape-{stage}-oauth-tokens) before persistence to GoogleAccounts. Access tokens are not stored — refreshed per-export.
 - **Delivery**: Post-job-completion fan-out via DocsExportQueue (SQS, 3 retries + DLQ). Triggered alongside webhook delivery in job_manager._on_job_completed.
 - **Modes**: `new_doc_per_run` (one doc per job run, all rows) and `one_doc_per_row` (one doc per result row — e.g. one doc per profile). `one_doc_per_row` is capped at `MAX_DOCS_PER_ROW_RUN` (25) rows per run to stay within Drive API rate limits and the 120s Lambda timeout; over-cap runs fail cleanly and log to DocsExports.
-- **Routes**: `/integrations/google/{auth-url, callback, GET, DELETE}`, `/export-destinations/{POST, GET, DELETE/{id}}`.
+- **Routes**: `/integrations/google/{auth-url, callback, GET, DELETE}`, `/export-destinations/{POST, GET, DELETE/{id}}`. The `callback` route is a backend POST that exchanges the auth `code`; it is NOT the OAuth redirect target.
+- **OAuth redirect URI**: register the FRONTEND callback page on the Google OAuth client, prod `https://scrape.snowforge.dev/dashboard/integrations/google/callback` and dev `http://localhost:3001/dashboard/integrations/google/callback`, and set the matching value in `GOOGLE_OAUTH_REDIRECT_URI` (Doppler `sf-snowscrape` dev/prod). Flow: frontend gets the consent URL from `/integrations/google/auth-url` (backend builds it with `flow.redirect_uri = GOOGLE_OAUTH_REDIRECT_URI`), Google redirects the browser back to the frontend page, and `app/(application)/dashboard/integrations/google/callback/page.tsx` POSTs `code`+`state` to the backend `/integrations/google/callback` route.
 - **Billing**: Not metered against plan limits in v1.0.
 - **KMS Key**: `alias/snowscrape-{stage}-oauth-tokens` — automatically created by SST and exposed via OAUTH_TOKEN_KMS_KEY_ID env var.
 - **Env vars**: GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, GOOGLE_OAUTH_REDIRECT_URI (from Doppler); OAUTH_TOKEN_KMS_KEY_ID (from SST output).
