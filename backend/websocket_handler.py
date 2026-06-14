@@ -57,12 +57,15 @@ def ws_connect_handler(event, context):
         # Store the connection in a pending (unauthenticated) state.
         # The client must send an 'authenticate' action as its first message.
         table = get_connections_table()
+        # NOTE: do NOT seed `subscriptions` here. handle_subscribe extends it with
+        # `ADD subscriptions :channel` (a string SET); an empty LIST seed makes
+        # DynamoDB reject that ADD with a ValidationException (the first subscribe
+        # after connect 500s). Leaving the attribute absent lets ADD create the set.
         table.put_item(Item={
             'connection_id': connection_id,
             'user_id': '__unauthenticated__',
             'authenticated': False,
             'connected_at': int(time.time()),
-            'subscriptions': [],
             'ttl': int(time.time()) + 300  # Short 5-minute TTL until authenticated
         })
 
