@@ -449,12 +449,24 @@ def test_generic_exception_maps_to_render_error(monkeypatch):
     assert result["url"] == "https://ex.com"
 
 
-def test_browser_not_closed_when_navigation_raises(monkeypatch):
-    # goto raises before browser.close() is reached; the `with` block still exits
+def test_browser_closed_when_navigation_raises(monkeypatch):
+    # goto raises after the browser launches; the try/finally must still close
+    # the browser so a render failure does not leak the Chromium process (#49).
     factory, handle = build_fake_playwright(goto_exc=ValueError("kaboom"))
     monkeypatch.setattr(js_renderer, "sync_playwright", factory)
     js_renderer.render_page_with_playwright("https://ex.com", {})
-    assert handle.browser.closed is False
+    assert handle.browser.closed is True
+    assert handle.cm.exited is True
+
+
+def test_browser_closed_when_selector_wait_raises(monkeypatch):
+    # An exception AFTER a successful goto (during wait_for_selector) must also
+    # close the browser via the finally, not just the navigation-failure path.
+    factory, handle = build_fake_playwright(
+        selector_exc=js_renderer.PlaywrightTimeoutError("selector timeout"))
+    monkeypatch.setattr(js_renderer, "sync_playwright", factory)
+    js_renderer.render_page_with_playwright("https://ex.com", {"wait_for_selector": "#never"})
+    assert handle.browser.closed is True
     assert handle.cm.exited is True
 
 

@@ -80,66 +80,75 @@ def render_page_with_playwright(url: str, render_config: Dict) -> Dict:
 
             browser = playwright.chromium.launch(**launch_options)
 
-            # Create context with viewport and user agent
-            context_options = {
-                'viewport': viewport,
-                'ignore_https_errors': True
-            }
+            try:
+                # Create context with viewport and user agent
+                context_options = {
+                    'viewport': viewport,
+                    'ignore_https_errors': True
+                }
 
-            if user_agent:
-                context_options['user_agent'] = user_agent
+                if user_agent:
+                    context_options['user_agent'] = user_agent
 
-            context = browser.new_context(**context_options)
+                context = browser.new_context(**context_options)
 
-            # Block resources if specified
-            if block_resources:
-                def handle_route(route):
-                    if route.request.resource_type in block_resources:
-                        route.abort()
-                    else:
-                        route.continue_()
+                # Block resources if specified
+                if block_resources:
+                    def handle_route(route):
+                        if route.request.resource_type in block_resources:
+                            route.abort()
+                        else:
+                            route.continue_()
 
-                context.route('**/*', handle_route)
-                logger.info("Blocking resources", types=block_resources)
+                    context.route('**/*', handle_route)
+                    logger.info("Blocking resources", types=block_resources)
 
-            page = context.new_page()
+                page = context.new_page()
 
-            # Set default timeout
-            page.set_default_timeout(wait_timeout)
+                # Set default timeout
+                page.set_default_timeout(wait_timeout)
 
-            # Navigate to URL
-            logger.info("Navigating to URL", url=url, wait_strategy=wait_strategy)
+                # Navigate to URL
+                logger.info("Navigating to URL", url=url, wait_strategy=wait_strategy)
 
-            page.goto(url, wait_until=wait_strategy, timeout=wait_timeout)
+                page.goto(url, wait_until=wait_strategy, timeout=wait_timeout)
 
-            # Wait for specific selector if provided
-            if wait_for_selector:
-                logger.info("Waiting for selector", selector=wait_for_selector)
-                page.wait_for_selector(wait_for_selector, timeout=wait_timeout)
+                # Wait for specific selector if provided
+                if wait_for_selector:
+                    logger.info("Waiting for selector", selector=wait_for_selector)
+                    page.wait_for_selector(wait_for_selector, timeout=wait_timeout)
 
-            # Get rendered HTML content
-            content = page.content()
+                # Get rendered HTML content
+                content = page.content()
 
-            logger.info("Page rendered successfully", url=url, content_length=len(content))
+                logger.info("Page rendered successfully", url=url, content_length=len(content))
 
-            # Capture screenshot if requested
-            screenshot_data = None
-            if capture_screenshot:
-                logger.info("Capturing screenshot", full_page=screenshot_full_page)
-                screenshot_bytes = page.screenshot(full_page=screenshot_full_page)
-                # Convert to base64 for easier transport
-                screenshot_data = base64.b64encode(screenshot_bytes).decode('utf-8')
-                logger.info("Screenshot captured", size_bytes=len(screenshot_bytes))
+                # Capture screenshot if requested
+                screenshot_data = None
+                if capture_screenshot:
+                    logger.info("Capturing screenshot", full_page=screenshot_full_page)
+                    screenshot_bytes = page.screenshot(full_page=screenshot_full_page)
+                    # Convert to base64 for easier transport
+                    screenshot_data = base64.b64encode(screenshot_bytes).decode('utf-8')
+                    logger.info("Screenshot captured", size_bytes=len(screenshot_bytes))
 
-            # Close browser
-            browser.close()
-
-            return {
-                'status': 'success',
-                'content': content,
-                'screenshot': screenshot_data,
-                'url': url
-            }
+                return {
+                    'status': 'success',
+                    'content': content,
+                    'screenshot': screenshot_data,
+                    'url': url
+                }
+            finally:
+                # Always close the browser, even when rendering raises, so a
+                # failed render never leaks the Chromium process (CWE-404; #49).
+                # Guard the close itself so a cleanup failure cannot mask the
+                # in-flight render exception (which would also flip the outer
+                # error_type from 'timeout' to 'render_error').
+                try:
+                    browser.close()
+                except Exception as close_err:
+                    logger.warning("browser.close() failed during cleanup",
+                                   url=url, error=str(close_err))
 
     except PlaywrightTimeoutError as e:
         logger.error("Playwright timeout", url=url, error=str(e))
