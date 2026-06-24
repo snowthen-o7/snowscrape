@@ -17,6 +17,37 @@ from observatory_client import ObservatoryClient
 
 logger = get_logger(__name__)
 
+# Public-facing registration metadata, sourced from docs/INFRASTRUCTURE.md.
+# Per stage; override with SNOWSCRAPE_PUBLIC_URL / SNOWSCRAPE_API_BASE_URL when a
+# stack is recreated with new API Gateway IDs so the script never re-registers
+# stale placeholder values in the Observatory dashboard.
+REPOSITORY_URL = 'https://github.com/snowthen-o7/snowscrape'
+
+DEFAULT_PUBLIC_URL = {
+	'dev': 'http://localhost:3001',
+	'prod': 'https://scrape.snowforge.dev',
+}
+
+DEFAULT_API_BASE_URL = {
+	'dev': 'https://g5vmashyda.execute-api.us-east-2.amazonaws.com',
+	'prod': 'https://2pg2gj4048.execute-api.us-east-2.amazonaws.com',
+}
+
+
+def _public_url(stage):
+	"""Public site URL for the given stage (the SNOWSCRAPE_PUBLIC_URL env var wins)."""
+	return os.environ.get('SNOWSCRAPE_PUBLIC_URL') or DEFAULT_PUBLIC_URL.get(stage, '')
+
+
+def _api_base_url(stage):
+	"""Backend API base URL for the given stage (the SNOWSCRAPE_API_BASE_URL env var wins).
+
+	A trailing slash is stripped so `{api_base}/health` never becomes `//health`
+	when an operator supplies SNOWSCRAPE_API_BASE_URL with a trailing slash.
+	"""
+	base = os.environ.get('SNOWSCRAPE_API_BASE_URL') or DEFAULT_API_BASE_URL.get(stage, '')
+	return base.rstrip('/')
+
 
 def register_snowscrape(stage='dev'):
 	"""
@@ -35,14 +66,18 @@ def register_snowscrape(stage='dev'):
 
 	logger.info("Registering Snowscrape with Observatory", stage=stage, url=observatory.url, site_id=observatory.site_id)
 
+	# Public-facing metadata for the Observatory dashboard (env override wins).
+	domain = _public_url(stage)
+	api_base = _api_base_url(stage)
+
 	# Register with Observatory
 	success = observatory.register(
 		name=f'Snowscrape ({stage.upper()})',
 		site_type='pipeline',
 		platform='AWS Lambda',
-		domain=f'https://api-snowscrape-{stage}.example.com',  # Update with your actual domain
-		repository='https://github.com/alexdiaz/snowscrape',  # Update with your actual repo
-		healthEndpoint=f'https://api-snowscrape-{stage}.example.com/health',  # Update
+		domain=domain,
+		repository=REPOSITORY_URL,
+		healthEndpoint=f'{api_base}/health',
 		description='Web scraping pipeline for scheduled data extraction and processing',
 		version='1.0.0',
 		databases=['DynamoDB (SnowscrapeJobs, SnowscrapeUrls, SnowscrapeSessions)'],
