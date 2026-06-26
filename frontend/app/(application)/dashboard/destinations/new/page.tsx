@@ -9,7 +9,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { standardSchemaResolver } from '@hookform/resolvers/standard-schema';
 
 import { AppLayout } from '@/components/layout';
 import {
@@ -48,7 +48,7 @@ export default function NewDestinationPage() {
   const hasAccount = !!accounts?.length;
 
   const { register, handleSubmit, setValue, watch, formState } = useForm<FormValues>({
-    resolver: zodResolver(schema),
+    resolver: standardSchemaResolver(schema),
     defaultValues: {
       mode: 'new_doc_per_run',
       format_template: 'structured_log',
