@@ -2573,13 +2573,13 @@ def create_webhook_handler(event, context):
 				"headers": {"Content-Type": "application/json"}
 			}
 
-		user_data = validate_clerk_token(token)
-		user_id = user_data.get("sub")
-
-		if not user_id:
+		try:
+			user_id = resolve_user_id(token)
+		except Exception as e:
+			logger.warning("Token validation failed", error=str(e))
 			return {
 				"statusCode": 401,
-				"body": json.dumps({"message": "Unauthorized"}),
+				"body": json.dumps({"message": str(e)}),
 				"headers": {"Content-Type": "application/json"}
 			}
 
@@ -2687,13 +2687,13 @@ def list_webhooks_handler(event, context):
 				"headers": {"Content-Type": "application/json"}
 			}
 
-		user_data = validate_clerk_token(token)
-		user_id = user_data.get("sub")
-
-		if not user_id:
+		try:
+			user_id = resolve_user_id(token)
+		except Exception as e:
+			logger.warning("Token validation failed", error=str(e))
 			return {
 				"statusCode": 401,
-				"body": json.dumps({"message": "Unauthorized"}),
+				"body": json.dumps({"message": str(e)}),
 				"headers": {"Content-Type": "application/json"}
 			}
 
@@ -2756,13 +2756,13 @@ def delete_webhook_handler(event, context):
 				"headers": {"Content-Type": "application/json"}
 			}
 
-		user_data = validate_clerk_token(token)
-		user_id = user_data.get("sub")
-
-		if not user_id:
+		try:
+			user_id = resolve_user_id(token)
+		except Exception as e:
+			logger.warning("Token validation failed", error=str(e))
 			return {
 				"statusCode": 401,
-				"body": json.dumps({"message": "Unauthorized"}),
+				"body": json.dumps({"message": str(e)}),
 				"headers": {"Content-Type": "application/json"}
 			}
 
@@ -2837,13 +2837,13 @@ def test_webhook_handler(event, context):
 				"headers": {"Content-Type": "application/json"}
 			}
 
-		user_data = validate_clerk_token(token)
-		user_id = user_data.get("sub")
-
-		if not user_id:
+		try:
+			user_id = resolve_user_id(token)
+		except Exception as e:
+			logger.warning("Token validation failed", error=str(e))
 			return {
 				"statusCode": 401,
-				"body": json.dumps({"message": "Unauthorized"}),
+				"body": json.dumps({"message": str(e)}),
 				"headers": {"Content-Type": "application/json"}
 			}
 
