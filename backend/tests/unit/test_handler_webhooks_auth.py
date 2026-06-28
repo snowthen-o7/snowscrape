@@ -136,3 +136,48 @@ class TestWebhookHandlersRejectInvalidCredential:
 		with patch.object(handler_mod, 'extract_token_from_event', return_value=None):
 			resp = getattr(handler_mod, handler_name)(_event(), lambda_context)
 		assert resp['statusCode'] == 401
+
+
+# Handlers that look a single webhook up by primary key then act on it. They must
+# NOT leak whether a webhook_id exists when it belongs to another user (issue #54,
+# CWE-639): a foreign-owned webhook_id and a non-existent one must be
+# indistinguishable in the response.
+OWNED_LOOKUP_HANDLERS = ['delete_webhook_handler', 'test_webhook_handler']
+
+
+@pytest.mark.unit
+class TestWebhookHandlersNoExistenceOracle:
+	"""delete/test must return the SAME response for a webhook owned by another
+	user as for a webhook that does not exist, so the status cannot be used to
+	probe which webhook_ids exist (issue #54)."""
+
+	@pytest.mark.parametrize('handler_name', OWNED_LOOKUP_HANDLERS)
+	def test_foreign_owner_matches_not_found(self, handler_mod, lambda_context, handler_name):
+		# Case A: the webhook_id exists but is owned by a different user.
+		foreign_table = MagicMock()
+		foreign_table.get_item.return_value = {'Item': {'webhook_id': 'wh-1', 'user_id': 'someone-else'}}
+		# Case B: the webhook_id does not exist at all.
+		missing_table = MagicMock()
+		missing_table.get_item.return_value = {}
+
+		def _run(table):
+			with patch.object(handler_mod, 'extract_token_from_event', return_value='sk_live_abc'), \
+				 patch.object(handler_mod, 'resolve_user_id', return_value='user-1'), \
+				 patch.object(handler_mod, 'webhook_table', table), \
+				 patch.object(handler_mod.WebhookDispatcher, 'dispatch_event', return_value=None) as mock_dispatch:
+				resp = getattr(handler_mod, handler_name)(
+					_event(path_params={'webhook_id': 'wh-1'}), lambda_context,
+				)
+			return resp, mock_dispatch
+
+		foreign_resp, foreign_dispatch = _run(foreign_table)
+		missing_resp, _ = _run(missing_table)
+
+		# Identical response (status, body, headers): no oracle of any kind.
+		assert foreign_resp['statusCode'] == 404
+		assert missing_resp['statusCode'] == 404
+		assert foreign_resp == missing_resp
+		# The foreign-owned webhook must never be acted on, by either handler:
+		# delete must not soft-delete it, test must not dispatch an event for it.
+		foreign_table.update_item.assert_not_called()
+		foreign_dispatch.assert_not_called()

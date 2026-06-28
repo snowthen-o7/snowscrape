@@ -2776,22 +2776,17 @@ def delete_webhook_handler(event, context):
 				"headers": {"Content-Type": "application/json"}
 			}
 
-		# Get webhook to verify ownership
+		# Look the webhook up and verify ownership. Treat "not found" and "found
+		# but owned by another user" identically (same 404), so the response
+		# cannot be used as an existence oracle for webhook_ids the caller does
+		# not own (CWE-639, issue #54).
 		response = webhook_table.get_item(Key={'webhook_id': webhook_id})
 		webhook = response.get('Item')
 
-		if not webhook:
+		if not webhook or webhook.get('user_id') != user_id:
 			return {
 				"statusCode": 404,
 				"body": json.dumps({"message": "Webhook not found"}),
-				"headers": {"Content-Type": "application/json"}
-			}
-
-		# Verify ownership
-		if webhook.get('user_id') != user_id:
-			return {
-				"statusCode": 403,
-				"body": json.dumps({"message": "Access denied"}),
 				"headers": {"Content-Type": "application/json"}
 			}
 
@@ -2857,22 +2852,17 @@ def test_webhook_handler(event, context):
 				"headers": {"Content-Type": "application/json"}
 			}
 
-		# Get webhook to verify ownership
+		# Look the webhook up and verify ownership. Treat "not found" and "found
+		# but owned by another user" identically (same 404), so the response
+		# cannot be used as an existence oracle for webhook_ids the caller does
+		# not own (CWE-639, issue #54).
 		response = webhook_table.get_item(Key={'webhook_id': webhook_id})
 		webhook = response.get('Item')
 
-		if not webhook:
+		if not webhook or webhook.get('user_id') != user_id:
 			return {
 				"statusCode": 404,
 				"body": json.dumps({"message": "Webhook not found"}),
-				"headers": {"Content-Type": "application/json"}
-			}
-
-		# Verify ownership
-		if webhook.get('user_id') != user_id:
-			return {
-				"statusCode": 403,
-				"body": json.dumps({"message": "Access denied"}),
 				"headers": {"Content-Type": "application/json"}
 			}
 
