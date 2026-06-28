@@ -69,7 +69,8 @@ def health_check_handler(event, context):
 			job_table.table_status
 			health_status['checks']['dynamodb'] = {'status': 'healthy'}
 		except Exception as e:
-			health_status['checks']['dynamodb'] = {'status': 'unhealthy', 'error': str(e)}
+			logger.warning("Health check dependency unhealthy", dependency="dynamodb", error=str(e))
+			health_status['checks']['dynamodb'] = {'status': 'unhealthy'}
 			health_status['status'] = 'degraded'
 
 		# Check S3 connectivity
@@ -77,7 +78,8 @@ def health_check_handler(event, context):
 			s3.list_buckets()
 			health_status['checks']['s3'] = {'status': 'healthy'}
 		except Exception as e:
-			health_status['checks']['s3'] = {'status': 'unhealthy', 'error': str(e)}
+			logger.warning("Health check dependency unhealthy", dependency="s3", error=str(e))
+			health_status['checks']['s3'] = {'status': 'unhealthy'}
 			health_status['status'] = 'degraded'
 
 		# Check SQS connectivity
@@ -85,7 +87,8 @@ def health_check_handler(event, context):
 			sqs.get_queue_url(QueueName=os.environ['SQS_JOB_QUEUE'])
 			health_status['checks']['sqs'] = {'status': 'healthy'}
 		except Exception as e:
-			health_status['checks']['sqs'] = {'status': 'unhealthy', 'error': str(e)}
+			logger.warning("Health check dependency unhealthy", dependency="sqs", error=str(e))
+			health_status['checks']['sqs'] = {'status': 'unhealthy'}
 			health_status['status'] = 'degraded'
 
 		# Calculate response time
@@ -139,7 +142,7 @@ def health_check_handler(event, context):
 			'body': json.dumps({
 				'status': 'unhealthy',
 				'timestamp': datetime.now(timezone.utc).isoformat(),
-				'error': str(e)
+				'error': 'Internal server error'
 			}),
 			'headers': {
 				'Access-Control-Allow-Origin': get_cors_origin(event),
@@ -1430,7 +1433,6 @@ def report_metrics_to_observatory_handler(event, context):
 			'statusCode': 500,
 			'body': json.dumps({
 				'message': 'Failed to report metrics',
-				'error': str(e)
 			})
 		}
 
@@ -1680,7 +1682,7 @@ def preview_url_variables_handler(event, context):
 			'statusCode': 500,
 			'body': json.dumps({
 				'valid': False,
-				'error': f'Internal server error: {str(e)}'
+				'error': 'Internal server error'
 			}),
 			'headers': {
 				'Access-Control-Allow-Credentials': True,
@@ -1887,7 +1889,7 @@ def download_results_handler(event, context):
 		log_exception(logger, "Failed to generate download URL", e)
 		return {
 			"statusCode": 500,
-			"body": json.dumps({"message": "Failed to generate download URL", "error": str(e)}),
+			"body": json.dumps({"message": "Failed to generate download URL"}),
 			"headers": {
 				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
@@ -2035,7 +2037,7 @@ def preview_results_handler(event, context):
 		log_exception(logger, "Failed to fetch results preview", e)
 		return {
 			"statusCode": 500,
-			"body": json.dumps({"message": "Failed to fetch results preview", "error": str(e)}),
+			"body": json.dumps({"message": "Failed to fetch results preview"}),
 			"headers": {
 				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
@@ -2145,7 +2147,7 @@ def create_template_handler(event, context):
 		log_exception(logger, "Failed to create template", e)
 		return {
 			"statusCode": 500,
-			"body": json.dumps({"message": "Failed to create template", "error": str(e)}),
+			"body": json.dumps({"message": "Failed to create template"}),
 			"headers": {
 				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
@@ -2227,7 +2229,7 @@ def list_templates_handler(event, context):
 		log_exception(logger, "Failed to list templates", e)
 		return {
 			"statusCode": 500,
-			"body": json.dumps({"message": "Failed to list templates", "error": str(e)}),
+			"body": json.dumps({"message": "Failed to list templates"}),
 			"headers": {
 				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
@@ -2329,7 +2331,7 @@ def get_template_handler(event, context):
 		log_exception(logger, "Failed to get template", e)
 		return {
 			"statusCode": 500,
-			"body": json.dumps({"message": "Failed to get template", "error": str(e)}),
+			"body": json.dumps({"message": "Failed to get template"}),
 			"headers": {
 				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
@@ -2426,7 +2428,7 @@ def delete_template_handler(event, context):
 		log_exception(logger, "Failed to delete template", e)
 		return {
 			"statusCode": 500,
-			"body": json.dumps({"message": "Failed to delete template", "error": str(e)}),
+			"body": json.dumps({"message": "Failed to delete template"}),
 			"headers": {
 				'Access-Control-Allow-Origin': get_cors_origin(event),
 				"Content-Type": "application/json"
@@ -2547,7 +2549,7 @@ def cleanup_old_results_handler(event, context):
 		log_exception(logger, "Failed to run cleanup", e)
 		return {
 			"statusCode": 500,
-			"body": json.dumps({"message": "Failed to run cleanup", "error": str(e)})
+			"body": json.dumps({"message": "Failed to run cleanup"})
 		}
 	finally:
 		logger.clear_context()
@@ -2664,7 +2666,7 @@ def create_webhook_handler(event, context):
 		log_exception(logger, "Failed to create webhook", e)
 		return {
 			"statusCode": 500,
-			"body": json.dumps({"message": "Failed to create webhook", "error": str(e)}),
+			"body": json.dumps({"message": "Failed to create webhook"}),
 			"headers": {"Content-Type": "application/json"}
 		}
 	finally:
@@ -2733,7 +2735,7 @@ def list_webhooks_handler(event, context):
 		log_exception(logger, "Failed to list webhooks", e)
 		return {
 			"statusCode": 500,
-			"body": json.dumps({"message": "Failed to list webhooks", "error": str(e)}),
+			"body": json.dumps({"message": "Failed to list webhooks"}),
 			"headers": {"Content-Type": "application/json"}
 		}
 	finally:
@@ -2809,7 +2811,7 @@ def delete_webhook_handler(event, context):
 		log_exception(logger, "Failed to delete webhook", e)
 		return {
 			"statusCode": 500,
-			"body": json.dumps({"message": "Failed to delete webhook", "error": str(e)}),
+			"body": json.dumps({"message": "Failed to delete webhook"}),
 			"headers": {"Content-Type": "application/json"}
 		}
 	finally:
@@ -2897,7 +2899,7 @@ def test_webhook_handler(event, context):
 		log_exception(logger, "Failed to test webhook", e)
 		return {
 			"statusCode": 500,
-			"body": json.dumps({"message": "Failed to test webhook", "error": str(e)}),
+			"body": json.dumps({"message": "Failed to test webhook"}),
 			"headers": {"Content-Type": "application/json"}
 		}
 	finally:
@@ -3095,7 +3097,7 @@ def proxy_health_checker_handler(event, context):
 		log_exception(logger, "Failed to run proxy health check", e)
 		return {
 			"statusCode": 500,
-			"body": json.dumps({"message": "Failed to run health check", "error": str(e)})
+			"body": json.dumps({"message": "Failed to run health check"})
 		}
 	finally:
 		logger.clear_context()
@@ -3178,7 +3180,6 @@ def scraper_preview_handler(event, context):
 				"headers": cors_headers,
 				"body": json.dumps({
 					"message": "Failed to fetch or parse the page",
-					"error": str(e)
 				})
 			}
 
@@ -3198,7 +3199,7 @@ def scraper_preview_handler(event, context):
 		return {
 			"statusCode": 500,
 			"headers": cors_headers,
-			"body": json.dumps({"message": "Internal server error", "error": str(e)})
+			"body": json.dumps({"message": "Internal server error"})
 		}
 	finally:
 		logger.clear_context()
@@ -3289,7 +3290,6 @@ def scraper_test_handler(event, context):
 				"headers": cors_headers,
 				"body": json.dumps({
 					"message": "Failed to test extraction",
-					"error": str(e)
 				})
 			}
 
@@ -3309,7 +3309,7 @@ def scraper_test_handler(event, context):
 		return {
 			"statusCode": 500,
 			"headers": cors_headers,
-			"body": json.dumps({"message": "Internal server error", "error": str(e)})
+			"body": json.dumps({"message": "Internal server error"})
 		}
 	finally:
 		logger.clear_context()
@@ -3394,7 +3394,7 @@ def scraper_preview_async_start_handler(event, context):
 		return {
 			"statusCode": 500,
 			"headers": cors_headers,
-			"body": json.dumps({"message": "Internal server error", "error": str(e)})
+			"body": json.dumps({"message": "Internal server error"})
 		}
 	finally:
 		logger.clear_context()
@@ -3463,7 +3463,7 @@ def scraper_preview_async_worker_handler(event, context):
 
 		return {
 			"statusCode": 500,
-			"body": json.dumps({"message": "Worker failed", "error": str(e)})
+			"body": json.dumps({"message": "Worker failed"})
 		}
 	finally:
 		logger.clear_context()
@@ -3581,7 +3581,7 @@ def ai_extract_handler(event, context):
 		return {
 			"statusCode": 500,
 			"headers": cors_headers,
-			"body": json.dumps({"message": "AI extraction failed", "error": str(e)})
+			"body": json.dumps({"message": "AI extraction failed"})
 		}
 	finally:
 		logger.clear_context()
@@ -3687,7 +3687,7 @@ def ai_suggest_queries_handler(event, context):
 		return {
 			"statusCode": 500,
 			"headers": cors_headers,
-			"body": json.dumps({"message": "Query suggestion failed", "error": str(e)})
+			"body": json.dumps({"message": "Query suggestion failed"})
 		}
 	finally:
 		logger.clear_context()
