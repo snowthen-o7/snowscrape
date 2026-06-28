@@ -14,9 +14,12 @@ same screen.
 
 API keys authenticate the entire `/jobs` data-plane: creating, listing, reading,
 updating, and deleting jobs; the pause / resume / cancel / refresh actions; reading
-crawls; and downloading or previewing results. Control-plane operations (managing API
-keys, billing, templates, webhooks, and OAuth integrations) stay dashboard-only and
-require a Clerk session, so a leaked key cannot mint new keys or change billing.
+crawls; and downloading or previewing results. They also authenticate the `/webhooks`
+management operations (create, list, delete, and test), so a programmatic consumer can
+register and manage its own job-completion callbacks. The remaining control-plane
+operations (managing API keys, billing, templates, and OAuth integrations) stay
+dashboard-only and require a Clerk session, so a leaked key cannot mint new keys or
+change billing.
 
 ## 2. Authenticate
 
@@ -112,7 +115,8 @@ or the quota is exhausted.
 
 - All authenticated requests use the same `Authorization: Bearer ...` header whether the
   token is a Clerk session JWT (dashboard) or an `sk_live_...` API key (programmatic).
-- Webhooks (job lifecycle events) are configured in the dashboard. They are part of the
-  control-plane, so they cannot be managed with an API key today.
-- The `/jobs` data-plane is the supported programmatic surface. Templates and export
-  destinations are dashboard-managed for now.
+- Webhooks (job lifecycle events) can be configured in the dashboard or managed
+  programmatically: the `/webhooks` create, list, delete, and test operations accept an
+  `sk_live_...` API key, so a headless consumer can wire up its own job-completion callbacks.
+- The `/jobs` data-plane and `/webhooks` management are the supported programmatic surface.
+  Templates and export destinations are dashboard-managed for now.

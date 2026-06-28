@@ -15,11 +15,12 @@ info:
     - **Clerk JWT** (`BearerAuth`): issued by the Clerk frontend SDK for the dashboard. Accepted
       on every authenticated endpoint.
     - **SnowScrape API key** (`ApiKeyAuth`): a long-lived `sk_live_...` secret created under
-      Settings -> API Keys, for programmatic access. Accepted ONLY on the `/jobs` data-plane
+      Settings -> API Keys, for programmatic access. Accepted on the `/jobs` data-plane
       (create, list, get, update, delete, the pause/resume/cancel/refresh actions, crawls, and
-      result download/preview).
+      result download/preview) and on the `/webhooks` management operations (create, list, delete,
+      and test), so a headless API consumer can register and manage its own job-completion callbacks.
 
-    Control-plane endpoints (API key management, billing, templates, webhooks, integrations/OAuth,
+    The remaining control-plane endpoints (API key management, billing, templates, integrations/OAuth,
     and the scraper builder previews) remain Clerk-only by design: an API key cannot mint or revoke
     other keys, change billing, or manage OAuth connections. Operations that accept an API key
     advertise both schemes in their `security` block; pass either credential as
@@ -754,6 +755,9 @@ paths:
     post:
       operationId: createWebhook
       tags: [Webhooks]
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
       summary: Create a webhook
       description: |
         Registers a new webhook endpoint. The webhook will receive HMAC-signed
@@ -788,6 +792,9 @@ paths:
     get:
       operationId: listWebhooks
       tags: [Webhooks]
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
       summary: List all webhooks
       description: Returns all webhooks registered by the authenticated user. The `secret` field is omitted from list responses.
       responses:
@@ -808,6 +815,9 @@ paths:
     delete:
       operationId: deleteWebhook
       tags: [Webhooks]
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
       summary: Delete (deactivate) a webhook
       description: |
         Soft-deletes a webhook by setting `active` to false. The webhook record is
@@ -836,6 +846,9 @@ paths:
     post:
       operationId: testWebhook
       tags: [Webhooks]
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
       summary: Send a test event to a webhook
       description: Dispatches a `webhook.test` event to verify the webhook endpoint is reachable and correctly configured.
       parameters:
