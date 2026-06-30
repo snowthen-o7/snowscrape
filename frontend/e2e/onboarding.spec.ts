@@ -4,8 +4,11 @@
  */
 
 import { test, expect } from '@playwright/test';
+import { runAuthedE2E } from './helpers/test-env';
 
 test.describe('Onboarding Tour', () => {
+  test.skip(!runAuthedE2E, 'Drives Clerk-gated /dashboard; needs a Clerk test user');
+
   test.beforeEach(async ({ page }) => {
     // Clear onboarding completed flag
     await page.goto('/dashboard');
@@ -122,6 +125,8 @@ test.describe('Onboarding Tour', () => {
 });
 
 test.describe('Quick Start Guide', () => {
+  test.skip(!runAuthedE2E, 'Drives Clerk-gated /dashboard; needs a Clerk test user');
+
   test.beforeEach(async ({ page }) => {
     await page.goto('/dashboard');
     await page.evaluate(() => {

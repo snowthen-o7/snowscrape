@@ -4,8 +4,11 @@
  */
 
 import { test, expect } from '@playwright/test';
+import { runAuthedE2E } from './helpers/test-env';
 
 test.describe('Template Marketplace', () => {
+  test.skip(!runAuthedE2E, 'Drives Clerk-gated /dashboard; needs a Clerk test user');
+
   test('should navigate to templates page', async ({ page }) => {
     await page.goto('/dashboard/templates');
 
@@ -96,6 +99,8 @@ test.describe('Template Marketplace', () => {
 });
 
 test.describe('Template Details', () => {
+  test.skip(!runAuthedE2E, 'Drives Clerk-gated /dashboard; needs a Clerk test user');
+
   test('should display template information', async ({ page }) => {
     await page.goto('/dashboard/templates/amazon-product');
 

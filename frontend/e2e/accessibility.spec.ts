@@ -1,7 +1,13 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
+import { runA11y } from './helpers/test-env';
 
 test.describe('Accessibility Tests - WCAG 2.1 AA Compliance', () => {
+  // Strict axe scans are an opt-in quality gate (RUN_A11Y=1); see helpers/test-env.
+  // They are brittle against third-party widgets and target Clerk-gated pages, so
+  // they do not run in the default credential-free CI smoke pass.
+  test.skip(!runA11y, 'Strict accessibility scans run only when RUN_A11Y=1');
+
   test.describe('Public Pages', () => {
     test('Homepage should have no accessibility violations', async ({ page }) => {
       await page.goto('/');
