@@ -21,10 +21,10 @@ export default function UseCases() {
       <section className="bg-gradient-to-br from-brand-primary to-brand-primary/90 py-24 sm:py-32">
         <div className="mx-auto max-w-7xl px-6 lg:px-8">
           <div className="mx-auto max-w-3xl text-center">
-            <h1 className="text-4xl font-bold tracking-tight text-white sm:text-6xl">
+            <h1 className="text-4xl font-bold tracking-tight text-foreground sm:text-6xl">
               Solutions for every industry
             </h1>
-            <p className="mt-6 text-lg leading-8 text-gray-300">
+            <p className="mt-6 text-lg leading-8 text-muted-foreground">
               See how businesses across industries use SnowScrape to extract valuable
               data and gain competitive advantages.
             </p>

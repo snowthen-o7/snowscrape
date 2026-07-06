@@ -24,10 +24,10 @@ export default function Docs() {
       <section className="bg-gradient-to-br from-brand-primary to-brand-primary/90 py-24 sm:py-32">
         <div className="mx-auto max-w-7xl px-6 lg:px-8">
           <div className="mx-auto max-w-3xl text-center">
-            <h1 className="text-4xl font-bold tracking-tight text-white sm:text-6xl">
+            <h1 className="text-4xl font-bold tracking-tight text-foreground sm:text-6xl">
               Documentation
             </h1>
-            <p className="mt-6 text-lg leading-8 text-gray-300">
+            <p className="mt-6 text-lg leading-8 text-muted-foreground">
               Everything you need to get started with SnowScrape and become a web scraping expert.
             </p>
 
@@ -38,7 +38,7 @@ export default function Docs() {
                   <input
                     type="text"
                     placeholder="Search documentation..."
-                    className="flex-1 rounded-lg border border-white/20 bg-white/10 px-4 py-3 text-white placeholder:text-gray-400 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+                    className="flex-1 rounded-lg border border-input bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
                   />
                   <button className="rounded-lg bg-accent px-6 py-3 font-semibold text-primary hover:bg-accent/90">
                     Search

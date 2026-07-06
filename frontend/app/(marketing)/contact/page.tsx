@@ -57,10 +57,10 @@ export default function Contact() {
       <section className="bg-gradient-to-br from-brand-primary to-brand-primary/90 py-24 sm:py-32">
         <div className="mx-auto max-w-7xl px-6 lg:px-8">
           <div className="mx-auto max-w-3xl text-center">
-            <h1 className="text-4xl font-bold tracking-tight text-white sm:text-6xl">
+            <h1 className="text-4xl font-bold tracking-tight text-foreground sm:text-6xl">
               Get in touch
             </h1>
-            <p className="mt-6 text-lg leading-8 text-gray-300">
+            <p className="mt-6 text-lg leading-8 text-muted-foreground">
               Have a question about SnowScrape? We're here to help. Reach out through any
               of our channels below.
             </p>
@@ -238,7 +238,7 @@ export default function Contact() {
                         setFormData({ ...formData, subject: value })
                       }
                     >
-                      <SelectTrigger className="mt-2">
+                      <SelectTrigger className="mt-2" aria-label="Subject">
                         <SelectValue placeholder="Select a subject" />
                       </SelectTrigger>
                       <SelectContent>

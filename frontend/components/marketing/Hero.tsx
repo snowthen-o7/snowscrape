@@ -38,7 +38,7 @@ export function Hero() {
           </h1>
 
           {/* Subheading */}
-          <p className="mt-6 text-lg leading-8 text-gray-300 sm:text-xl">
+          <p className="mt-6 text-lg leading-8 text-muted-foreground sm:text-xl">
             Extract data from any website with powerful CSS, XPath, and regex queries.
             Schedule jobs, handle JavaScript rendering, and export to multiple formats.
             No coding required.
@@ -53,7 +53,7 @@ export function Hero() {
               </Link>
             </Button>
 
-            <Button size="lg" variant="outline" className="border-white/20 text-white hover:bg-white/10">
+            <Button size="lg" variant="outline" className="border-border text-foreground hover:bg-muted">
               <PlayCircle className="mr-2 h-5 w-5" />
               Watch Demo
             </Button>
