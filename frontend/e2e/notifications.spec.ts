@@ -44,8 +44,9 @@ test.describe('Notification Center', () => {
   test('should navigate to full notifications page', async ({ page }) => {
     await page.goto('/dashboard/notifications');
 
-    // Should show notifications page heading
-    await expect(page.getByRole('heading', { name: /notifications/i })).toBeVisible();
+    // Should show notifications page heading (exact, so it doesn't also match the
+    // "No notifications yet" empty-state heading).
+    await expect(page.getByRole('heading', { name: 'Notifications', exact: true })).toBeVisible();
   });
 
   test('should filter notifications by read status', async ({ page }) => {
@@ -64,7 +65,8 @@ test.describe('Notification Center', () => {
       await page.waitForTimeout(300);
     }
 
-    const readTab = page.getByRole('tab', { name: /read/i });
+    // Anchor to the start so this doesn't also match the "Unread" tab.
+    const readTab = page.getByRole('tab', { name: /^Read \(/ });
     if (await readTab.isVisible()) {
       await readTab.click();
       await page.waitForTimeout(300);

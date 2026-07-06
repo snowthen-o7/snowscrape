@@ -7,7 +7,11 @@ import { test, expect } from '@playwright/test';
  */
 
 test.describe('Billing flow E2E', () => {
-  test('signed-in user with no subscription is redirected to /onboarding/checkout', async ({
+  // The subscription-gated redirect can only be asserted with the billing backend running
+  // (proxy.ts reads status from ${NEXT_PUBLIC_API_BASE_URL}/billing/subscription). The E2E env
+  // runs the frontend with billing failing open, so this needs the backend + a seeded
+  // no-subscription state before it can be enabled. The auth fixture covers signed-in UI only.
+  test.fixme('signed-in user with no subscription is redirected to /onboarding/checkout', async ({
     page,
   }) => {
     await page.goto('/sign-in');
