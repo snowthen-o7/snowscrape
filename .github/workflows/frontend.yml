@@ -117,6 +117,11 @@ jobs:
         run: pnpm test:e2e
         env:
           CI: true
+          # Placeholder Clerk keys so the dev server boots in CI (ClerkProvider throws on a
+          # missing publishableKey). E2E covers public pages, not real authenticated flows.
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_Y2xlcmsuZXhhbXBsZS5jb20k
+          CLERK_SECRET_KEY: sk_test_ci_placeholder_not_a_real_secret
+          NEXT_PUBLIC_API_BASE_URL: ${{ secrets.NEXT_PUBLIC_API_BASE_URL || 'https://api.snowscrape.com' }}
 
       - name: Upload test results
         uses: actions/upload-artifact@v4

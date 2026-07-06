@@ -2,10 +2,13 @@
 
 The canonical source of truth for "which endpoints accept a programmatic API key"
 is `resolve_user_id` in utils.py: every handler that calls it accepts either a
-Clerk JWT or an `sk_live_...` API key. Those are exactly the `/jobs` data-plane
-operations. Control-plane endpoints validate Clerk JWTs directly and must NOT
-advertise the API-key scheme. These tests pin the spec to that contract so the
-docs cannot silently drift away from the implementation again.
+Clerk JWT or an `sk_live_...` API key. Those are the `/jobs` data-plane operations
+and the `/webhooks` management operations (a headless API consumer needs to
+register and manage its own job-completion callbacks). The remaining control-plane
+endpoints (API-key management, billing, templates, integrations/OAuth) validate
+Clerk JWTs directly and must NOT advertise the API-key scheme. These tests pin the
+spec to that contract so the docs cannot silently drift away from the
+implementation again.
 """
 
 from pathlib import Path
@@ -35,6 +38,16 @@ DATA_PLANE_OPERATIONS = {
     "previewResults",
 }
 
+# operationIds whose webhook-management handlers call resolve_user_id, so a
+# programmatic `sk_live_...` caller can register and manage job-completion
+# callbacks. Keep in sync with the resolve_user_id call sites in handler.py.
+WEBHOOK_API_KEY_OPERATIONS = {
+    "createWebhook",
+    "listWebhooks",
+    "deleteWebhook",
+    "testWebhook",
+}
+
 # Representative control-plane operations that must stay Clerk-only.
 CLERK_ONLY_OPERATIONS = {
     "createApiKey",
@@ -42,7 +55,6 @@ CLERK_ONLY_OPERATIONS = {
     "revokeApiKey",
     "createTemplate",
     "listTemplates",
-    "createWebhook",
     "createCheckoutSession",
     "getSubscription",
 }
@@ -170,6 +182,19 @@ def test_data_plane_accepts_api_key(operations, operation_id):
     schemes = _schemes_for(operations[operation_id])
     assert API_KEY_SCHEME in schemes, (
         f"{operation_id} is a /jobs data-plane op and must accept ApiKeyAuth"
+    )
+    assert CLERK_SCHEME in schemes, (
+        f"{operation_id} must still accept the Clerk JWT (BearerAuth)"
+    )
+
+
+@pytest.mark.parametrize("operation_id", sorted(WEBHOOK_API_KEY_OPERATIONS))
+def test_webhook_management_accepts_api_key(operations, operation_id):
+    assert operation_id in operations, f"missing operation {operation_id} in spec"
+    schemes = _schemes_for(operations[operation_id])
+    assert API_KEY_SCHEME in schemes, (
+        f"{operation_id} is a /webhooks management op (handler resolves via "
+        f"resolve_user_id) and must accept ApiKeyAuth"
     )
     assert CLERK_SCHEME in schemes, (
         f"{operation_id} must still accept the Clerk JWT (BearerAuth)"

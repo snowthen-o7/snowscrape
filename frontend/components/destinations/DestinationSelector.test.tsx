@@ -10,6 +10,13 @@ import userEvent from '@testing-library/user-event';
 import { DestinationSelector } from '@/components/destinations/DestinationSelector';
 import type { ExportDestination } from '@/lib/api/destinations';
 
+// delay: null removes the setTimeout-based pause user-event schedules between
+// sub-events. With the default (delay: 0) those timers still queue, and under
+// parallel CPU contention the starved event loop can let a single click exceed
+// vitest's 5s default, timing the test out (issue #52). Disabling the delay
+// makes these interactions deterministic without changing what they exercise.
+const setupUser = () => userEvent.setup({ delay: null });
+
 // Drive the component via a mutable hook return so each test controls the list.
 let hookState: { data: ExportDestination[] | undefined; isLoading: boolean };
 
@@ -48,7 +55,7 @@ describe('DestinationSelector cap', () => {
 
   it('leaves unchecked boxes enabled and adds an id below the cap', async () => {
     const onChange = vi.fn();
-    const user = userEvent.setup();
+    const user = setupUser();
     render(<DestinationSelector value={['dest-0']} onChange={onChange} />);
 
     const boxes = screen.getAllByRole('checkbox');
@@ -74,7 +81,7 @@ describe('DestinationSelector cap', () => {
 
   it('does not add a new id when at the cap even if toggle fires', async () => {
     const onChange = vi.fn();
-    const user = userEvent.setup();
+    const user = setupUser();
     const selected = Array.from({ length: 10 }, (_, i) => `dest-${i}`);
     render(<DestinationSelector value={selected} onChange={onChange} />);
 
@@ -85,7 +92,7 @@ describe('DestinationSelector cap', () => {
 
   it('still allows unchecking a selected destination at the cap', async () => {
     const onChange = vi.fn();
-    const user = userEvent.setup();
+    const user = setupUser();
     const selected = Array.from({ length: 10 }, (_, i) => `dest-${i}`);
     render(<DestinationSelector value={selected} onChange={onChange} />);
 

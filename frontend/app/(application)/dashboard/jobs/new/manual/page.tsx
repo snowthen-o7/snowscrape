@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from '@clerk/nextjs';
 import { useForm, FormProvider } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { standardSchemaResolver } from '@hookform/resolvers/standard-schema';
 import { AppLayout } from '@/components/layout';
 import { PageHeader } from '@snowforge/ui';
 import { Button } from '@snowforge/ui';
@@ -39,7 +39,7 @@ export default function ManualConfigurationPage() {
   const { session } = useSession();
 
   const form = useForm<JobFormValues>({
-    resolver: zodResolver(jobFormSchema),
+    resolver: standardSchemaResolver(jobFormSchema),
     defaultValues: {
       name: '',
       rate_limit: 1,
