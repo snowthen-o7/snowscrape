@@ -25,8 +25,23 @@ setup('authenticate and save Clerk session', async ({ page }) => {
   await page.goto('/');
   await clerk.signIn({ page, emailAddress });
 
-  // Confirm the session works: an authenticated user reaches /dashboard (proxy.ts fails open
-  // with no billing API configured) instead of being bounced to /sign-in.
+  // Bypass the subscription gate in proxy.ts so authenticated UI tests don't need the billing
+  // backend to grant this test user a subscription. The middleware trusts a fresh "active"
+  // status cookie; fetched_at is set far in the future so it is never treated as stale.
+  await page.context().addCookies([
+    {
+      name: 'sf_sub_status',
+      value: JSON.stringify({ status: 'active', fetched_at: 9_999_999_999 }),
+      domain: 'localhost',
+      path: '/',
+      httpOnly: true,
+      sameSite: 'Lax',
+      expires: 9_999_999_999,
+    },
+  ]);
+
+  // Confirm the session works: an authenticated, subscribed user reaches /dashboard rather than
+  // being bounced to /sign-in or /onboarding/checkout.
   await page.goto('/dashboard');
   await page.waitForURL(/\/dashboard/, { timeout: 15_000 });
 

@@ -10,8 +10,9 @@ import { defineConfig, devices } from '@playwright/test';
  *    all 5 browsers, so a11y stays covered cross-browser and cross-viewport.
  *  - `authenticated` runs the app-functionality specs with the saved Clerk session (chromium).
  *
- * The webServer runs with NEXT_PUBLIC_API_BASE_URL unset so proxy.ts fails open (lets an
- * authenticated user reach protected pages without the billing backend, which E2E doesn't run).
+ * Pages fetch real data from NEXT_PUBLIC_API_BASE_URL so they render (an empty API base makes
+ * data-driven pages crash). The subscription gate in proxy.ts is bypassed by a billing-status
+ * cookie the setup injects, so E2E doesn't need the billing backend to grant a subscription.
  */
 
 // Specs that must NOT be authenticated (public marketing pages + the sign-in redirect they assert).
@@ -55,12 +56,11 @@ export default defineConfig({
     },
   ],
 
-  /* Run dev server before tests. Force fail-open billing (see proxy.ts) for authed E2E. */
+  /* Run dev server before tests (with the real API base so data-driven pages render). */
   webServer: {
     command: 'pnpm dev',
     url: 'http://localhost:3001',
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
-    env: { ...process.env, NEXT_PUBLIC_API_BASE_URL: '' },
   },
 });
