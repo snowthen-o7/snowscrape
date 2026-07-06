@@ -198,7 +198,7 @@ export default function Features() {
 
               <div className="mt-8 rounded-lg bg-muted p-4">
                 <p className="text-xs font-medium text-foreground">Example Configuration:</p>
-                <pre className="mt-2 text-xs text-muted-foreground">
+                <pre className="mt-2 overflow-x-auto text-xs text-muted-foreground" tabIndex={0}>
 {`{
   "js_render": true,
   "wait_for": "div.products",

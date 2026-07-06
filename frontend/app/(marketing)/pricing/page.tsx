@@ -175,7 +175,12 @@ export default function Pricing() {
             </p>
           </div>
 
-          <div className="mx-auto mt-16 max-w-6xl overflow-x-auto">
+          <div
+            className="mx-auto mt-16 max-w-6xl overflow-x-auto"
+            tabIndex={0}
+            role="region"
+            aria-label="Plan comparison"
+          >
             <table className="w-full text-left">
               <thead>
                 <tr className="border-b border-border">
