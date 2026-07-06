@@ -190,6 +190,10 @@ test.describe('Accessibility Tests - WCAG 2.1 AA Compliance', () => {
       const unlabeledInputs = await page.evaluate(() => {
         const inputs = Array.from(document.querySelectorAll('input, textarea, select'));
         return inputs.filter(input => {
+          // aria-hidden inputs (e.g. Radix Select's visually-hidden native <select>) are removed
+          // from the accessibility tree, so screen readers never encounter them and they do not
+          // require a label. axe ignores them too.
+          if (input.getAttribute('aria-hidden') === 'true') return false;
           const id = input.id;
           const hasLabel = id && document.querySelector(`label[for="${id}"]`);
           const hasAriaLabel = input.hasAttribute('aria-label') || input.hasAttribute('aria-labelledby');

@@ -35,10 +35,10 @@ export function CTASection({
 
       <div className="relative mx-auto max-w-7xl px-6 py-24 sm:py-32 lg:px-8">
         <div className="mx-auto max-w-2xl text-center">
-          <h2 className="text-4xl font-bold tracking-tight text-white sm:text-5xl">
+          <h2 className="text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
             {title}
           </h2>
-          <p className="mt-6 text-lg leading-8 text-gray-300">
+          <p className="mt-6 text-lg leading-8 text-muted-foreground">
             {description}
           </p>
           <div className="mt-10 flex items-center justify-center gap-4">
@@ -54,7 +54,7 @@ export function CTASection({
                 size="lg"
                 variant="outline"
                 asChild
-                className="border-white/20 text-white hover:bg-white/10"
+                className="border-border text-foreground hover:bg-muted"
               >
                 <Link href={secondaryCTA.href}>{secondaryCTA.text}</Link>
               </Button>

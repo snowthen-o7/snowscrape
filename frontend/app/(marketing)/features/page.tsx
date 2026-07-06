@@ -28,10 +28,10 @@ export default function Features() {
       <section className="bg-gradient-to-br from-brand-primary to-brand-primary/90 py-24 sm:py-32">
         <div className="mx-auto max-w-7xl px-6 lg:px-8">
           <div className="mx-auto max-w-3xl text-center">
-            <h1 className="text-4xl font-bold tracking-tight text-white sm:text-6xl">
+            <h1 className="text-4xl font-bold tracking-tight text-foreground sm:text-6xl">
               Powerful features for modern web scraping
             </h1>
-            <p className="mt-6 text-lg leading-8 text-gray-300">
+            <p className="mt-6 text-lg leading-8 text-muted-foreground">
               Everything you need to extract, transform, and export web data at scale.
               Built for developers, designed for simplicity.
             </p>
